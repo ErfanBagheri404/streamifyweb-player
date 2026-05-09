@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "concurrently  \"npm run dev:client\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "cd client && npm install && npm run build",
+    "build:server": "cd server && npm install && npm run build",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "start": "next dev",
     "lint": "eslint"
   },
   "dependencies": {
+    "concurrently": "^9.2.1",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"
