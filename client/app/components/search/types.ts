@@ -5,6 +5,12 @@ export type SourceType =
   | "spotify"
   | "jiosaavn";
 
+export interface AuthorThumbnail {
+  url: string;
+  width: number;
+  height: number;
+}
+
 export interface SearchResult {
   id: string;
   title: string;
@@ -22,6 +28,7 @@ export interface SearchResult {
   videoCount?: number;
   channelDescription?: string;
   verified?: boolean;
+  authorThumbnails?: AuthorThumbnail[];
 }
 
 export interface SourceFilter {
