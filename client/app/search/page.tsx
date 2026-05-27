@@ -254,7 +254,7 @@ export default function SearchPage() {
 
       try {
         const page = loadMore ? currentPage + 1 : 1;
-        let url = `http://localhost:3001/search?q=${encodeURIComponent(
+        let url = `/api/search?q=${encodeURIComponent(
           queryToUse
         )}&source=${sourceToUse}&filter=${filterToUse}&page=${page}&limit=20`;
         if (loadMore && paginationRef.current.nextpage) {
