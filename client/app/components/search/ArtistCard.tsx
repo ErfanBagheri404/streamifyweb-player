@@ -28,7 +28,7 @@ function findBestThumbnail(item: SearchResult): string | undefined {
   }
 
   // Fallback to other thumbnail fields
-  return item.thumbnailUrl || item.img || item.thumbnail;
+  return item.thumbnailUrl || item.img;
 }
 
 export const ArtistCard = memo<ArtistCardProps>(({ item, onPress }) => {

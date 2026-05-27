@@ -10,7 +10,7 @@ interface ResultItemProps {
 
 function formatSubscribers(
   count: number | string | undefined,
-  source: string
+  source: string | undefined
 ): string {
   if (count == null || count === 0) return "";
   const num = typeof count === "string" ? parseInt(count, 10) : count;
@@ -42,12 +42,13 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
   const displayAuthor = isYouTubeMixPlaylist ? undefined : item.author;
 
   // Thumbnail
-  const thumbnail = isArtist
-    ? item.thumbnailUrl ||
-      item.img ||
-      item.authorThumbnails?.[0]?.url ||
-      item.thumbnail
-    : item.thumbnailUrl || item.img;
+  const thumbnail =
+    (isArtist
+      ? item.thumbnailUrl ||
+        item.img ||
+        item.authorThumbnails?.[0]?.url ||
+        item.thumbnail
+      : item.thumbnailUrl || item.img) || "";
 
   const durationFormatted = !isArtist
     ? formatDuration(parseInt(item.duration) || 0, item.source)
@@ -100,15 +101,15 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
         {/* Channel / Artist name */}
         <h3 className="text-white font-medium truncate">{displayTitle}</h3>
 
-          {/* Subscriber / listener count – now properly below the name */}
-          {isArtist && subCountLabel && (
-            <p className="text-neutral-400 text-sm truncate">{subCountLabel}</p>
-          )}
+        {/* Subscriber / listener count – now properly below the name */}
+        {isArtist && subCountLabel && (
+          <p className="text-neutral-400 text-sm truncate">{subCountLabel}</p>
+        )}
 
-          {/* Author line for non‑artists */}
-          {!isArtist && displayAuthor && (
-            <p className="text-neutral-400 text-sm truncate">{displayAuthor}</p>
-          )}
+        {/* Author line for non‑artists */}
+        {!isArtist && displayAuthor && (
+          <p className="text-neutral-400 text-sm truncate">{displayAuthor}</p>
+        )}
 
         {!isArtist && (
           <div className="flex items-center gap-2 text-xs text-neutral-500">

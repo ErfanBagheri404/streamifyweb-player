@@ -19,6 +19,7 @@ export interface SearchResult {
   views?: string;
   thumbnailUrl?: string;
   img?: string;
+  thumbnail?: string;
   source?: string;
   type?: string;
   albumId?: string;
@@ -29,6 +30,8 @@ export interface SearchResult {
   channelDescription?: string;
   verified?: boolean;
   authorThumbnails?: AuthorThumbnail[];
+  // Additional fields for different sources
+  name?: string;
 }
 
 export interface SourceFilter {

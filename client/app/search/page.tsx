@@ -43,9 +43,9 @@ interface RawPipedItem {
   id?: string;
   author?: string;
   artist?: string;
-  videoThumbnails?: { url: string }[];
+  videoThumbnails?: { url: string; width?: number; height?: number }[];
   img?: string;
-  authorThumbnails?: { url: string }[];
+  authorThumbnails?: { url: string; width?: number; height?: number }[];
   lengthSeconds?: number;
   videoCount?: number;
   channelDescription?: string;
