@@ -6,8 +6,10 @@ import React, {
   useRef,
   useMemo,
   useEffect,
+  Suspense,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAudio } from "../contexts/AudioContext";
 import {
   SearchInput,
   FilterBar,
@@ -26,6 +28,7 @@ interface RawPipedItem {
   type?: string;
   title?: string;
   thumbnail?: string;
+  thumbnailUrl?: string;
   uploaderName?: string;
   uploaderUrl?: string;
   uploaderAvatar?: string;
@@ -43,6 +46,10 @@ interface RawPipedItem {
   id?: string;
   author?: string;
   artist?: string;
+  artwork_url?: string;
+  artwork?: string;
+  image?: { quality?: string; url?: string }[];
+  user?: { username?: string; avatar_url?: string };
   videoThumbnails?: { url: string; width?: number; height?: number }[];
   img?: string;
   authorThumbnails?: { url: string; width?: number; height?: number }[];
@@ -55,21 +62,42 @@ interface RawPipedItem {
 }
 
 export default function SearchPage() {
+  return (
+    <Suspense fallback={null}>
+      <SearchPageInner />
+    </Suspense>
+  );
+}
+
+function SearchPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { playSong } = useAudio();
 
   // State
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const query = searchParams.get("q");
+    return query || "";
+  });
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(() => {
+    return searchParams.get("q") ? true : false;
+  });
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreResults, setHasMoreResults] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const [selectedSource, setSelectedSource] = useState<SourceType>("youtube");
-  const [selectedFilter, setSelectedFilter] = useState("all");
+  const [selectedSource, setSelectedSource] = useState<SourceType>(() => {
+    const source = searchParams.get("source");
+    return (source as SourceType) || "youtube";
+  });
+  const [selectedFilter, setSelectedFilter] = useState(() => {
+    const filter = searchParams.get("filter");
+    return filter || "all";
+  });
   const [showFilters, setShowFilters] = useState(false);
   const [sourceFilters, setSourceFilters] = useState(defaultSourceFilters);
 
@@ -78,6 +106,22 @@ export default function SearchPage() {
   const selectedSourceRef = useRef(selectedSource);
   const searchQueryRef = useRef(searchQuery);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Update URL parameters when state changes
+  const updateUrlParams = useCallback(
+    (query: string, source: SourceType, filter: string) => {
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("q", query.trim());
+      if (source !== "youtube") params.set("source", source);
+      if (filter !== "all") params.set("filter", filter);
+
+      const newUrl = `${window.location.pathname}${
+        params.toString() ? "?" + params.toString() : ""
+      }`;
+      window.history.replaceState({}, "", newUrl);
+    },
+    []
+  );
 
   useEffect(() => {
     selectedFilterRef.current = selectedFilter;
@@ -88,6 +132,65 @@ export default function SearchPage() {
   useEffect(() => {
     searchQueryRef.current = searchQuery;
   }, [searchQuery]);
+
+  // Update URL parameters when search state changes
+  useEffect(() => {
+    if (hasSearched || searchQuery) {
+      updateUrlParams(searchQuery, selectedSource, selectedFilter);
+    }
+  }, [
+    searchQuery,
+    selectedSource,
+    selectedFilter,
+    hasSearched,
+    updateUrlParams,
+  ]);
+
+  // Restore search state from localStorage and perform initial search
+  useEffect(() => {
+    const query = searchParams.get("q");
+
+    // If URL has search params, use them (this takes priority)
+    if (query && !hasSearched && !isLoading) {
+      handleSearch(query);
+      return;
+    }
+
+    // If no URL params, try to restore from localStorage
+    const savedSearch = localStorage.getItem("lastSearch");
+    if (savedSearch && !hasSearched && !query && !isLoading) {
+      try {
+        const searchState = JSON.parse(savedSearch);
+        const timestamp = searchState.timestamp || 0;
+
+        // Only restore if state is recent (within 2 hours)
+        const maxAge = 2 * 60 * 60 * 1000; // 2 hours
+        if (Date.now() - timestamp < maxAge && searchState.query) {
+          // Set the state first
+          setSearchQuery(searchState.query);
+          searchQueryRef.current = searchState.query;
+          setSelectedSource(searchState.source || "youtube");
+          selectedSourceRef.current = searchState.source || "youtube";
+          setSelectedFilter(searchState.filter || "all");
+          selectedFilterRef.current = searchState.filter || "all";
+          setHasSearched(true);
+
+          // Restore search results if available
+          if (searchState.results && searchState.results.length > 0) {
+            setSearchResults(searchState.results);
+          } else {
+            // If no saved results, perform the search
+            setTimeout(() => {
+              handleSearch(searchState.query);
+            }, 100);
+          }
+        }
+      } catch (error) {
+        console.error("Error restoring search state:", error);
+        localStorage.removeItem("lastSearch");
+      }
+    }
+  }, []); // Only run on mount
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const paginationRef = useRef({
@@ -109,6 +212,41 @@ export default function SearchPage() {
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
   }, []);
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      // Check if we should restore search state when navigating back
+      const savedSearch = localStorage.getItem("lastSearch");
+      if (savedSearch && !searchParams.get("q")) {
+        try {
+          const searchState = JSON.parse(savedSearch);
+          const timestamp = searchState.timestamp || 0;
+          const maxAgePopstate = 2 * 60 * 60 * 1000; // 2 hours
+
+          if (Date.now() - timestamp < maxAgePopstate && searchState.query) {
+            // Restore the search state without performing a new search
+            setSearchQuery(searchState.query);
+            searchQueryRef.current = searchState.query;
+            setSelectedSource(searchState.source || "youtube");
+            selectedSourceRef.current = searchState.source || "youtube";
+            setSelectedFilter(searchState.filter || "all");
+            selectedFilterRef.current = searchState.filter || "all";
+            setHasSearched(true);
+
+            if (searchState.results && searchState.results.length > 0) {
+              setSearchResults(searchState.results);
+            }
+          }
+        } catch (error) {
+          console.error("Error restoring search state on popstate:", error);
+        }
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [searchParams]);
 
   // ─── Fetch suggestions from Piped API ────────────────
   const fetchSuggestions = async (query: string, source: SourceType) => {
@@ -163,9 +301,21 @@ export default function SearchPage() {
       );
       thumbnailUrl = sorted[0]?.url || "";
     }
+    if (!thumbnailUrl && Array.isArray(raw.image) && raw.image.length > 0) {
+      const bestImage =
+        raw.image.find((entry) => entry?.quality === "500x500") || raw.image[0];
+      thumbnailUrl = bestImage?.url || "";
+    }
     if (!thumbnailUrl) {
       thumbnailUrl =
-        raw.thumbnail || raw.videoThumbnails?.[0]?.url || raw.img || "";
+        raw.thumbnailUrl ||
+        raw.thumbnail ||
+        raw.videoThumbnails?.[0]?.url ||
+        raw.img ||
+        raw.artwork_url ||
+        raw.artwork ||
+        raw.user?.avatar_url ||
+        "";
     }
 
     const author = raw.uploaderName || raw.author || raw.artist || "";
@@ -301,6 +451,9 @@ export default function SearchPage() {
           source: sourceToUse,
           filter: filterToUse,
         };
+
+        // Save search state to localStorage
+        saveSearchState();
       } catch (error) {
         console.error("Search error:", error);
         if (!loadMore) setSearchResults([]);
@@ -393,6 +546,16 @@ export default function SearchPage() {
     }, 200);
   }, []);
 
+  const handleCategorySelect = useCallback(
+    (category: string) => {
+      setSearchQuery(category);
+      searchQueryRef.current = category;
+      setSuggestions([]);
+      handleSearch(category);
+    },
+    [handleSearch]
+  );
+
   // ─── Source selection ────────────────────────────────────
   const handleSourceSelect = useCallback(
     (sourceId: SourceType) => {
@@ -445,22 +608,107 @@ export default function SearchPage() {
     setSuggestions([]);
     setSearchResults([]);
     setHasSearched(false);
+    // Clear URL parameters
+    router.push("/search");
+    // Clear saved search state
+    localStorage.removeItem("lastSearch");
   };
 
+  // Save current search state to localStorage
+  const saveSearchState = useCallback(() => {
+    if (searchQuery || hasSearched) {
+      const searchState = {
+        query: searchQuery,
+        source: selectedSource,
+        filter: selectedFilter,
+        results: searchResults, // Save the actual results
+        timestamp: Date.now(),
+      };
+      localStorage.setItem("lastSearch", JSON.stringify(searchState));
+    }
+  }, [searchQuery, selectedSource, selectedFilter, searchResults, hasSearched]);
+
   // ─── Navigation handlers ─────────────────────────────────
+  const buildArtistUrl = (item: SearchResult) => {
+    const name =
+      item.title || item.author || item.name || (item as any).name || "";
+    const image =
+      item.thumbnailUrl ||
+      item.img ||
+      item.authorThumbnails?.[0]?.url ||
+      item.thumbnail ||
+      "";
+
+    const params = new URLSearchParams();
+    if (name) params.set("name", name);
+    if (image) params.set("image", image);
+
+    // Preserve search state
+    if (searchQuery) params.set("search_query", searchQuery);
+    if (selectedSource !== "youtube")
+      params.set("search_source", selectedSource);
+    if (selectedFilter !== "all") params.set("search_filter", selectedFilter);
+
+    const qs = params.toString();
+    return `/artist/${item.id}${qs ? `?${qs}` : ""}`;
+  };
+
   const handleTopResultPress = (item: SearchResult) => {
+    // Save search state before navigation
+    saveSearchState();
     if (item.source === "youtube_channel" || item.type === "artist") {
-      router.push(`/artist/${item.id}`);
+      router.push(buildArtistUrl(item));
     } else {
       console.log("Play:", item.title);
     }
   };
-  const handleArtistPress = (item: SearchResult) =>
-    router.push(`/artist/${item.id}`);
-  const handleAlbumPress = (item: SearchResult) =>
+  const handleArtistPress = (item: SearchResult) => {
+    // Save search state before navigation
+    saveSearchState();
+    router.push(buildArtistUrl(item));
+  };
+  const handleAlbumPress = (item: SearchResult) => {
+    // Save search state before navigation
+    saveSearchState();
     router.push(`/album/${item.id}`);
-  const handleSongPress = (item: SearchResult) =>
-    console.log("Play song:", item.title);
+  };
+  const handleSongPress = async (item: SearchResult) => {
+    // Save search state before navigation
+    saveSearchState();
+
+    try {
+      // Fetch actual video details with audio URL
+      const response = await fetch(`/api/video?id=${item.id}`);
+      const videoData = await response.json();
+
+      if (videoData.audioUrl) {
+        // Play the song using the actual YouTube audio URL
+        const song = {
+          id: item.id,
+          title: item.title,
+          artist: item.author || "Unknown Artist",
+          coverUrl: item.thumbnailUrl || item.img || item.thumbnail,
+          audioUrl: videoData.audioUrl,
+          duration: videoData.lengthSeconds
+            ? parseInt(videoData.lengthSeconds)
+            : undefined,
+          cachedAt: Date.now(),
+        };
+
+        playSong(song);
+        console.log(
+          "Playing song:",
+          item.title,
+          "with audio URL:",
+          videoData.audioUrl
+        );
+      } else {
+        console.error("No audio URL found for video:", item.id);
+      }
+    } catch (error) {
+      console.error("Failed to fetch video details:", error);
+    }
+  };
 
   // ─── Filter results into sections ────────────────────────
   const filteredResults = useMemo(() => {
@@ -495,7 +743,7 @@ export default function SearchPage() {
   const currentFilterOptions = getFilterOptions(selectedSource);
 
   return (
-    <div className="min-h-screen text-white">
+    <div className="h-full text-white flex flex-col overflow-hidden">
       <SearchInput
         value={searchQuery}
         onChange={handleTextChange}
@@ -530,8 +778,7 @@ export default function SearchPage() {
 
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto hide-scrollbar h-full"
-        style={{ maxHeight: "calc(100vh - 180px)" }}
+        className="flex-1 overflow-y-auto hide-scrollbar"
       >
         <ResultsList
           isLoading={isLoading}
@@ -547,6 +794,7 @@ export default function SearchPage() {
           onArtistPress={handleArtistPress}
           onAlbumPress={handleAlbumPress}
           onSongPress={handleSongPress}
+          onCategorySelect={handleCategorySelect}
         />
       </div>
     </div>

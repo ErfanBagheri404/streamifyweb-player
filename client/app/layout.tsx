@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import LeftPanel from "./components/LeftPanel";
-
-
+import MiniPlayer from "./components/MiniPlayer";
+import DynamicMainContent from "./components/DynamicMainContent";
+import { AudioProvider } from "./contexts/AudioContext";
 
 export const metadata: Metadata = {
   title: "Streamify Player",
@@ -15,10 +16,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`} h-full antialiased`}>
-      <body className={` h-full bg-black text-white flex flex-row p-3`}>
-        <LeftPanel />
-        <main className="flex-1 overflow-y-auto hide-scrollbar">{children}</main>
+    <html lang="en" className={`h-full antialiased`}>
+      <body className={`h-full bg-black text-white flex flex-row p-3`}>
+        <AudioProvider>
+          <LeftPanel />
+          <DynamicMainContent>{children}</DynamicMainContent>
+          <MiniPlayer />
+        </AudioProvider>
       </body>
     </html>
   );

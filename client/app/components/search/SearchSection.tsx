@@ -14,7 +14,6 @@ export const SearchSection = memo<SearchSectionProps>(
   ({ title, items, onItemPress, isArtistsSection = false }) => {
     if (items.length === 0) return null;
 
-    // Artists section uses horizontal scroll layout
     if (isArtistsSection) {
       return (
         <div className="mb-6">
@@ -32,7 +31,6 @@ export const SearchSection = memo<SearchSectionProps>(
       );
     }
 
-    // Default vertical list layout
     return (
       <div className="mb-4">
         <h2 className="text-white text-lg font-bold mb-2 ml-1">{title}</h2>
