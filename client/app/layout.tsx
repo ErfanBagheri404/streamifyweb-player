@@ -4,6 +4,7 @@ import LeftPanel from "./components/LeftPanel";
 import MiniPlayer from "./components/MiniPlayer";
 import DynamicMainContent from "./components/DynamicMainContent";
 import { AudioProvider } from "./contexts/AudioContext";
+import { dmSans, spaceMono } from "./fonts";
 
 export const metadata: Metadata = {
   title: "Streamify Player",
@@ -16,8 +17,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`h-full antialiased`}>
-      <body className={`h-full bg-black text-white flex flex-row p-3`}>
+    <html
+      lang="en"
+      className={`h-full antialiased ${dmSans.variable} ${spaceMono.variable}`}
+    >
+      <body
+        className={`${dmSans.className} h-full bg-black text-white flex flex-row p-3`}
+      >
         <AudioProvider>
           <LeftPanel />
           <DynamicMainContent>{children}</DynamicMainContent>

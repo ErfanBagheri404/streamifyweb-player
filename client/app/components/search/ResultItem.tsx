@@ -23,10 +23,26 @@ function formatSubscribers(
   return `${formatted} Subscribers`;
 }
 
+function formatMetric(
+  value: number | string | undefined,
+  suffix: string
+): string | undefined {
+  if (value == null || value === 0 || value === "0") return undefined;
+
+  const raw = String(value).trim();
+  if (!raw) return undefined;
+  if (new RegExp(`\\b${suffix}\\b`, "i").test(raw)) return raw;
+  if (/^\d+$/.test(raw)) return `${shortCount(raw)} ${suffix}`;
+  return `${raw} ${suffix}`;
+}
+
 export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
   const isArtist = item.type === "artist" || item.type === "channel";
   const isYouTubeSource =
     item.source === "youtube" || item.source === "youtubemusic";
+  const hideViewsAndDateForYouTubeMusic =
+    item.source === "youtubemusic" &&
+    (item.type === "song" || item.type === "video" || item.type === "stream");
 
   // YouTube mix detection
   const isYouTubeMixPlaylist =
@@ -55,14 +71,18 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
     : null;
 
   const viewsFormatted =
-    !isArtist && item.views && item.views !== "-1" && item.views !== "0"
-      ? shortCount(item.views) + " views"
+    !isArtist && !hideViewsAndDateForYouTubeMusic
+      ? formatMetric(item.views, "views")
+      : undefined;
+
+  const uploadedLabel =
+    !isArtist && !hideViewsAndDateForYouTubeMusic && item.uploaded
+      ? item.uploaded
       : undefined;
 
   const subCountLabel = isArtist
     ? formatSubscribers((item as any).subCount, item.source)
     : "";
-
   // Thumbnail styling
   const thumbnailClasses = isArtist
     ? "w-12 h-12 rounded-full object-cover mr-3"
@@ -120,10 +140,10 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
                 <span>{viewsFormatted}</span>
               </>
             )}
-            {item.uploaded && (
+            {uploadedLabel && (
               <>
                 <span className="w-1 h-1 rounded-full bg-neutral-600" />
-                <span>{item.uploaded}</span>
+                <span>{uploadedLabel}</span>
               </>
             )}
           </div>

@@ -2,7 +2,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAudio } from "../contexts/AudioContext";
 
@@ -14,7 +14,8 @@ interface SearchState {
 
 export default function LeftPanel() {
   const router = useRouter();
-  const { currentSong, recentSongs, playSong } = useAudio();
+  const pathname = usePathname();
+  const { recentSongs, playSong } = useAudio();
   const [lastSearch, setLastSearch] = useState<SearchState | null>(null);
 
   const openSearch = () => {
@@ -32,6 +33,14 @@ export default function LeftPanel() {
   };
 
   const recentCovers = recentSongs.filter((song) => song.coverUrl);
+  const isHomePage = pathname === "/";
+  const isSearchPage = pathname.startsWith("/search");
+  const isLibraryPage = pathname.startsWith("/library");
+  const getIconClassName = (isActive: boolean) =>
+    [
+      "cursor-pointer transition-all duration-200 ease-out",
+      isActive ? "opacity-100 scale-100" : "scale-[0.88] opacity-65",
+    ].join(" ");
 
   useEffect(() => {
     // Load last search state from localStorage
@@ -45,37 +54,53 @@ export default function LeftPanel() {
     <div className="flex flex-col gap-3 h-full pr-4">
       {/* First Box */}
       <div className="flex w-[86px] flex-col items-center gap-7 rounded-xl bg-[#181818] px-7 py-6">
-        <div>
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="flex items-center justify-center"
+          aria-label="Go to home"
+        >
           <Image
             src="/StreamifyLogo.svg"
             alt="Streamify Logo"
             width={30}
             height={30}
-            onClick={() => router.push("/")}
+            className={getIconClassName(isHomePage)}
             priority
           />
-        </div>
-        <div>
+        </button>
+        <button
+          type="button"
+          onClick={openSearch}
+          className="flex items-center justify-center"
+          aria-label="Open search"
+        >
           <Image
             src="/Search.svg"
             alt="Search"
             width={30}
             height={30}
-            onClick={openSearch}
-            className="cursor-pointer"
+            className={getIconClassName(isSearchPage)}
           />
-        </div>
-        <div>
-          <Image src="/Library.svg" alt="Library" width={30} height={30} />
-        </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push("/library")}
+          className="flex items-center justify-center"
+          aria-label="Open library"
+        >
+          <Image
+            src="/Library.svg"
+            alt="Library"
+            width={30}
+            height={30}
+            className={getIconClassName(isLibraryPage)}
+          />
+        </button>
       </div>
 
       {/* Second Box */}
-      <div
-        className={`flex w-[86px] flex-1 min-h-0 flex-col items-center rounded-xl bg-[#181818] py-6 transition-all duration-300 ease-in-out ${
-          currentSong ? "mb-20" : ""
-        }`}
-      >
+      <div className="mb-20 flex w-[86px] flex-1 min-h-0 flex-col items-center rounded-xl bg-[#181818] py-6">
         <div className="flex w-full flex-1 flex-col items-center gap-3 overflow-y-auto hide-scrollbar pr-1">
           {recentCovers.length > 0
             ? recentCovers.map((song) => (

@@ -1,9 +1,15 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Image from "next/image";
-import { Space_Mono } from "next/font/google";
 import { useAudio } from "../contexts/AudioContext";
+import { spaceMono } from "../fonts";
 
 const STATIC_WAVEFORM_BAR_COUNT = 56;
 
@@ -28,28 +34,29 @@ function createStaticWaveform(seedInput: string, count: number): number[] {
   return values;
 }
 
-const spaceMono = Space_Mono({
-  subsets: ["latin"],
-  weight: ["400"],
-  display: "swap",
-});
-
 const MiniPlayer: React.FC = () => {
   const {
     currentSong,
     isPlaying,
+    isSongLoading,
     currentTime,
     duration,
+    volume,
     isRepeat,
     pauseSong,
     resumeSong,
     seekTo,
+    setVolume,
     toggleRepeat,
     playNext,
     playPrevious,
+    openFullscreen,
   } = useAudio();
-  const waveformContainerRef = useRef<HTMLButtonElement>(null);
+
+  const compactWaveformRef = useRef<HTMLButtonElement>(null);
+  const volumeControlRef = useRef<HTMLDivElement>(null);
   const isDraggingSeekRef = useRef(false);
+  const [isVolumeOpen, setIsVolumeOpen] = useState(false);
 
   const waveformBars = useMemo(() => {
     if (!currentSong) return [];
@@ -82,12 +89,13 @@ const MiniPlayer: React.FC = () => {
     duration > 0 ? Math.min(Math.max(currentTime / duration, 0), 1) : 0;
   const progressPercent = progress * 100;
   const playedBars = Math.round(progress * waveformBars.length);
+  const volumePercent = Math.round(volume * 100);
 
   const seekFromClientX = useCallback(
     (clientX: number) => {
       if (!duration) return;
 
-      const bounds = waveformContainerRef.current?.getBoundingClientRect();
+      const bounds = compactWaveformRef.current?.getBoundingClientRect();
       if (!bounds) return;
 
       const ratio = Math.min(
@@ -105,7 +113,31 @@ const MiniPlayer: React.FC = () => {
     };
   }, []);
 
-  const handleWaveformPointerDown = (
+  useEffect(() => {
+    if (!isVolumeOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!volumeControlRef.current?.contains(event.target as Node)) {
+        setIsVolumeOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsVolumeOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isVolumeOpen]);
+
+  const handleCompactWaveformPointerDown = (
     event: React.PointerEvent<HTMLButtonElement>
   ) => {
     if (!duration) return;
@@ -115,14 +147,14 @@ const MiniPlayer: React.FC = () => {
     seekFromClientX(event.clientX);
   };
 
-  const handleWaveformPointerMove = (
+  const handleCompactWaveformPointerMove = (
     event: React.PointerEvent<HTMLButtonElement>
   ) => {
     if (!isDraggingSeekRef.current) return;
     seekFromClientX(event.clientX);
   };
 
-  const handleWaveformPointerEnd = (
+  const handleCompactWaveformPointerEnd = (
     event: React.PointerEvent<HTMLButtonElement>
   ) => {
     if (!isDraggingSeekRef.current) return;
@@ -140,7 +172,7 @@ const MiniPlayer: React.FC = () => {
   }
 
   return (
-    <div className="fixed bottom-3 left-3 right-3 z-50 rounded-full bg-[#181818] p-3 shadow-lg">
+    <div className="fixed bottom-3 left-3 right-3 z-50 rounded-full bg-[#181818] p-3">
       <div className="mx-auto flex max-w-full items-center justify-between">
         <div className="flex min-w-0 flex-1 items-center space-x-3">
           <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-gray-700">
@@ -177,12 +209,12 @@ const MiniPlayer: React.FC = () => {
 
         <div className="flex min-w-0 flex-1 items-center justify-center space-x-3 px-4">
           <button
-            ref={waveformContainerRef}
+            ref={compactWaveformRef}
             type="button"
-            onPointerDown={handleWaveformPointerDown}
-            onPointerMove={handleWaveformPointerMove}
-            onPointerUp={handleWaveformPointerEnd}
-            onPointerCancel={handleWaveformPointerEnd}
+            onPointerDown={handleCompactWaveformPointerDown}
+            onPointerMove={handleCompactWaveformPointerMove}
+            onPointerUp={handleCompactWaveformPointerEnd}
+            onPointerCancel={handleCompactWaveformPointerEnd}
             className="relative h-8 flex-1 min-w-[180px] max-w-[240px] cursor-ew-resize overflow-hidden touch-none"
             aria-label="Seek playback"
           >
@@ -224,25 +256,38 @@ const MiniPlayer: React.FC = () => {
 
         <div className="flex flex-1 items-center justify-end space-x-2">
           <button
+            type="button"
             onClick={playPrevious}
             className="rounded-full transition-colors"
           >
             <Image src="/Previous.svg" alt="Previous" width={42} height={42} />
           </button>
 
-          <button onClick={handlePlayPause} className="transition-colors">
-            {isPlaying ? (
+          <button
+            type="button"
+            disabled={isSongLoading}
+            onClick={handlePlayPause}
+            className="flex h-10 w-10 items-center justify-center transition-colors"
+          >
+            {isSongLoading ? (
+              <div className="h-5 w-5 rounded-full border-2 border-white/80 border-t-transparent animate-spin" />
+            ) : isPlaying ? (
               <Image src="/Pause.svg" alt="Pause" width={32} height={32} />
             ) : (
               <Image src="/Play.svg" alt="Play" width={32} height={32} />
             )}
           </button>
 
-          <button onClick={playNext} className="rounded-full transition-colors">
+          <button
+            type="button"
+            onClick={playNext}
+            className="rounded-full transition-colors"
+          >
             <Image src="/Next.svg" alt="Next" width={42} height={42} />
           </button>
 
           <button
+            type="button"
             onClick={toggleRepeat}
             className={`rounded-full transition-colors ${
               isRepeat ? "opacity-100" : "opacity-70"
@@ -251,13 +296,47 @@ const MiniPlayer: React.FC = () => {
             <Image src="/Repeat.svg" alt="Repeat" width={42} height={42} />
           </button>
 
-          <div className="flex items-center space-x-2 pr-2">
-            <button className="rounded-full transition-colors">
+          <div
+            ref={volumeControlRef}
+            className="relative flex items-center pr-2"
+          >
+            {isVolumeOpen ? (
+              <div className="absolute bottom-full right-1 mb-3 rounded-full bg-[#202020] px-4 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.4)]">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={volumePercent}
+                  onChange={(event) =>
+                    setVolume(Number(event.target.value) / 100)
+                  }
+                  className="volume-slider h-4 w-20 cursor-pointer appearance-none bg-transparent"
+                  style={
+                    {
+                      "--volume-progress": `${volumePercent}%`,
+                    } as React.CSSProperties
+                  }
+                  aria-label="Adjust volume"
+                />
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setIsVolumeOpen((prev) => !prev)}
+              className="rounded-full transition-colors"
+              aria-label="Toggle volume slider"
+              aria-expanded={isVolumeOpen}
+            >
               <Image src="/Volume.svg" alt="Volume" width={42} height={42} />
             </button>
           </div>
 
-          <button className="rounded-full pr-2 transition-colors">
+          <button
+            type="button"
+            onClick={openFullscreen}
+            className="rounded-full pr-2 transition-colors"
+            aria-label="Open fullscreen player"
+          >
             <Image
               src="/Fullscreen.svg"
               alt="Fullscreen"

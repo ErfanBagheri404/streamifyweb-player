@@ -16,6 +16,7 @@ export interface Song {
   coverUrl?: string;
   audioUrl?: string;
   duration?: number;
+  uploaded?: string;
   cachedAt?: number;
 }
 
@@ -23,11 +24,14 @@ interface AudioContextType {
   currentSong: Song | null;
   recentSongs: Song[];
   isPlaying: boolean;
+  isSongLoading: boolean;
   currentTime: number;
   duration: number;
   volume: number;
   isRepeat: boolean;
+  beginSongLoad: (song: Song) => void;
   playSong: (song: Song) => void;
+  clearSongLoading: () => void;
   pauseSong: () => void;
   resumeSong: () => void;
   seekTo: (time: number) => void;
@@ -35,6 +39,9 @@ interface AudioContextType {
   toggleRepeat: () => void;
   playNext: () => void;
   playPrevious: () => void;
+  isFullscreenOpen: boolean;
+  openFullscreen: () => void;
+  closeFullscreen: () => void;
   audioRef: React.RefObject<HTMLAudioElement>;
   isPlayerVisible: boolean; // Add this
 }
@@ -68,10 +75,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [recentSongs, setRecentSongs] = useState<Song[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isSongLoading, setIsSongLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(1);
   const [isRepeat, setIsRepeat] = useState(false);
+  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -121,6 +130,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       volume,
       isRepeat,
       isPlaying,
+      isSongLoading: false,
     };
     localStorage.setItem("audioPlayerState", JSON.stringify(state));
   }, [
@@ -197,6 +207,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
   // Handle audio ended
   useEffect(() => {
+    if (!currentSong && isFullscreenOpen) {
+      setIsFullscreenOpen(false);
+    }
+  }, [currentSong, isFullscreenOpen]);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -241,7 +257,43 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     });
     setCurrentTime(0);
     setDuration(normalizedSong.duration || 0);
+    setIsSongLoading(false);
     setIsPlaying(true);
+  };
+
+  const beginSongLoad = (song: Song) => {
+    const audio = audioRef.current;
+    const normalizedSong = {
+      ...song,
+      cachedAt: song.cachedAt ?? Date.now(),
+    };
+
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.removeAttribute("src");
+      audio.load();
+    }
+
+    setCurrentSong(normalizedSong);
+    setRecentSongs((prev) => {
+      const existing = prev.find((entry) => entry.id === normalizedSong.id);
+      const merged = existing
+        ? { ...existing, ...normalizedSong }
+        : normalizedSong;
+      return [
+        merged,
+        ...prev.filter((entry) => entry.id !== normalizedSong.id),
+      ];
+    });
+    setCurrentTime(0);
+    setDuration(normalizedSong.duration || 0);
+    setIsPlaying(false);
+    setIsSongLoading(true);
+  };
+
+  const clearSongLoading = () => {
+    setIsSongLoading(false);
   };
 
   const pauseSong = () => {
@@ -291,15 +343,28 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
   };
 
+  const openFullscreen = () => {
+    if (currentSong) {
+      setIsFullscreenOpen(true);
+    }
+  };
+
+  const closeFullscreen = () => {
+    setIsFullscreenOpen(false);
+  };
+
   const value: AudioContextType = {
     currentSong,
     recentSongs,
     isPlaying,
+    isSongLoading,
     currentTime,
     duration,
     volume,
     isRepeat,
+    beginSongLoad,
     playSong,
+    clearSongLoading,
     pauseSong,
     resumeSong,
     seekTo,
@@ -307,6 +372,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     toggleRepeat,
     playNext,
     playPrevious,
+    isFullscreenOpen,
+    openFullscreen,
+    closeFullscreen,
     audioRef,
     isPlayerVisible: currentSong !== null, // Player is visible if a song is loaded
   };

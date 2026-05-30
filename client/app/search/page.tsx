@@ -59,6 +59,91 @@ interface RawPipedItem {
   description?: string;
   verified?: boolean;
   subCount?: number;
+  source?: string;
+}
+
+function scoreImageQuality(
+  image: { width?: number; height?: number; quality?: string } | undefined
+): number {
+  if (!image) return 0;
+  const width = image.width ?? 0;
+  const height = image.height ?? 0;
+  if (width > 0 || height > 0) return width * height;
+
+  const quality = image.quality ?? "";
+  const match = quality.match(/(\d+)\s*x\s*(\d+)/i);
+  if (!match) return 0;
+  return Number(match[1]) * Number(match[2]);
+}
+
+function upgradeSoundCloudImage(url?: string): string {
+  if (!url) return "";
+
+  return url
+    .replace("-large.", "-t500x500.")
+    .replace("large.jpg", "t500x500.jpg")
+    .replace("large.png", "t500x500.png");
+}
+
+function formatUploadedLabel(value?: string | number): string | undefined {
+  if (value == null) return undefined;
+
+  const raw = String(value).trim();
+  if (!raw || raw === "-1") return undefined;
+
+  const cleaned = raw
+    .replace(/^[\d.,]+\s*(?:[KMB]|million|billion)?\s+views?\s*[•-]?\s*/i, "")
+    .trim();
+  if (!cleaned || cleaned === "-1") return undefined;
+  const timestampCandidate = cleaned || raw;
+
+  if (/^\d{10,13}$/.test(timestampCandidate)) {
+    const numericValue = Number(timestampCandidate);
+    const timestamp =
+      timestampCandidate.length === 13 ? numericValue : numericValue * 1000;
+    const date = new Date(timestamp);
+
+    if (!Number.isNaN(date.getTime())) {
+      return new Intl.DateTimeFormat("en", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(date);
+    }
+  }
+
+  return cleaned || raw;
+}
+
+function getBestThumbnail(raw: RawPipedItem, source: string): string {
+  if (Array.isArray(raw.authorThumbnails) && raw.authorThumbnails.length > 0) {
+    return [...raw.authorThumbnails].sort(
+      (a, b) => scoreImageQuality(b) - scoreImageQuality(a)
+    )[0]?.url;
+  }
+
+  if (Array.isArray(raw.image) && raw.image.length > 0) {
+    return [...raw.image].sort(
+      (a, b) => scoreImageQuality(b) - scoreImageQuality(a)
+    )[0]?.url || "";
+  }
+
+  if (Array.isArray(raw.videoThumbnails) && raw.videoThumbnails.length > 0) {
+    return [...raw.videoThumbnails].sort(
+      (a, b) => scoreImageQuality(b) - scoreImageQuality(a)
+    )[0]?.url;
+  }
+
+  const fallback =
+    raw.thumbnailUrl ||
+    raw.thumbnail ||
+    raw.img ||
+    raw.artwork_url ||
+    raw.artwork ||
+    raw.user?.avatar_url ||
+    "";
+
+  return source === "soundcloud" ? upgradeSoundCloudImage(fallback) : fallback;
 }
 
 export default function SearchPage() {
@@ -72,7 +157,7 @@ export default function SearchPage() {
 function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { playSong } = useAudio();
+  const { playSong, beginSongLoad, clearSongLoading } = useAudio();
 
   // State
   const [searchQuery, setSearchQuery] = useState(() => {
@@ -83,6 +168,7 @@ function SearchPageInner() {
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingSongId, setLoadingSongId] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(() => {
     return searchParams.get("q") ? true : false;
   });
@@ -283,6 +369,7 @@ function SearchPageInner() {
 
   // ─── Helper: map raw item to SearchResult ────────────────
   const mapToSearchResult = (raw: RawPipedItem): SearchResult => {
+    const source = raw.source || selectedSourceRef.current || "youtube";
     const id =
       raw.url?.split("v=")[1] ||
       raw.url ||
@@ -292,49 +379,14 @@ function SearchPageInner() {
       raw.id ||
       "";
 
-    // For channel/artist thumbnails, find the highest quality (512x512 or largest available)
-    let thumbnailUrl = "";
-    if (raw.authorThumbnails && raw.authorThumbnails.length > 0) {
-      // Sort by width descending to get highest quality
-      const sorted = [...raw.authorThumbnails].sort(
-        (a, b) => (b.width || 0) - (a.width || 0)
-      );
-      thumbnailUrl = sorted[0]?.url || "";
-    }
-    if (!thumbnailUrl && Array.isArray(raw.image) && raw.image.length > 0) {
-      const bestImage =
-        raw.image.find((entry) => entry?.quality === "500x500") || raw.image[0];
-      thumbnailUrl = bestImage?.url || "";
-    }
-    if (!thumbnailUrl) {
-      thumbnailUrl =
-        raw.thumbnailUrl ||
-        raw.thumbnail ||
-        raw.videoThumbnails?.[0]?.url ||
-        raw.img ||
-        raw.artwork_url ||
-        raw.artwork ||
-        raw.user?.avatar_url ||
-        "";
-    }
+    const thumbnailUrl = getBestThumbnail(raw, source);
 
     const author = raw.uploaderName || raw.author || raw.artist || "";
 
     const duration = String(raw.duration ?? raw.lengthSeconds ?? "0");
 
-    const views =
-      raw.views != null ? shortCount(String(raw.views)) + " views" : undefined;
-
-    let uploaded: string | number | undefined = raw.uploadedDate;
-    if (!uploaded && raw.uploaded != null) {
-      if (typeof raw.uploaded === "string") {
-        uploaded =
-          raw.uploaded.replace(/(\[\d.\]+\['MKB'\]?)\s*views?\s*•?\s*/i, "") ||
-          raw.uploaded;
-      } else {
-        uploaded = raw.uploaded; // timestamp number
-      }
-    }
+    const views = raw.views != null ? String(raw.views) : undefined;
+    const uploaded = formatUploadedLabel(raw.uploadedDate ?? raw.uploaded);
 
     // Map type – Piped uses "stream" for videos, "channel" for artists
     let mappedType = raw.type ?? "video";
@@ -348,17 +400,17 @@ function SearchPageInner() {
         : raw.title || "";
 
     return {
+      // Keep original fields for potential use, but let normalized values win.
+      ...raw,
       id,
-      source: "youtube" as const,
+      source,
       title: displayTitle,
       author,
       duration,
-      views: views || "",
+      views,
       thumbnailUrl,
       uploaded,
       type: mappedType,
-      // Keep original fields for potential use
-      ...raw,
     } as SearchResult;
   };
 
@@ -673,8 +725,21 @@ function SearchPageInner() {
     router.push(`/album/${item.id}`);
   };
   const handleSongPress = async (item: SearchResult) => {
+    if (loadingSongId === item.id) return;
+
     // Save search state before navigation
     saveSearchState();
+    setLoadingSongId(item.id);
+
+    beginSongLoad({
+      id: item.id,
+      title: item.title,
+      artist: item.author || "Unknown Artist",
+      coverUrl: item.thumbnailUrl || item.img || item.thumbnail,
+      uploaded: item.uploaded,
+      duration: item.duration ? parseInt(item.duration, 10) : undefined,
+      cachedAt: Date.now(),
+    });
 
     try {
       // Fetch actual video details with audio URL
@@ -688,6 +753,7 @@ function SearchPageInner() {
           title: item.title,
           artist: item.author || "Unknown Artist",
           coverUrl: item.thumbnailUrl || item.img || item.thumbnail,
+          uploaded: item.uploaded,
           audioUrl: videoData.audioUrl,
           duration: videoData.lengthSeconds
             ? parseInt(videoData.lengthSeconds)
@@ -704,9 +770,13 @@ function SearchPageInner() {
         );
       } else {
         console.error("No audio URL found for video:", item.id);
+        clearSongLoading();
       }
     } catch (error) {
       console.error("Failed to fetch video details:", error);
+      clearSongLoading();
+    } finally {
+      setLoadingSongId((current) => (current === item.id ? null : current));
     }
   };
 

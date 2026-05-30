@@ -1,21 +1,24 @@
 "use client";
 
 import { useAudio } from "../contexts/AudioContext";
+import FullscreenPlayer from "./FullscreenPlayer";
 
 interface DynamicMainContentProps {
   children: React.ReactNode;
 }
 
-export default function DynamicMainContent({ children }: DynamicMainContentProps) {
-  const { isPlayerVisible } = useAudio();
+export default function DynamicMainContent({
+  children,
+}: DynamicMainContentProps) {
+  const { isFullscreenOpen } = useAudio();
 
   return (
     <main
-      className={`flex-1 overflow-y-auto hide-scrollbar relative ${
-        isPlayerVisible ? "pb-20" : ""
-      }`}
+      className={`flex-1 relative ${
+        isFullscreenOpen ? "overflow-hidden" : "overflow-y-auto hide-scrollbar"
+      } min-h-0 pb-20`}
     >
-      {children}
+      {isFullscreenOpen ? <FullscreenPlayer /> : children}
     </main>
   );
 }

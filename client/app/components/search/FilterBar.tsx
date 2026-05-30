@@ -25,7 +25,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   return (
     <div
       className={`overflow-hidden transition-all duration-300 ease-out  ${
-        showFilters ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+        showFilters ? "mb-3 max-h-96 opacity-100 pb-2" : "mb-0 max-h-0 opacity-0"
       }`}
     >
       {/* Source filters */}
@@ -56,7 +56,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
       {/* Sub-filters */}
       {showSubFilters && (
-        <div className="overflow-x-auto whitespace-nowrap pb-2">
+        <div className="overflow-x-auto whitespace-nowrap pb-3 hide-scrollbar">
           <div className="flex gap-2">
             {filterOptions.map((filter) => (
               <button

@@ -187,6 +187,44 @@ const INVIDIOUS_INSTANCES = [
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
+function scoreThumbnail(
+  thumbnail:
+    | { width?: number; height?: number; quality?: string; url?: string }
+    | undefined
+): number {
+  if (!thumbnail) return 0;
+  const width = thumbnail.width ?? 0;
+  const height = thumbnail.height ?? 0;
+  if (width > 0 || height > 0) return width * height;
+
+  const quality = thumbnail.quality ?? "";
+  const match = quality.match(/(\d+)\s*x\s*(\d+)/i);
+  if (!match) return 0;
+  return Number(match[1]) * Number(match[2]);
+}
+
+function pickBestThumbnailUrl(
+  thumbnails:
+    | Array<{ width?: number; height?: number; quality?: string; url?: string }>
+    | undefined
+): string {
+  if (!Array.isArray(thumbnails) || thumbnails.length === 0) return "";
+
+  return (
+    [...thumbnails].sort((a, b) => scoreThumbnail(b) - scoreThumbnail(a))[0]
+      ?.url || ""
+  );
+}
+
+function upgradeSoundCloudImage(url?: string): string {
+  if (!url) return "";
+
+  return url
+    .replace("-large.", "-t500x500.")
+    .replace("large.jpg", "t500x500.jpg")
+    .replace("large.png", "t500x500.png");
+}
+
 interface HasItems {
   items?: unknown[];
 }
@@ -348,10 +386,35 @@ async function searchYouTube(
   const newNextpage = data?.nextpage ?? null;
   console.log(`[searchYouTube] Items found: ${rawItems.length}`);
 
-  const results = rawItems.map((item: RawPipedItem) => ({
-    ...item,
-    source: "youtube" as const,
-  }));
+  const results = rawItems.map((item: RawPipedItem) => {
+    const videoThumbnails = Array.isArray(item.videoThumbnails)
+      ? (item.videoThumbnails as Array<{
+          width?: number;
+          height?: number;
+          quality?: string;
+          url?: string;
+        }>)
+      : undefined;
+    const authorThumbnails = Array.isArray(item.authorThumbnails)
+      ? (item.authorThumbnails as Array<{
+          width?: number;
+          height?: number;
+          quality?: string;
+          url?: string;
+        }>)
+      : undefined;
+
+    return {
+      ...item,
+      thumbnailUrl:
+        pickBestThumbnailUrl(videoThumbnails) ||
+        pickBestThumbnailUrl(authorThumbnails) ||
+        (typeof item.playlistThumbnail === "string" ? item.playlistThumbnail : "") ||
+        (typeof item.thumbnailUrl === "string" ? item.thumbnailUrl : "") ||
+        (typeof item.thumbnail === "string" ? item.thumbnail : ""),
+      source: "youtube" as const,
+    };
+  });
 
   console.log(`[searchYouTube] Final results count: ${results.length}`);
   return { items: results, nextpage: newNextpage };
@@ -482,7 +545,14 @@ async function searchYouTubeMusic(
 ) {
   console.log(`[searchYouTubeMusic] Query: "${query}", Filter: "${filter}"`);
   const musicFilter = musicFilterMap(filter || "songs");
-  return searchYouTube(query, musicFilter, page, limit, nextpage);
+  const result = await searchYouTube(query, musicFilter, page, limit, nextpage);
+  return {
+    items: result.items.map((item) => ({
+      ...(item as Record<string, unknown>),
+      source: "youtubemusic" as const,
+    })),
+    nextpage: result.nextpage ?? null,
+  };
 }
 
 // ---------- SoundCloud – unchanged ----------
@@ -524,7 +594,9 @@ async function searchSoundCloud(
       videoCount:
         c.track_count ??
         (Array.isArray(c.tracks) ? c.tracks.length : undefined),
-      thumbnailUrl: c.artwork_url || c.artwork || c.user?.avatar_url || "",
+      thumbnailUrl: upgradeSoundCloudImage(
+        c.artwork_url || c.artwork || c.user?.avatar_url || ""
+      ),
       type: scType === "playlists" ? "playlist" : "album",
       source: "soundcloud",
     }));
@@ -556,9 +628,9 @@ async function searchSoundCloud(
         duration: String(Math.floor(t.duration / 1000)),
         views: String(t.playback_count || 0),
         uploaded: "",
-        thumbnailUrl:
-          t.artwork_url?.replace("large.jpg", "t500x500.jpg") ||
-          t.user?.avatar_url,
+        thumbnailUrl: upgradeSoundCloudImage(
+          t.artwork_url || t.user?.avatar_url
+        ),
         type: "song",
         source: "soundcloud",
       }));

@@ -18,7 +18,7 @@ export const SearchSection = memo<SearchSectionProps>(
       return (
         <div className="mb-6">
           <h2 className="text-white text-lg font-bold mb-3 ml-1">{title}</h2>
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
             {items.map((item) => (
               <ArtistCard
                 key={`${item.source || "yt"}-${item.id}`}
