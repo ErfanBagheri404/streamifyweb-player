@@ -12,6 +12,7 @@ interface JioSaavnSong {
   singers?: string;
   primaryArtists?: string;
   duration?: string;
+  url?: string;
   image?: JioSaavnImage[];
   album?: { id: string; name: string; url: string };
 }
@@ -77,13 +78,15 @@ export async function searchJioSaavn(query: string): Promise<SearchResponse> {
     for (const s of songs) {
       const thumb = s.image?.find((img) => img.quality === "500x500")?.url || s.image?.[0]?.url;
       results.push({
-        id: String(s.id),
+        id: String(s.id || s.url || ""),
         title: s.song || s.name || "",
         author: s.singers || s.primaryArtists || "",
         duration: s.duration ? String(s.duration) : "0",
         thumbnailUrl: thumb,
         type: "song",
         source: "jiosaavn",
+        href: s.url,
+        url: s.url,
         albumId: s.album?.id,
         albumName: s.album?.name,
       });

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 
 const USER_AGENT =
@@ -14,6 +15,53 @@ const INVIDIOUS_INSTANCES = [
 ];
 
 type SearchResponse = { items: unknown[]; nextpage?: string | null };
+
+const DEBUG_ENV_PATH = ".dbg/youtube-search-500.env";
+const DEBUG_SERVER_URL_FALLBACK = "";
+const DEBUG_SESSION_ID_FALLBACK = "youtube-search-500";
+
+function getDebugConfig(): { url: string; sessionId: string } {
+  let url = DEBUG_SERVER_URL_FALLBACK;
+  let sessionId = DEBUG_SESSION_ID_FALLBACK;
+
+  try {
+    const envText = readFileSync(DEBUG_ENV_PATH, "utf8");
+    const nextUrl = envText.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim();
+    const nextSessionId = envText
+      .match(/^DEBUG_SESSION_ID=(.+)$/m)?.[1]
+      ?.trim();
+
+    if (nextUrl) url = nextUrl;
+    if (nextSessionId) sessionId = nextSessionId;
+  } catch {}
+
+  return { url, sessionId };
+}
+
+function reportDebugEvent(
+  runId: string,
+  hypothesisId: string,
+  location: string,
+  msg: string,
+  data: Record<string, unknown>
+) {
+  const { url, sessionId } = getDebugConfig();
+  if (!url) return;
+
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId,
+      runId,
+      hypothesisId,
+      location,
+      msg,
+      data,
+      ts: Date.now(),
+    }),
+  }).catch(() => {});
+}
 
 function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
   const controller = new AbortController();
@@ -140,22 +188,46 @@ async function searchPiped(
         filterParam
       )}`;
 
-  const res = await fetch(`${instance}${endpoint}`, {
-    headers: { "User-Agent": USER_AGENT, accept: "application/json" },
-    cache: "no-store",
-    signal: withTimeout(undefined, 1800),
-  });
+  try {
+    const res = await fetch(`${instance}${endpoint}`, {
+      headers: { "User-Agent": USER_AGENT, accept: "application/json" },
+      cache: "no-store",
+      signal: withTimeout(undefined, 1800),
+    });
 
-  if (!res.ok) return { items: [], nextpage: null };
+    if (!res.ok) return { items: [], nextpage: null };
 
-  const data = (await res.json()) as unknown;
-  const parsed = data as { items?: unknown[]; nextpage?: string | null };
-  const items = (parsed.items ?? []).map((item) => ({
-    ...(item as Record<string, unknown>),
-    source: "youtube",
-  }));
+    const data = (await res.json()) as unknown;
+    const parsed = data as { items?: unknown[]; nextpage?: string | null };
+    const items = (parsed.items ?? []).map((item) => {
+      const entry = item as Record<string, any>;
+      // Prioritize videoId for the main 'id' field
+      if (entry.videoId) {
+        entry.id = entry.videoId;
+      }
+      // Fallback to parsing from URL if videoId is missing
+      else if (
+        typeof entry.url === "string" &&
+        entry.url.includes("/watch?v=")
+      ) {
+        try {
+          const videoId = new URL(
+            "https://www.youtube.com" + entry.url
+          ).searchParams.get("v");
+          if (videoId) {
+            entry.id = videoId;
+          }
+        } catch {
+          // Ignore parsing errors
+        }
+      }
+      return { ...entry, source: "youtube" };
+    });
 
-  return { items, nextpage: parsed.nextpage ?? null };
+    return { items, nextpage: parsed.nextpage ?? null };
+  } catch {
+    return { items: [], nextpage: null };
+  }
 }
 
 function parseDurationToSeconds(value: unknown): number | undefined {
@@ -187,7 +259,16 @@ async function searchYtify(
 
   const items = data.map((entry) => {
     const e = entry as Record<string, unknown>;
-    const id = typeof e.id === "string" ? e.id : "";
+    let id = typeof e.id === "string" ? e.id : "";
+
+    // Extract video ID from YouTube URL if id contains full URL
+    if (id.includes("youtube.com/watch?v=")) {
+      const match = id.match(/[?&]v=([^&]+)/);
+      if (match?.[1]) {
+        id = match[1];
+      }
+    }
+
     const type = typeof e.type === "string" ? e.type : "video";
     const title = typeof e.title === "string" ? e.title : "";
     const author = typeof e.author === "string" ? e.author : "";
@@ -199,7 +280,8 @@ async function searchYtify(
     return {
       source: "youtube",
       type: type === "video" ? "stream" : type,
-      videoId: id,
+      id: id, // Use 'id' field instead of 'videoId' to match frontend expectations
+      videoId: id, // Keep videoId for compatibility
       url: id ? `https://www.youtube.com/watch?v=${id}` : "",
       title,
       uploaderName: author,
@@ -222,10 +304,17 @@ async function searchYouTubeMusic(
 ): Promise<SearchResponse> {
   const musicFilter = musicFilterMap(filter || "songs");
   const result = await searchPiped(query, musicFilter, nextpage);
-  const items = result.items.map((item) => ({
-    ...(item as Record<string, unknown>),
-    source: "youtubemusic",
-  }));
+  const items = result.items.map((item) => {
+    const entry = item as Record<string, unknown>;
+    const videoId = entry.videoId as string | undefined;
+    if (videoId) {
+      entry.id = videoId;
+    }
+    return {
+      ...entry,
+      source: "youtubemusic",
+    };
+  });
   return { items, nextpage: result.nextpage ?? null };
 }
 
@@ -253,10 +342,33 @@ async function searchInvidious(
       const data = (await res.json()) as unknown;
       if (!Array.isArray(data)) continue;
 
-      const items = data.map((item) => ({
-        ...(rewriteInvidiousThumbs(item, instance) as Record<string, unknown>),
-        source: "youtube",
-      }));
+      const items = data.map((item) => {
+        const entry = rewriteInvidiousThumbs(item, instance) as Record<
+          string,
+          any
+        >;
+        // Prioritize videoId for the main 'id' field
+        if (entry.videoId) {
+          entry.id = entry.videoId;
+        }
+        // Invidious usually provides videoId, this is a fallback
+        else if (
+          typeof entry.url === "string" &&
+          entry.url.includes("/watch?v=")
+        ) {
+          try {
+            const videoId = new URL(
+              "https://www.youtube.com" + entry.url
+            ).searchParams.get("v");
+            if (videoId) {
+              entry.id = videoId;
+            }
+          } catch (e) {
+            /* ignore */
+          }
+        }
+        return { ...entry, source: "youtube" };
+      });
 
       return { items, nextpage: null };
     } catch {
@@ -273,50 +385,91 @@ async function searchSoundCloud(
   page: number,
   limit: number
 ): Promise<SearchResponse> {
+  const normalizeTrackDuration = (value: unknown): number | undefined => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value > 10000 ? Math.floor(value / 1000) : Math.floor(value);
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed > 10000 ? Math.floor(parsed / 1000) : Math.floor(parsed);
+      }
+    }
+    return undefined;
+  };
+
+  const normalizeTrackItem = (input: Record<string, unknown>) => {
+    const user =
+      input.user && typeof input.user === "object"
+        ? (input.user as Record<string, unknown>)
+        : {};
+
+    return {
+      ...input,
+      id: input.id || input.permalink_url || input.url,
+      title: input.title,
+      author:
+        user.username ||
+        (typeof input.author === "string" ? input.author : undefined) ||
+        "Unknown Artist",
+      thumbnailUrl:
+        input.artwork_url ||
+        input.thumbnailUrl ||
+        input.thumbnail ||
+        user.avatar_url,
+      url: input.permalink_url || input.permalinkUrl || input.url || input.href,
+      duration: normalizeTrackDuration(input.duration),
+      source: "soundcloud",
+    };
+  };
+
   const f = (filter || "").toLowerCase();
   const offset = (page - 1) * limit;
+  try {
+    const proxyUrl =
+      f === "playlists" || f === "albums"
+        ? `https://proxy.searchsoundcloud.com/${
+            f === "playlists" ? "playlists" : "albums"
+          }?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`
+        : `https://proxy.searchsoundcloud.com/tracks?q=${encodeURIComponent(
+            query
+          )}&limit=${limit}&offset=${offset}`;
 
-  if (f === "playlists" || f === "albums") {
-    const scType = f === "playlists" ? "playlists" : "albums";
-    const url = `https://proxy.searchsoundcloud.com/${scType}?q=${encodeURIComponent(
-      query
-    )}&limit=${limit}&offset=${offset}`;
-    const res = await fetch(url, {
+    const res = await fetch(proxyUrl, {
       headers: { "User-Agent": USER_AGENT, accept: "application/json" },
       cache: "no-store",
     });
+
     if (!res.ok) return { items: [], nextpage: null };
 
     const json = (await res.json()) as unknown;
-    const data = json as {
-      collection?: unknown[];
-      results?: unknown[];
-    };
-    const collection = data?.collection ?? data?.results ?? [];
-    const items = collection.map((c) => ({
-      ...(c as Record<string, unknown>),
-      type: scType === "playlists" ? "playlist" : "album",
-      source: "soundcloud",
-    }));
+    const data = json as { collection?: unknown[]; results?: unknown[] };
+    const collection = data.collection ?? data.results ?? [];
+
+    if (f === "playlists" || f === "albums") {
+      const items = collection.map((entry) => ({
+        ...(entry as Record<string, unknown>),
+        id:
+          (entry as Record<string, unknown>).permalink_url ||
+          (entry as Record<string, unknown>).url ||
+          "",
+        url:
+          (entry as Record<string, unknown>).permalink_url ||
+          (entry as Record<string, unknown>).url ||
+          "",
+        type: f === "playlists" ? "playlist" : "album",
+        source: "soundcloud",
+      }));
+      return { items, nextpage: null };
+    }
+
+    const items = collection.map((entry) =>
+      normalizeTrackItem(entry as Record<string, unknown>)
+    );
     return { items, nextpage: null };
+  } catch {
+    return { items: [], nextpage: null };
   }
-
-  const url = `https://proxy.searchsoundcloud.com/tracks?q=${encodeURIComponent(
-    query
-  )}&limit=${limit}&offset=${offset}`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT, accept: "application/json" },
-    cache: "no-store",
-  });
-  if (!res.ok) return { items: [], nextpage: null };
-
-  const json = (await res.json()) as unknown;
-  const data = json as { collection?: unknown[] };
-  const items = (data.collection ?? []).map((t) => ({
-    ...(t as Record<string, unknown>),
-    source: "soundcloud",
-  }));
-  return { items, nextpage: null };
 }
 
 async function searchJioSaavn(query: string): Promise<SearchResponse> {
@@ -338,18 +491,50 @@ async function searchJioSaavn(query: string): Promise<SearchResponse> {
     const albums = (data.data?.albums as { results?: unknown[] })?.results;
     const artists = (data.data?.artists as { results?: unknown[] })?.results;
 
-    const items: unknown[] = [];
+    const items: Array<Record<string, unknown>> = [];
     for (const entry of topQuery ?? []) {
-      items.push({ ...(entry as Record<string, unknown>), source: "jiosaavn" });
+      const item: Record<string, unknown> = {
+        ...(entry as Record<string, unknown>),
+        source: "jiosaavn",
+      };
+      // Ensure the entry has the correct 'id' field for the frontend
+      if (!item.id && typeof item.videoId === "string") {
+        item.id = item.videoId;
+      }
+      items.push(item);
     }
     for (const entry of songs ?? []) {
-      items.push({ ...(entry as Record<string, unknown>), source: "jiosaavn" });
+      const item: Record<string, unknown> = {
+        ...(entry as Record<string, unknown>),
+        source: "jiosaavn",
+      };
+      // Ensure the entry has the correct 'id' field for the frontend
+      if (!item.id && typeof item.videoId === "string") {
+        item.id = item.videoId;
+      }
+      items.push(item);
     }
     for (const entry of albums ?? []) {
-      items.push({ ...(entry as Record<string, unknown>), source: "jiosaavn" });
+      const item: Record<string, unknown> = {
+        ...(entry as Record<string, unknown>),
+        source: "jiosaavn",
+      };
+      // Ensure the entry has the correct 'id' field for the frontend
+      if (!item.id && typeof item.videoId === "string") {
+        item.id = item.videoId;
+      }
+      items.push(item);
     }
     for (const entry of artists ?? []) {
-      items.push({ ...(entry as Record<string, unknown>), source: "jiosaavn" });
+      const item: Record<string, unknown> = {
+        ...(entry as Record<string, unknown>),
+        source: "jiosaavn",
+      };
+      // Ensure the entry has the correct 'id' field for the frontend
+      if (!item.id && typeof item.videoId === "string") {
+        item.id = item.videoId;
+      }
+      items.push(item);
     }
 
     return { items, nextpage: null };
@@ -375,6 +560,30 @@ async function searchYouTubeDefault(
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const q = searchParams.get("q");
+  const sourceParam = (searchParams.get("source") || "youtube").toLowerCase();
+  const filterParam = searchParams.get("filter") || "";
+  const pageNum = parseInt(searchParams.get("page") || "1", 10) || 1;
+  const limitNum = parseInt(searchParams.get("limit") || "20", 10) || 20;
+  const nextpage = searchParams.get("nextpage") || undefined;
+  const runId = `pre-${Date.now()}`;
+
+  // #region debug-point A:search-route-entry
+  reportDebugEvent(
+    runId,
+    "A",
+    "app/api/search/route.ts:GET:entry",
+    "[DEBUG] /api/search request received",
+    {
+      url: request.url,
+      q,
+      sourceParam,
+      filterParam,
+      pageNum,
+      limitNum,
+      nextpage,
+    }
+  );
+  // #endregion
 
   const origin = request.nextUrl.origin;
   const backendBaseUrl = getBackendBaseUrl(origin);
@@ -387,19 +596,41 @@ export async function GET(request: NextRequest) {
           { status: 200 }
         );
       }
-    } catch {
+    } catch (error) {
+      // #region debug-point E:search-backend-proxy-failed
+      reportDebugEvent(
+        runId,
+        "E",
+        "app/api/search/route.ts:GET:backend-proxy-failed",
+        "[DEBUG] backend proxy failed",
+        {
+          backendBaseUrl,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+      // #endregion
       // fall through to built-in providers
     }
   }
 
-  const sourceParam = (searchParams.get("source") || "youtube").toLowerCase();
-  const filterParam = searchParams.get("filter") || "";
-  const pageNum = parseInt(searchParams.get("page") || "1", 10) || 1;
-  const limitNum = parseInt(searchParams.get("limit") || "20", 10) || 20;
-  const nextpage = searchParams.get("nextpage") || undefined;
-
   try {
     let result: SearchResponse = { items: [], nextpage: null };
+
+    // #region debug-point B:search-branch
+    reportDebugEvent(
+      runId,
+      "B",
+      "app/api/search/route.ts:GET:branch",
+      "[DEBUG] selecting search provider branch",
+      {
+        sourceParam,
+        hasQuery: Boolean(q),
+        filterParam,
+        pageNum,
+        nextpage,
+      }
+    );
+    // #endregion
 
     switch (sourceParam) {
       case "piped":
@@ -427,11 +658,45 @@ export async function GET(request: NextRequest) {
         result = { items: [], nextpage: null };
     }
 
+    // #region debug-point C:search-route-success
+    reportDebugEvent(
+      runId,
+      "C",
+      "app/api/search/route.ts:GET:success",
+      "[DEBUG] /api/search completed",
+      {
+        sourceParam,
+        itemCount: Array.isArray(result.items) ? result.items.length : -1,
+        nextpage: result.nextpage ?? null,
+      }
+    );
+    // #endregion
+
     return NextResponse.json(
       { items: result.items, nextpage: result.nextpage ?? null },
       { status: 200 }
     );
-  } catch {
+  } catch (error) {
+    // #region debug-point D:search-route-failed
+    reportDebugEvent(
+      runId,
+      "D",
+      "app/api/search/route.ts:GET:failed",
+      "[DEBUG] /api/search failed",
+      {
+        sourceParam,
+        q,
+        filterParam,
+        pageNum,
+        nextpage,
+        error: error instanceof Error ? error.message : String(error),
+        stack:
+          error instanceof Error && error.stack
+            ? error.stack.split("\n").slice(0, 5).join("\n")
+            : null,
+      }
+    );
+    // #endregion
     return NextResponse.json(
       { items: [], error: "Search failed" },
       { status: 500 }

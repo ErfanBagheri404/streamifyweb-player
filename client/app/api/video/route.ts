@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 
 const PIPED_INSTANCES = ["https://api.piped.private.coffee"];
@@ -10,6 +11,10 @@ const INVIDIOUS_INSTANCES = [
   "https://inv.nadeko.net",
   "https://invidious.tiekoetter.com",
 ];
+const SOUNDCLOUD_WIDGET_BASE = "https://api-widget.soundcloud.com";
+const SOUNDCLOUD_WIDGET_CLIENT_ID = "gqKBMSuBw5rbN9rDRYPqKNvF17ovlObu";
+const SOUNDCLOUD_WIDGET_APP_VERSION = "1779361243";
+const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
@@ -20,9 +25,28 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 const STALE_CACHE_TTL_MS = 60 * 60 * 1000;
 const INVIDIOUS_TIMEOUT_MS = 10000;
 const PIPED_TIMEOUT_MS = 7000;
-const DEBUG_SERVER_URL = "http://127.0.0.1:7777/event";
-const DEBUG_SESSION_ID = "playback-api";
+const DEBUG_SERVER_URL = "";
+const DEBUG_SESSION_ID = "playback-source-500";
+const DEBUG_ENV_PATH = ".dbg/soundcloud-playback.env";
 const execFileAsync = promisify(execFile);
+
+function getDebugConfig(): { url: string; sessionId: string } {
+  let url = DEBUG_SERVER_URL;
+  let sessionId = DEBUG_SESSION_ID;
+
+  try {
+    const envText = readFileSync(DEBUG_ENV_PATH, "utf8");
+    const nextUrl = envText.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim();
+    const nextSessionId = envText
+      .match(/^DEBUG_SESSION_ID=(.+)$/m)?.[1]
+      ?.trim();
+
+    if (nextUrl) url = nextUrl;
+    if (nextSessionId) sessionId = nextSessionId;
+  } catch {}
+
+  return { url, sessionId };
+}
 
 function reportDebugEvent(
   runId: string,
@@ -31,11 +55,14 @@ function reportDebugEvent(
   msg: string,
   data: Record<string, unknown>
 ) {
-  fetch(DEBUG_SERVER_URL, {
+  const { url, sessionId } = getDebugConfig();
+  if (!url) return;
+
+  fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      sessionId: DEBUG_SESSION_ID,
+      sessionId,
       runId,
       hypothesisId,
       location,
@@ -129,6 +156,661 @@ function parseJsonText(
 
     throw new Error(errorMessage);
   }
+}
+
+async function fetchTextWithHeaders(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number
+): Promise<string> {
+  const res = await fetch(url, {
+    headers,
+    cache: "no-store",
+    signal: withTimeout(undefined, timeoutMs),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(
+      `HTTP ${res.status}${text ? `: ${text.slice(0, 160)}` : ""}`
+    );
+  }
+  return text;
+}
+
+function buildDirectProxyAudioUrl(streamUrl: string | null): string | null {
+  if (!streamUrl) return null;
+  return `/api/audio-proxy?url=${encodeURIComponent(streamUrl)}`;
+}
+
+function pickArrayString(entry: unknown, keys: string[]): string | undefined {
+  const record = toRecord(entry);
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+}
+
+function qualityScore(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const match = value.match(/(\d+)/);
+    if (match) return Number(match[1]);
+  }
+  return 0;
+}
+
+function getJioSaavnRecords(payload: unknown): Record<string, any>[] {
+  const queue: unknown[] = [payload];
+  const records: Record<string, any>[] = [];
+  const seen = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || seen.has(current)) continue;
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      queue.push(...current);
+      continue;
+    }
+
+    const record = toRecord(current);
+    if (!Object.keys(record).length) continue;
+    records.push(record);
+
+    queue.push(
+      record.data,
+      record.song,
+      record.songs,
+      record.results,
+      record.more_info
+    );
+  }
+
+  return records;
+}
+
+function pickJioSaavnImage(value: unknown): string | undefined {
+  const images = toArray(value).map((entry) => toRecord(entry));
+  if (!images.length) return undefined;
+
+  return (
+    images
+      .sort(
+        (a, b) =>
+          qualityScore(b.quality || b.size) - qualityScore(a.quality || a.size)
+      )
+      .map((entry) => pickArrayString(entry, ["url", "link"]))
+      .find(Boolean) || undefined
+  );
+}
+
+function pickJioSaavnArtistNames(
+  record: Record<string, any>
+): string | undefined {
+  const direct = pickArrayString(record, [
+    "primary_artists",
+    "primaryArtists",
+    "singers",
+    "artist",
+    "subtitle",
+  ]);
+  if (direct) return direct;
+
+  const artists = toRecord(record.artists);
+  const groups = [artists.primary, artists.featured, artists.all];
+
+  for (const group of groups) {
+    const names = toArray(group)
+      .map((entry) => pickArrayString(entry, ["name"]))
+      .filter(Boolean);
+    if (names.length) return names.join(", ");
+  }
+
+  return undefined;
+}
+
+function normalizeForMatch(value?: string): string {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
+    .replace(
+      /\b(feat|ft|featuring|official|video|lyrics|audio|visualizer)\b/g,
+      " "
+    )
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function titleMatchScore(expectedTitle: string, actualTitle: string): number {
+  const expected = normalizeForMatch(expectedTitle);
+  const actual = normalizeForMatch(actualTitle);
+  if (!expected || !actual) return 0;
+  if (expected === actual) return 5;
+  if (actual.includes(expected) || expected.includes(actual)) return 3;
+  const expectedWords = new Set(expected.split(" "));
+  const actualWords = new Set(actual.split(" "));
+  let overlap = 0;
+  for (const word of expectedWords) {
+    if (actualWords.has(word)) overlap += 1;
+  }
+  return overlap >= Math.min(2, expectedWords.size) ? 2 : 0;
+}
+
+function authorMatchScore(
+  expectedAuthor?: string,
+  actualAuthor?: string
+): number {
+  const expected = normalizeForMatch(expectedAuthor);
+  const actual = normalizeForMatch(actualAuthor);
+  if (!expected || !actual) return 0;
+  if (expected === actual) return 3;
+  if (expected.split(" ").some((part) => part && actual.includes(part)))
+    return 1;
+  return 0;
+}
+
+function extractJioSaavnAudioUrl(payload: unknown): string | null {
+  const records = getJioSaavnRecords(payload);
+
+  for (const record of records) {
+    const downloadCandidates = [
+      record.downloadUrl,
+      record.download_url,
+      record.downloadLinks,
+      toRecord(record.more_info).download_url,
+      toRecord(record.more_info).downloadUrl,
+    ].find((value) => Array.isArray(value));
+
+    if (Array.isArray(downloadCandidates)) {
+      const best = [...downloadCandidates]
+        .map((entry) => toRecord(entry))
+        .sort(
+          (a, b) =>
+            qualityScore(b.quality || b.bitrate || b.kbps) -
+            qualityScore(a.quality || a.bitrate || a.kbps)
+        )
+        .map((entry) =>
+          pickArrayString(entry, ["url", "link", "downloadUrl", "download_url"])
+        )
+        .find(Boolean);
+      if (best) return best;
+    }
+
+    const directUrl = pickArrayString(record, [
+      "media_url",
+      "mediaUrl",
+      "url",
+      "vlink",
+      "preview_url",
+    ]);
+    if (directUrl && /^https?:\/\//i.test(directUrl)) return directUrl;
+  }
+
+  return null;
+}
+
+function normalizeJioSaavnPayload(
+  payload: unknown
+): Record<string, unknown> | null {
+  const records = getJioSaavnRecords(payload);
+  const root =
+    records.find(
+      (record) =>
+        Array.isArray(record.downloadUrl) ||
+        Array.isArray(record.download_url) ||
+        Boolean(
+          pickArrayString(record, [
+            "name",
+            "title",
+            "song",
+            "primaryArtists",
+            "primary_artists",
+          ])
+        )
+    ) || toRecord(payload);
+  const moreInfo = toRecord(root.more_info);
+  const audioStream = extractJioSaavnAudioUrl(payload);
+  if (!audioStream) return null;
+
+  const image =
+    pickJioSaavnImage(root.image) ||
+    pickArrayString(root, ["thumbnailUrl", "thumbnail"]) ||
+    pickJioSaavnImage(moreInfo.image) ||
+    pickArrayString(moreInfo, ["thumbnailUrl", "thumbnail"]);
+
+  return {
+    id: root.id || root.songid || root.url,
+    title: root.song || root.title || root.name,
+    author: pickJioSaavnArtistNames(root) || pickJioSaavnArtistNames(moreInfo),
+    lengthSeconds: toNumber(root.duration) ?? toNumber(moreInfo.duration),
+    thumbnailUrl: image,
+    audioUrl: buildDirectProxyAudioUrl(audioStream),
+  };
+}
+
+async function fetchJioSaavnFromEndpoints(
+  endpoints: string[]
+): Promise<Record<string, unknown> | null> {
+  for (const endpoint of endpoints) {
+    try {
+      const payload = await fetchJson(endpoint, undefined, 12000);
+      const normalized = normalizeJioSaavnPayload(payload);
+      if (normalized?.audioUrl) return normalized;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function buildJioSaavnSongEndpoints(id: string, urlHint?: string): string[] {
+  const candidates = new Set<string>();
+  const addId = (value?: string) => {
+    if (!value) return;
+    candidates.add(
+      `${JIOSAAVN_API_BASE}/api/songs/${encodeURIComponent(value)}`
+    );
+    candidates.add(
+      `${JIOSAAVN_API_BASE}/api/songs?ids=${encodeURIComponent(value)}`
+    );
+  };
+  const addLink = (value?: string) => {
+    if (!value) return;
+    candidates.add(
+      `${JIOSAAVN_API_BASE}/api/songs?link=${encodeURIComponent(value)}`
+    );
+  };
+
+  addId(id);
+
+  if (urlHint) {
+    addLink(urlHint);
+    try {
+      const parsed = new URL(urlHint);
+      const token = parsed.pathname.split("/").filter(Boolean).pop();
+      addId(token);
+    } catch {
+      addId(urlHint);
+    }
+  }
+
+  return [...candidates];
+}
+
+function extractSearchCandidates(
+  payload: unknown
+): Array<Record<string, unknown>> {
+  if (Array.isArray(payload)) {
+    return payload
+      .map((entry) => toRecord(entry))
+      .filter((entry) => Object.keys(entry).length);
+  }
+
+  const root = toRecord(payload);
+  const nested = [
+    root.results,
+    toRecord(root.data).results,
+    toRecord(root.data).songs,
+    toRecord(toRecord(root.data).songs).results,
+  ];
+
+  for (const value of nested) {
+    if (Array.isArray(value)) {
+      return value
+        .map((entry) => toRecord(entry))
+        .filter((entry) => Object.keys(entry).length);
+    }
+  }
+
+  return [];
+}
+
+async function findJioSaavnMatch(
+  title: string,
+  artist?: string
+): Promise<{ id: string; url?: string } | null> {
+  const query = [title, artist].filter(Boolean).join(" ").trim();
+  if (!query) return null;
+
+  const endpoints = [
+    `https://streamifyjiosaavn.vercel.app/api/search?query=${encodeURIComponent(
+      query
+    )}`,
+    `https://jiosaavn-api.vercel.app/search?query=${encodeURIComponent(query)}`,
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      const payload = await fetchJson(endpoint, undefined, 12000);
+      const candidates = extractSearchCandidates(payload)
+        .map((entry) => ({
+          entry,
+          title: pickArrayString(entry, ["title", "song", "name"]) || "",
+          author:
+            pickArrayString(entry, [
+              "description",
+              "primary_artists",
+              "primaryArtists",
+              "singers",
+              "artist",
+            ]) || "",
+          id: pickArrayString(entry, ["id", "identifier"]) || "",
+          url: pickArrayString(entry, ["url", "permalink_url"]),
+        }))
+        .map((candidate) => ({
+          ...candidate,
+          score:
+            titleMatchScore(title, candidate.title) +
+            authorMatchScore(artist, candidate.author),
+        }))
+        .filter((candidate) => candidate.id)
+        .sort((a, b) => b.score - a.score);
+
+      if (candidates[0] && candidates[0].score >= 3) {
+        return {
+          id: candidates[0].id,
+          url: candidates[0].url,
+        };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+let soundCloudClientId: string | null = null;
+
+async function getSoundCloudClientId(reset = false): Promise<string> {
+  if (soundCloudClientId && !reset) return soundCloudClientId;
+
+  try {
+    // Try to get client ID from a known working endpoint first
+    const apiUrl =
+      "https://soundcloud.com/oembed?url=https://soundcloud.com/lil-durk/back-again";
+    const oembedResponse = await fetchTextWithHeaders(
+      apiUrl,
+      {
+        "User-Agent": USER_AGENT,
+        Referer: "https://soundcloud.com/",
+        Origin: "https://soundcloud.com",
+      },
+      12000
+    );
+
+    // Try to extract client ID from oembed response
+    const clientIdMatch = oembedResponse.match(
+      /client_id["\s:]+([a-zA-Z0-9]+)/
+    );
+    if (clientIdMatch?.[1]) {
+      soundCloudClientId = clientIdMatch[1];
+      return soundCloudClientId;
+    }
+  } catch {
+    // Continue with other methods if oembed fails
+  }
+
+  try {
+    const desktopHtml = await fetchTextWithHeaders(
+      "https://soundcloud.com",
+      {
+        "User-Agent": USER_AGENT,
+        Referer: "https://soundcloud.com/",
+        Origin: "https://soundcloud.com",
+      },
+      12000
+    );
+
+    const scriptUrls = desktopHtml.match(/https?:\/\/[^\s"]+\.js/g) || [];
+    for (const scriptUrl of scriptUrls) {
+      try {
+        const script = await fetchTextWithHeaders(
+          scriptUrl,
+          { "User-Agent": USER_AGENT, Referer: "https://soundcloud.com/" },
+          12000
+        );
+        const match = script.match(/[{,]client_id:"(\w+)"/);
+        if (match?.[1]) {
+          soundCloudClientId = match[1];
+          return soundCloudClientId;
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // Continue with mobile method if desktop fails
+  }
+
+  try {
+    const mobileHtml = await fetchTextWithHeaders(
+      "https://m.soundcloud.com/",
+      {
+        "User-Agent":
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/99.0.4844.47 Mobile/15E148 Safari/604.1",
+      },
+      12000
+    );
+    const mobileMatch = mobileHtml.match(/"clientId":"(\w+?)"/);
+    if (mobileMatch?.[1]) {
+      soundCloudClientId = mobileMatch[1];
+      return soundCloudClientId;
+    }
+  } catch {
+    // Continue with fallback
+  }
+
+  // Fallback to a commonly working client ID
+  const fallbackClientId = "iZIs9mchVcX5lhVRyQGGAYlNPVldzAoX";
+  soundCloudClientId = fallbackClientId;
+  return soundCloudClientId;
+}
+
+async function fetchSoundCloudJson(url: string): Promise<unknown> {
+  const clientId = await getSoundCloudClientId();
+  const requestUrl = `${url}${
+    url.includes("?") ? "&" : "?"
+  }client_id=${clientId}`;
+
+  try {
+    return await fetchJson(requestUrl, undefined, 12000);
+  } catch (error) {
+    const fallbackClientId = await getSoundCloudClientId(true);
+    const fallbackUrl = `${url}${
+      url.includes("?") ? "&" : "?"
+    }client_id=${fallbackClientId}`;
+    return fetchJson(fallbackUrl, undefined, 12000);
+  }
+}
+
+async function fetchSoundCloudWidgetJson(
+  url: string,
+  extraParams?: Record<string, string>
+): Promise<unknown> {
+  const requestUrl = new URL(url);
+  requestUrl.searchParams.set("client_id", SOUNDCLOUD_WIDGET_CLIENT_ID);
+  requestUrl.searchParams.set("app_version", SOUNDCLOUD_WIDGET_APP_VERSION);
+
+  if (extraParams) {
+    for (const [key, value] of Object.entries(extraParams)) {
+      if (value) requestUrl.searchParams.set(key, value);
+    }
+  }
+
+  return fetchJson(requestUrl.toString(), undefined, 12000);
+}
+
+function normalizeSoundCloudUrlHint(urlHint?: string): string | undefined {
+  if (!urlHint) return undefined;
+
+  try {
+    const parsed = new URL(urlHint);
+    if (
+      parsed.hostname === "w.soundcloud.com" &&
+      parsed.pathname === "/player/"
+    ) {
+      const embeddedUrl = parsed.searchParams.get("url");
+      if (embeddedUrl) return embeddedUrl;
+    }
+    return parsed.toString();
+  } catch {
+    return urlHint;
+  }
+}
+
+function extractSoundCloudTrackId(value?: string): string | undefined {
+  if (!value) return undefined;
+
+  const trackRefMatch = value.match(/soundcloud:tracks:(\d+)/i);
+  if (trackRefMatch?.[1]) return trackRefMatch[1];
+
+  const apiTrackMatch = value.match(/api\.soundcloud\.com\/tracks\/(\d+)/i);
+  if (apiTrackMatch?.[1]) return apiTrackMatch[1];
+
+  return undefined;
+}
+
+async function fetchSoundCloudDetails(
+  id: string,
+  urlHint?: string
+): Promise<Record<string, unknown>> {
+  const normalizedUrlHint = normalizeSoundCloudUrlHint(urlHint);
+  const hintedTrackId = extractSoundCloudTrackId(normalizedUrlHint);
+  const resolveTarget = hintedTrackId
+    ? `https://api.soundcloud.com/tracks/${hintedTrackId}`
+    : normalizedUrlHint || `https://api.soundcloud.com/tracks/${id}`;
+
+  // #region debug-point A:soundcloud-resolve-start
+  reportDebugEvent(
+    `pre-${Date.now()}`,
+    "A",
+    "app/api/video/route.ts:fetchSoundCloudDetails:start",
+    "[DEBUG] resolving SoundCloud track",
+    {
+      id,
+      urlHint: normalizedUrlHint || null,
+      hintedTrackId: hintedTrackId || null,
+      resolveTarget,
+    }
+  );
+  // #endregion
+
+  const payload = await fetchSoundCloudWidgetJson(
+    `${SOUNDCLOUD_WIDGET_BASE}/resolve?url=${encodeURIComponent(
+      resolveTarget
+    )}&format=json`
+  );
+
+  const track = toRecord(payload);
+  if (!track.id) {
+    throw new Error("SoundCloud track could not be resolved");
+  }
+
+  // #region debug-point B:soundcloud-track-resolved
+  reportDebugEvent(
+    `pre-${Date.now()}`,
+    "B",
+    "app/api/video/route.ts:fetchSoundCloudDetails:resolved",
+    "[DEBUG] SoundCloud track resolved",
+    {
+      requestedId: id,
+      resolvedId: track.id,
+      permalinkUrl:
+        typeof track.permalink_url === "string" ? track.permalink_url : null,
+      mediaPresent: Boolean(toRecord(track.media).transcodings),
+      duration: toNumber(track.duration) ?? null,
+    }
+  );
+  // #endregion
+
+  const transcodings = toArray(toRecord(track.media).transcodings).map(
+    (entry) => toRecord(entry)
+  );
+  const bestTranscoding =
+    transcodings.find(
+      (entry) => toRecord(entry.format).protocol === "progressive"
+    ) ||
+    transcodings.find((entry) => toRecord(entry.format).protocol === "hls") ||
+    transcodings[0];
+
+  const transcodingUrl =
+    typeof bestTranscoding?.url === "string" ? bestTranscoding.url : null;
+  if (!transcodingUrl) {
+    throw new Error("SoundCloud track did not expose a playable transcoding");
+  }
+
+  // #region debug-point C:soundcloud-transcoding-picked
+  reportDebugEvent(
+    `pre-${Date.now()}`,
+    "C",
+    "app/api/video/route.ts:fetchSoundCloudDetails:transcoding",
+    "[DEBUG] SoundCloud transcoding selected",
+    {
+      requestedId: id,
+      transcodingUrl,
+      protocol:
+        typeof toRecord(bestTranscoding?.format).protocol === "string"
+          ? toRecord(bestTranscoding?.format).protocol
+          : null,
+      mimeType:
+        typeof toRecord(bestTranscoding?.format).mime_type === "string"
+          ? toRecord(bestTranscoding?.format).mime_type
+          : null,
+      transcodingCount: transcodings.length,
+    }
+  );
+  // #endregion
+
+  const trackAuthorization =
+    typeof track.track_authorization === "string"
+      ? track.track_authorization
+      : null;
+
+  const streamPayload = toRecord(
+    await fetchSoundCloudWidgetJson(transcodingUrl, {
+      ...(trackAuthorization
+        ? { track_authorization: trackAuthorization }
+        : {}),
+    })
+  );
+  const streamUrl =
+    typeof streamPayload.url === "string" ? streamPayload.url : null;
+  if (!streamUrl) {
+    throw new Error("SoundCloud stream URL lookup failed");
+  }
+
+  // #region debug-point D:soundcloud-stream-resolved
+  reportDebugEvent(
+    `pre-${Date.now()}`,
+    "D",
+    "app/api/video/route.ts:fetchSoundCloudDetails:stream",
+    "[DEBUG] SoundCloud stream URL resolved",
+    {
+      requestedId: id,
+      hasStreamUrl: Boolean(streamUrl),
+      streamHost: (() => {
+        try {
+          return new URL(streamUrl).hostname;
+        } catch {
+          return null;
+        }
+      })(),
+    }
+  );
+  // #endregion
+
+  return {
+    id: track.id,
+    title: track.title,
+    author: toRecord(track.user).username,
+    lengthSeconds: Math.floor((toNumber(track.duration) ?? 0) / 1000),
+    thumbnailUrl: track.artwork_url || toRecord(track.user).avatar_url,
+    audioUrl: buildDirectProxyAudioUrl(streamUrl),
+  };
 }
 
 async function fetchJsonViaPowerShell(
@@ -395,116 +1077,72 @@ async function fetchVideoFromPiped(
 
 async function fetchVideoDetails(
   videoId: string,
-  runId: string
+  runId: string,
+  source?: string,
+  options?: { title?: string; artist?: string; urlHint?: string }
 ): Promise<Record<string, unknown>> {
-  const providers = [
-    ...INVIDIOUS_INSTANCES.map((instance) => ({
-      label: `invidious:${instance}`,
-      run: (signal?: AbortSignal) =>
-        fetchVideoFromInvidious(instance, videoId, signal),
-    })),
-    ...PIPED_INSTANCES.map((instance) => ({
-      label: `piped:${instance}`,
-      run: (signal?: AbortSignal) =>
-        fetchVideoFromPiped(instance, videoId, signal),
-    })),
-  ];
+  // The videoId should be the only thing needed for youtube/youtubemusic
+  if (source === "youtube" || source === "youtubemusic" || !source) {
+    const providers = [
+      ...INVIDIOUS_INSTANCES.map((instance) => ({
+        label: `invidious:${instance}`,
+        run: (signal?: AbortSignal) =>
+          fetchVideoFromInvidious(instance, videoId, signal),
+      })),
+      ...PIPED_INSTANCES.map((instance) => ({
+        label: `piped:${instance}`,
+        run: (signal?: AbortSignal) =>
+          fetchVideoFromPiped(instance, videoId, signal),
+      })),
+    ];
 
-  const errors: string[] = [];
-
-  for (const provider of providers) {
-    try {
-      // #region debug-point D:provider-attempt
-      reportDebugEvent(
-        runId,
-        "D",
-        "app/api/video/route.ts:GET:provider-attempt",
-        "[DEBUG] trying video provider",
-        {
-          videoId,
-          provider: provider.label,
-        }
-      );
-      // #endregion
-      const controller = new AbortController();
-      const value = (await provider.run(controller.signal)) as Record<
-        string,
-        unknown
-      >;
-      // #region debug-point H1:provider-payload-shape
-      reportDebugEvent(
-        runId,
-        "H1",
-        "app/api/video/route.ts:GET:provider-payload-shape",
-        "[DEBUG] provider returned stream candidates",
-        {
-          videoId,
-          provider: provider.label,
-          audioUrl: value.audioUrl,
-          adaptiveFormatsSample: summarizeAudioCandidates(
-            toArray(value.adaptiveFormats)
-          ),
-        }
-      );
-      // #endregion
-      // #region debug-point B:provider-success
-      reportDebugEvent(
-        runId,
-        "B",
-        "app/api/video/route.ts:GET:provider-success",
-        "[DEBUG] video provider succeeded",
-        {
-          videoId,
-          provider: provider.label,
-          hasAudioUrl: Boolean(value.audioUrl),
-          hasThumbnailUrl: Boolean(value.thumbnailUrl),
-          title: value.title,
-        }
-      );
-      // #endregion
-      cache.set(videoId, { at: Date.now(), value });
-      return value;
-    } catch (error) {
-      // #region debug-point C:provider-failure
-      reportDebugEvent(
-        runId,
-        "C",
-        "app/api/video/route.ts:GET:provider-failure",
-        "[DEBUG] video provider failed",
-        {
-          videoId,
-          provider: provider.label,
-          error: error instanceof Error ? error.message : String(error),
-        }
-      );
-      // #endregion
-      errors.push(
-        `${provider.label}: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+    const errors: string[] = [];
+    for (const provider of providers) {
+      try {
+        const value = await provider.run();
+        return value;
+      } catch (error) {
+        errors.push(
+          `${provider.label}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
     }
+    throw new Error(errors.join(" | ") || "All YouTube providers failed");
   }
 
-  // #region debug-point E:video-route-all-failed
-  reportDebugEvent(
-    runId,
-    "E",
-    "app/api/video/route.ts:GET:all-failed",
-    "[DEBUG] all video providers failed",
-    {
-      videoId,
-      errors,
-    }
-  );
-  // #endregion
-  throw new Error(errors.join(" | ") || "Failed to fetch video details");
+  if (source === "soundcloud") {
+    return fetchSoundCloudDetails(videoId, options?.urlHint);
+  }
+
+  if (source === "jiosaavn") {
+    const jioSaavnPayload = await fetchJioSaavnFromEndpoints(
+      buildJioSaavnSongEndpoints(videoId, options?.urlHint)
+    );
+    if (jioSaavnPayload?.audioUrl) return jioSaavnPayload;
+    throw new Error("Failed to fetch JioSaavn audio stream");
+  }
+
+  throw new Error(`Unsupported source: ${source || "unknown"}`);
 }
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const videoId = searchParams.get("id");
+  const source = searchParams.get("source") || undefined;
+  const title = searchParams.get("title") || undefined;
+  const artist = searchParams.get("artist") || undefined;
+  const urlHint = searchParams.get("url") || undefined;
   const runId = `pre-${Date.now()}`;
+  const requestKey = [
+    source || "youtube",
+    videoId || "",
+    title || "",
+    artist || "",
+  ]
+    .join("::")
+    .toLowerCase();
 
   // #region debug-point A:video-route-entry
   reportDebugEvent(
@@ -515,6 +1153,8 @@ export async function GET(request: NextRequest) {
     {
       url: request.url,
       videoId,
+      originalVideoId: videoId,
+      source,
     }
   );
   // #endregion
@@ -537,7 +1177,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const cached = cache.get(videoId);
+  // Extract video ID from YouTube URL if the ID contains a full URL
+  let cleanVideoId = videoId;
+  if (videoId.includes("/watch?v=")) {
+    const match = videoId.match(/[?&]v=([^&]+)/);
+    if (match?.[1]) {
+      cleanVideoId = match[1];
+    }
+  } else if (videoId.includes("youtu.be/")) {
+    const match = videoId.match(/youtu\.be\/([^?]+)/);
+    if (match?.[1]) {
+      cleanVideoId = match[1];
+    }
+  }
+
+  const cached = cache.get(requestKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
     // #region debug-point A:video-route-cache-hit
     reportDebugEvent(
@@ -547,6 +1201,7 @@ export async function GET(request: NextRequest) {
       "[DEBUG] /api/video cache hit",
       {
         videoId,
+        source,
         ageMs: Date.now() - cached.at,
       }
     );
@@ -555,15 +1210,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let requestPromise = inflightRequests.get(videoId);
+    let requestPromise = inflightRequests.get(requestKey);
     if (!requestPromise) {
-      requestPromise = fetchVideoDetails(videoId, runId).finally(() => {
-        inflightRequests.delete(videoId);
+      requestPromise = fetchVideoDetails(cleanVideoId, runId, source, {
+        title,
+        artist,
+        urlHint,
+      }).finally(() => {
+        inflightRequests.delete(requestKey);
       });
-      inflightRequests.set(videoId, requestPromise);
+      inflightRequests.set(requestKey, requestPromise);
     }
 
     const value = await requestPromise;
+    cache.set(requestKey, { at: Date.now(), value });
     return NextResponse.json(value);
   } catch (error) {
     if (cached && Date.now() - cached.at < STALE_CACHE_TTL_MS) {
@@ -574,6 +1234,7 @@ export async function GET(request: NextRequest) {
         "[DEBUG] /api/video serving stale cache after provider failure",
         {
           videoId,
+          source,
           ageMs: Date.now() - cached.at,
           error: error instanceof Error ? error.message : String(error),
         }
@@ -589,6 +1250,7 @@ export async function GET(request: NextRequest) {
       "[DEBUG] /api/video unhandled error",
       {
         videoId,
+        source,
         error: error instanceof Error ? error.message : String(error),
       }
     );

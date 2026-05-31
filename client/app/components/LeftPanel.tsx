@@ -3,8 +3,9 @@
 
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAudio } from "../contexts/AudioContext";
+import { LibraryIcon, LogoIcon, SearchIcon } from "./icons/NavIcons";
 
 interface SearchState {
   query: string;
@@ -16,7 +17,15 @@ export default function LeftPanel() {
   const router = useRouter();
   const pathname = usePathname();
   const { recentSongs, playSong } = useAudio();
-  const [lastSearch, setLastSearch] = useState<SearchState | null>(null);
+  const [lastSearch] = useState<SearchState | null>(() => {
+    try {
+      const saved = localStorage.getItem("lastSearch");
+      return saved ? (JSON.parse(saved) as SearchState) : null;
+    } catch {
+      return null;
+    }
+  });
+  const navIconStrokeWidth = 0.45;
 
   const openSearch = () => {
     if (lastSearch?.query) {
@@ -38,17 +47,9 @@ export default function LeftPanel() {
   const isLibraryPage = pathname.startsWith("/library");
   const getIconClassName = (isActive: boolean) =>
     [
-      "cursor-pointer transition-all duration-200 ease-out",
+      "h-[30px] w-[30px] cursor-pointer transition-all duration-200 ease-out text-white",
       isActive ? "opacity-100 scale-100" : "scale-[0.88] opacity-65",
     ].join(" ");
-
-  useEffect(() => {
-    // Load last search state from localStorage
-    const saved = localStorage.getItem("lastSearch");
-    if (saved) {
-      setLastSearch(JSON.parse(saved));
-    }
-  }, []);
 
   return (
     <div className="flex flex-col gap-3 h-full pr-4">
@@ -60,13 +61,9 @@ export default function LeftPanel() {
           className="flex items-center justify-center"
           aria-label="Go to home"
         >
-          <Image
-            src="/StreamifyLogo.svg"
-            alt="Streamify Logo"
-            width={30}
-            height={30}
+          <LogoIcon
             className={getIconClassName(isHomePage)}
-            priority
+            strokeWidth={navIconStrokeWidth}
           />
         </button>
         <button
@@ -75,12 +72,9 @@ export default function LeftPanel() {
           className="flex items-center justify-center"
           aria-label="Open search"
         >
-          <Image
-            src="/Search.svg"
-            alt="Search"
-            width={30}
-            height={30}
+          <SearchIcon
             className={getIconClassName(isSearchPage)}
+            strokeWidth={navIconStrokeWidth}
           />
         </button>
         <button
@@ -89,12 +83,9 @@ export default function LeftPanel() {
           className="flex items-center justify-center"
           aria-label="Open library"
         >
-          <Image
-            src="/Library.svg"
-            alt="Library"
-            width={30}
-            height={30}
+          <LibraryIcon
             className={getIconClassName(isLibraryPage)}
+            strokeWidth={navIconStrokeWidth}
           />
         </button>
       </div>
@@ -126,13 +117,7 @@ export default function LeftPanel() {
                   key={index}
                   className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-neutral-800"
                 >
-                  <Image
-                    src="/StreamifyLogo.svg"
-                    alt="No recent song"
-                    width={16}
-                    height={16}
-                    className="opacity-40"
-                  />
+                  <LogoIcon className="h-4 w-4 opacity-40 text-white" />
                 </div>
               ))}
         </div>

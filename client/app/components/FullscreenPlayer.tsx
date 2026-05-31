@@ -1,8 +1,19 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useAudio } from "../contexts/AudioContext";
+import {
+  buildTimedLyrics,
+  fetchLyrics,
+  findActiveLyricIndex,
+  TimedLyricLine,
+} from "../lib/lyrics";
+
+const DEFAULT_PALETTE = {
+  primary: [138, 18, 7] as [number, number, number],
+  secondary: [52, 16, 14] as [number, number, number],
+};
 
 function formatTime(time: number): string {
   const minutes = Math.floor(time / 60);
@@ -85,12 +96,28 @@ function extractPaletteFromImage(image: HTMLImageElement): {
 }
 
 export default function FullscreenPlayer() {
-  const { currentSong, recentSongs, duration, closeFullscreen, playSong } =
-    useAudio();
-  const [relatedPalette, setRelatedPalette] = useState({
-    primary: [138, 18, 7] as [number, number, number],
-    secondary: [52, 16, 14] as [number, number, number],
+  const {
+    currentSong,
+    recentSongs,
+    currentTime,
+    duration,
+    seekTo,
+    closeFullscreen,
+    playSong,
+  } = useAudio();
+  const [relatedPalette, setRelatedPalette] = useState(DEFAULT_PALETTE);
+  const [lyricsText, setLyricsText] = useState("");
+  const [lyricsState, setLyricsState] = useState<{
+    loading: boolean;
+    error: string | null;
+    isSynced: boolean;
+  }>({
+    loading: false,
+    error: null,
+    isSynced: false,
   });
+  const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
+  const lyricItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const relatedSongs = useMemo(() => {
     if (!currentSong) return [];
@@ -112,13 +139,7 @@ export default function FullscreenPlayer() {
   }, [closeFullscreen]);
 
   useEffect(() => {
-    if (!currentSong?.coverUrl) {
-      setRelatedPalette({
-        primary: [138, 18, 7],
-        secondary: [52, 16, 14],
-      });
-      return;
-    }
+    if (!currentSong?.coverUrl) return;
 
     let isCancelled = false;
     const image = new window.Image();
@@ -130,19 +151,13 @@ export default function FullscreenPlayer() {
       try {
         setRelatedPalette(extractPaletteFromImage(image));
       } catch {
-        setRelatedPalette({
-          primary: [138, 18, 7],
-          secondary: [52, 16, 14],
-        });
+        setRelatedPalette(DEFAULT_PALETTE);
       }
     };
 
     image.onerror = () => {
       if (isCancelled) return;
-      setRelatedPalette({
-        primary: [138, 18, 7],
-        secondary: [52, 16, 14],
-      });
+      setRelatedPalette(DEFAULT_PALETTE);
     };
 
     image.src = currentSong.coverUrl;
@@ -151,6 +166,110 @@ export default function FullscreenPlayer() {
       isCancelled = true;
     };
   }, [currentSong?.coverUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLyrics = async () => {
+      if (!currentSong) {
+        setLyricsText("");
+        setLyricsState({
+          loading: false,
+          error: null,
+          isSynced: false,
+        });
+        return;
+      }
+
+      setLyricsState((previous) => ({
+        loading: true,
+        error: null,
+        isSynced: previous.isSynced,
+      }));
+
+      try {
+        const payload = await fetchLyrics({
+          id: currentSong.id,
+          title: currentSong.title,
+          artist: currentSong.artist,
+          duration: currentSong.duration,
+        });
+
+        if (cancelled) return;
+
+        if (!payload?.lyrics) {
+          setLyricsText("");
+          setLyricsState({
+            loading: false,
+            error: "Lyrics are not available for this track right now.",
+            isSynced: false,
+          });
+          return;
+        }
+
+        setLyricsText(payload.lyrics);
+        setLyricsState({
+          loading: false,
+          error: null,
+          isSynced: Boolean(payload.isSynced),
+        });
+      } catch {
+        if (cancelled) return;
+        setLyricsText("");
+        setLyricsState({
+          loading: false,
+          error: "Couldn't load lyrics for this track.",
+          isSynced: false,
+        });
+      }
+    };
+
+    loadLyrics();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentSong,
+    currentSong?.id,
+    currentSong?.title,
+    currentSong?.artist,
+    currentSong?.duration,
+  ]);
+
+  const lyricLines = useMemo<TimedLyricLine[]>(
+    () => (lyricsState.isSynced ? buildTimedLyrics(lyricsText) : []),
+    [lyricsText, lyricsState.isSynced]
+  );
+
+  const plainLyricsText = useMemo(() => lyricsText.trim(), [lyricsText]);
+
+  const activeLyricIndex = useMemo(
+    () => findActiveLyricIndex(lyricLines, currentTime),
+    [lyricLines, currentTime]
+  );
+
+  useEffect(() => {
+    if (!lyricsState.isSynced) return;
+    if (activeLyricIndex < 0) return;
+
+    const container = lyricsContainerRef.current;
+    const activeElement = lyricItemRefs.current[activeLyricIndex];
+    if (!container || !activeElement) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const activeRect = activeElement.getBoundingClientRect();
+    const targetScrollTop =
+      container.scrollTop +
+      (activeRect.top - containerRect.top) -
+      container.clientHeight / 2 +
+      activeElement.clientHeight / 2;
+
+    container.scrollTo({
+      top: Math.max(0, targetScrollTop),
+      behavior: "smooth",
+    });
+  }, [activeLyricIndex, lyricsState.isSynced]);
 
   if (!currentSong) {
     return null;
@@ -163,14 +282,9 @@ export default function FullscreenPlayer() {
   ]
     .filter(Boolean)
     .join(" • ");
-  const lyricLines = [
-    { text: "Lyrics are not available for this track yet.", tone: "muted" },
-    {
-      text: "This space is ready for synced lyrics when a lyrics source is connected.",
-      tone: "soft",
-    },
-    { text: `Now playing ${currentSong.title}`, tone: "active" },
-  ];
+  const displayPalette = currentSong.coverUrl
+    ? relatedPalette
+    : DEFAULT_PALETTE;
 
   return (
     <div className="h-full overflow-hidden  bg-[#070707] shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
@@ -219,7 +333,7 @@ export default function FullscreenPlayer() {
         </section>
 
         <aside className="flex min-h-0 flex-col gap-2">
-          <section className="flex min-h-0 flex-1 flex-col rounded-xl bg-[#181818] px-5 py-5 md:px-6 md:py-6">
+          <section className="flex min-h-0 flex-1 flex-col rounded-xl bg-[#181818] px-3 py-3 md:px-4 md:py-4">
             <div className="flex min-h-0 flex-1 flex-col rounded-[24px]">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -237,24 +351,60 @@ export default function FullscreenPlayer() {
                   ×
                 </button>
               </div>
-              <div className="mt-5 flex-1 overflow-y-auto hide-scrollbar pr-1 text-white/90">
-                <div className="space-y-4 text-lg leading-9 md:text-[22px] md:leading-[1.5]">
-                  {lyricLines.map((line) => (
-                    <p
-                      key={line.text}
-                      className={
-                        line.tone === "active"
-                          ? "font-semibold text-white"
-                          : line.tone === "normal"
-                          ? "text-white/70"
-                          : line.tone === "soft"
-                          ? "text-white/42"
-                          : "text-white/24"
-                      }
-                    >
-                      {line.text}
-                    </p>
-                  ))}
+              <div
+                ref={lyricsContainerRef}
+                className="mt-5 flex-1 overflow-y-auto hide-scrollbar pr-1 text-white/90"
+              >
+                <div className="space-y-2 text-lg leading-9 md:text-[22px] md:leading-[1.5]">
+                  {lyricsState.loading ? (
+                    <div className="space-y-3 py-2">
+                      <p className="text-white/45">Loading lyrics...</p>
+                      <p className="text-white/25">Synced Lyrics Loading...</p>
+                    </div>
+                  ) : lyricLines.length > 0 ? (
+                    <>
+                      {lyricLines.map((line, index) => {
+                        const isActive = index === activeLyricIndex;
+                        const isPassed = activeLyricIndex > index;
+                        return (
+                          <button
+                            key={`${line.startTime}-${line.text}-${index}`}
+                            ref={(element) => {
+                              lyricItemRefs.current[index] = element;
+                            }}
+                            type="button"
+                            onClick={() => seekTo(line.startTime)}
+                            className={`block w-full rounded-xl px-2 py-1 text-left transition ${
+                              isActive
+                                ? "bg-white/8 font-semibold text-white"
+                                : isPassed
+                                ? "text-white/45"
+                                : "text-white/72 hover:bg-white/5 hover:text-white"
+                            }`}
+                            title={`Jump to ${formatTime(line.startTime)}`}
+                          >
+                            {line.text}
+                          </button>
+                        );
+                      })}
+                    </>
+                  ) : plainLyricsText ? (
+                    <>
+                      <p className="pb-3 text-sm text-white/40">
+                        Synced lyrics were not available for this track.
+                      </p>
+                      <pre className="whitespace-pre-wrap font-sans text-lg leading-9 text-white/72 md:text-[22px] md:leading-[1.5]">
+                        {plainLyricsText}
+                      </pre>
+                    </>
+                  ) : (
+                    <div className="space-y-3 py-2">
+                      <p className="font-medium text-white/55">
+                        {lyricsState.error ||
+                          "Lyrics are not available for this track yet."}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -264,10 +414,10 @@ export default function FullscreenPlayer() {
             className="rounded-xl px-3 py-3 md:px-4 md:py-4"
             style={{
               backgroundImage: `linear-gradient(180deg, ${rgbToCss(
-                relatedPalette.primary,
+                displayPalette.primary,
                 0.88
               )} 0%, ${rgbToCss(
-                relatedPalette.secondary,
+                displayPalette.secondary,
                 0.76
               )} 58%, rgba(24, 24, 24, 0.96) 100%)`,
             }}

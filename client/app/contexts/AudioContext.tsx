@@ -83,8 +83,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasHydratedRef = useRef(false);
+  const playbackFrameRef = useRef<number | null>(null);
 
   // Load saved state from localStorage on mount
   useEffect(() => {
@@ -182,28 +182,57 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
   }, [currentSong, isPlaying, volume]);
 
-  // Handle time updates
   useEffect(() => {
-    if (isPlaying) {
-      intervalRef.current = setInterval(() => {
-        if (audioRef.current) {
-          setCurrentTime(audioRef.current.currentTime);
-          setDuration(audioRef.current.duration || 0);
-        }
-      }, 1000);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const syncPlaybackState = () => {
+      setCurrentTime(audio.currentTime || 0);
+      setDuration(audio.duration || currentSong?.duration || 0);
+    };
+
+    syncPlaybackState();
+
+    audio.addEventListener("timeupdate", syncPlaybackState);
+    audio.addEventListener("loadedmetadata", syncPlaybackState);
+    audio.addEventListener("durationchange", syncPlaybackState);
+    audio.addEventListener("seeking", syncPlaybackState);
+    audio.addEventListener("seeked", syncPlaybackState);
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      audio.removeEventListener("timeupdate", syncPlaybackState);
+      audio.removeEventListener("loadedmetadata", syncPlaybackState);
+      audio.removeEventListener("durationchange", syncPlaybackState);
+      audio.removeEventListener("seeking", syncPlaybackState);
+      audio.removeEventListener("seeked", syncPlaybackState);
+    };
+  }, [currentSong?.duration]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !isPlaying) {
+      if (playbackFrameRef.current !== null) {
+        cancelAnimationFrame(playbackFrameRef.current);
+        playbackFrameRef.current = null;
+      }
+      return;
+    }
+
+    const syncPlaybackFrame = () => {
+      setCurrentTime(audio.currentTime || 0);
+      setDuration(audio.duration || currentSong?.duration || 0);
+      playbackFrameRef.current = requestAnimationFrame(syncPlaybackFrame);
+    };
+
+    playbackFrameRef.current = requestAnimationFrame(syncPlaybackFrame);
+
+    return () => {
+      if (playbackFrameRef.current !== null) {
+        cancelAnimationFrame(playbackFrameRef.current);
+        playbackFrameRef.current = null;
       }
     };
-  }, [isPlaying]);
+  }, [currentSong?.duration, isPlaying]);
 
   // Handle audio ended
   useEffect(() => {

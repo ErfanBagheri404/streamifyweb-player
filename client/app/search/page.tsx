@@ -19,8 +19,34 @@ import {
   SearchResult,
   sourceFilters as defaultSourceFilters,
   getFilterOptions,
-  shortCount,
 } from "../components/search";
+
+const DEBUG_SERVER_URL = process.env.NEXT_PUBLIC_DEBUG_SERVER_URL || "";
+const DEBUG_SESSION_ID = "playback-source-500";
+
+function reportDebugEvent(
+  runId: string,
+  hypothesisId: string,
+  location: string,
+  msg: string,
+  data: Record<string, unknown>
+) {
+  if (!DEBUG_SERVER_URL) return;
+
+  fetch(DEBUG_SERVER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId: DEBUG_SESSION_ID,
+      runId,
+      hypothesisId,
+      location,
+      msg,
+      data,
+      ts: Date.now(),
+    }),
+  }).catch(() => {});
+}
 
 // ─── Raw Piped item shape (partial) ────────────────────────
 interface RawPipedItem {
@@ -60,6 +86,17 @@ interface RawPipedItem {
   verified?: boolean;
   subCount?: number;
   source?: string;
+  name?: string;
+  tracks?: SearchResult["tracks"];
+  videos?: SearchResult["videos"];
+}
+
+interface SavedSearchState {
+  query: string;
+  source: SourceType;
+  filter: string;
+  results?: SearchResult[];
+  timestamp?: number;
 }
 
 function scoreImageQuality(
@@ -123,9 +160,11 @@ function getBestThumbnail(raw: RawPipedItem, source: string): string {
   }
 
   if (Array.isArray(raw.image) && raw.image.length > 0) {
-    return [...raw.image].sort(
-      (a, b) => scoreImageQuality(b) - scoreImageQuality(a)
-    )[0]?.url || "";
+    return (
+      [...raw.image].sort(
+        (a, b) => scoreImageQuality(b) - scoreImageQuality(a)
+      )[0]?.url || ""
+    );
   }
 
   if (Array.isArray(raw.videoThumbnails) && raw.videoThumbnails.length > 0) {
@@ -192,6 +231,7 @@ function SearchPageInner() {
   const selectedSourceRef = useRef(selectedSource);
   const searchQueryRef = useRef(searchQuery);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const didRestoreInitialStateRef = useRef(false);
 
   // Update URL parameters when state changes
   const updateUrlParams = useCallback(
@@ -232,52 +272,6 @@ function SearchPageInner() {
     updateUrlParams,
   ]);
 
-  // Restore search state from localStorage and perform initial search
-  useEffect(() => {
-    const query = searchParams.get("q");
-
-    // If URL has search params, use them (this takes priority)
-    if (query && !hasSearched && !isLoading) {
-      handleSearch(query);
-      return;
-    }
-
-    // If no URL params, try to restore from localStorage
-    const savedSearch = localStorage.getItem("lastSearch");
-    if (savedSearch && !hasSearched && !query && !isLoading) {
-      try {
-        const searchState = JSON.parse(savedSearch);
-        const timestamp = searchState.timestamp || 0;
-
-        // Only restore if state is recent (within 2 hours)
-        const maxAge = 2 * 60 * 60 * 1000; // 2 hours
-        if (Date.now() - timestamp < maxAge && searchState.query) {
-          // Set the state first
-          setSearchQuery(searchState.query);
-          searchQueryRef.current = searchState.query;
-          setSelectedSource(searchState.source || "youtube");
-          selectedSourceRef.current = searchState.source || "youtube";
-          setSelectedFilter(searchState.filter || "all");
-          selectedFilterRef.current = searchState.filter || "all";
-          setHasSearched(true);
-
-          // Restore search results if available
-          if (searchState.results && searchState.results.length > 0) {
-            setSearchResults(searchState.results);
-          } else {
-            // If no saved results, perform the search
-            setTimeout(() => {
-              handleSearch(searchState.query);
-            }, 100);
-          }
-        }
-      } catch (error) {
-        console.error("Error restoring search state:", error);
-        localStorage.removeItem("lastSearch");
-      }
-    }
-  }, []); // Only run on mount
-
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const paginationRef = useRef({
     page: 1,
@@ -302,27 +296,22 @@ function SearchPageInner() {
   // Handle browser back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
-      // Check if we should restore search state when navigating back
       const savedSearch = localStorage.getItem("lastSearch");
-      if (savedSearch && !searchParams.get("q")) {
+      if (savedSearch) {
         try {
-          const searchState = JSON.parse(savedSearch);
+          const searchState = JSON.parse(savedSearch) as SavedSearchState;
           const timestamp = searchState.timestamp || 0;
           const maxAgePopstate = 2 * 60 * 60 * 1000; // 2 hours
 
           if (Date.now() - timestamp < maxAgePopstate && searchState.query) {
-            // Restore the search state without performing a new search
-            setSearchQuery(searchState.query);
-            searchQueryRef.current = searchState.query;
+            setSearchQuery(searchState.query || "");
+            searchQueryRef.current = searchState.query || "";
             setSelectedSource(searchState.source || "youtube");
             selectedSourceRef.current = searchState.source || "youtube";
             setSelectedFilter(searchState.filter || "all");
             selectedFilterRef.current = searchState.filter || "all";
-            setHasSearched(true);
-
-            if (searchState.results && searchState.results.length > 0) {
-              setSearchResults(searchState.results);
-            }
+            setHasSearched(Boolean(searchState.query));
+            setSearchResults(searchState.results || []);
           }
         } catch (error) {
           console.error("Error restoring search state on popstate:", error);
@@ -332,52 +321,19 @@ function SearchPageInner() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [searchParams]);
-
-  // ─── Fetch suggestions from Piped API ────────────────
-  const fetchSuggestions = async (query: string, source: SourceType) => {
-    // Only fetch suggestions for YouTube sources
-    if (source !== "youtube" && source !== "youtubemusic") {
-      return [];
-    }
-
-    try {
-      const response = await fetch(
-        `https://api.piped.private.coffee/opensearch/suggestions?query=${encodeURIComponent(
-          query
-        )}`,
-        { signal: abortControllerRef.current?.signal }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      // Piped returns an array where first element is query, rest are suggestions
-      if (Array.isArray(data) && data.length > 1) {
-        return data.slice(1) as string[];
-      }
-      return [];
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        console.error("Error fetching suggestions:", error);
-      }
-      return [];
-    }
-  };
+  }, []);
 
   // ─── Helper: map raw item to SearchResult ────────────────
   const mapToSearchResult = (raw: RawPipedItem): SearchResult => {
     const source = raw.source || selectedSourceRef.current || "youtube";
-    const id =
-      raw.url?.split("v=")[1] ||
-      raw.url ||
-      raw.videoId ||
-      raw.playlistId ||
-      raw.authorId ||
-      raw.id ||
-      "";
+    const rawUrl = raw.url || "";
+    let id =
+      raw.videoId || raw.playlistId || raw.authorId || raw.id || rawUrl || "";
+
+    if (!id && rawUrl) {
+      const videoMatch = rawUrl.match(/[?&]v=([^&]+)/);
+      if (videoMatch) id = videoMatch[1];
+    }
 
     const thumbnailUrl = getBestThumbnail(raw, source);
 
@@ -399,6 +355,26 @@ function SearchPageInner() {
         ? raw.author || raw.uploaderName || ""
         : raw.title || "";
 
+    // #region debug-point H5:search-map-item
+    reportDebugEvent(
+      `pre-search-map-${Date.now()}`,
+      "H5",
+      "app/search/page.tsx:mapToSearchResult",
+      "[DEBUG] search item normalized",
+      {
+        source,
+        rawType: raw.type || null,
+        mappedType,
+        id,
+        rawId: raw.id || null,
+        rawUrl: raw.url || null,
+        title: displayTitle,
+        hasTracks: Array.isArray(raw.tracks),
+        videoCount: raw.videoCount ?? null,
+      }
+    );
+    // #endregion
+
     return {
       // Keep original fields for potential use, but let normalized values win.
       ...raw,
@@ -413,6 +389,27 @@ function SearchPageInner() {
       type: mappedType,
     } as SearchResult;
   };
+
+  const saveSearchState = useCallback(
+    (override?: Partial<SavedSearchState> & { results?: SearchResult[] }) => {
+      const query = override?.query ?? searchQuery;
+      const source = override?.source ?? selectedSource;
+      const filter = override?.filter ?? selectedFilter;
+      const results = override?.results ?? searchResults;
+
+      if (query || hasSearched) {
+        const searchState = {
+          query,
+          source,
+          filter,
+          results,
+          timestamp: Date.now(),
+        };
+        localStorage.setItem("lastSearch", JSON.stringify(searchState));
+      }
+    },
+    [hasSearched, searchQuery, searchResults, selectedFilter, selectedSource]
+  );
 
   // ─── API call ────────────────────────────────────────────
   const handleSearch = useCallback(
@@ -504,8 +501,14 @@ function SearchPageInner() {
           filter: filterToUse,
         };
 
-        // Save search state to localStorage
-        saveSearchState();
+        if (!loadMore) {
+          saveSearchState({
+            query: queryToUse,
+            source: sourceToUse,
+            filter: filterToUse,
+            results: formatted,
+          });
+        }
       } catch (error) {
         console.error("Search error:", error);
         if (!loadMore) setSearchResults([]);
@@ -516,7 +519,7 @@ function SearchPageInner() {
         else setIsLoading(false);
       }
     },
-    [searchResults.length, currentPage]
+    [searchResults.length, currentPage, saveSearchState]
   );
 
   const loadMoreResults = useCallback(async () => {
@@ -529,6 +532,79 @@ function SearchPageInner() {
     await handleSearch(undefined, true);
     paginationRef.current.isLoadingMore = false;
   }, [isLoadingMore, hasMoreResults, handleSearch]);
+
+  function restoreSavedSearchState(searchState: SavedSearchState) {
+    setSearchQuery(searchState.query || "");
+    searchQueryRef.current = searchState.query || "";
+    setSelectedSource(searchState.source || "youtube");
+    selectedSourceRef.current = searchState.source || "youtube";
+    setSelectedFilter(searchState.filter || "all");
+    selectedFilterRef.current = searchState.filter || "all";
+    setHasSearched(Boolean(searchState.query));
+    setSearchResults(searchState.results || []);
+  }
+
+  // Restore search state from URL/localStorage on mount
+  useEffect(() => {
+    if (didRestoreInitialStateRef.current) return;
+    didRestoreInitialStateRef.current = true;
+
+    const queryFromUrl = searchParams.get("q") || "";
+    const sourceFromUrl =
+      (searchParams.get("source") as SourceType) || "youtube";
+    const filterFromUrl = searchParams.get("filter") || "all";
+    const savedSearch = localStorage.getItem("lastSearch");
+    let parsedSavedSearch: SavedSearchState | null = null;
+
+    if (savedSearch) {
+      try {
+        parsedSavedSearch = JSON.parse(savedSearch) as SavedSearchState;
+        const timestamp = parsedSavedSearch.timestamp || 0;
+        const maxAge = 2 * 60 * 60 * 1000;
+
+        if (Date.now() - timestamp >= maxAge) {
+          parsedSavedSearch = null;
+          localStorage.removeItem("lastSearch");
+        }
+      } catch (error) {
+        console.error("Error restoring search state:", error);
+        localStorage.removeItem("lastSearch");
+      }
+    }
+
+    if (queryFromUrl) {
+      const hasMatchingSavedResults =
+        parsedSavedSearch?.query === queryFromUrl &&
+        (parsedSavedSearch?.source || "youtube") === sourceFromUrl &&
+        (parsedSavedSearch?.filter || "all") === filterFromUrl &&
+        Array.isArray(parsedSavedSearch?.results) &&
+        parsedSavedSearch.results.length > 0;
+
+      if (hasMatchingSavedResults && parsedSavedSearch) {
+        setTimeout(() => {
+          restoreSavedSearchState(parsedSavedSearch!);
+        }, 0);
+      } else {
+        setTimeout(() => {
+          setSearchQuery(queryFromUrl);
+          searchQueryRef.current = queryFromUrl;
+          setSelectedSource(sourceFromUrl);
+          selectedSourceRef.current = sourceFromUrl;
+          setSelectedFilter(filterFromUrl);
+          selectedFilterRef.current = filterFromUrl;
+          setHasSearched(true);
+          handleSearch(queryFromUrl, false, filterFromUrl);
+        }, 0);
+      }
+      return;
+    }
+
+    if (parsedSavedSearch?.query) {
+      setTimeout(() => {
+        restoreSavedSearchState(parsedSavedSearch!);
+      }, 0);
+    }
+  }, [handleSearch, searchParams]);
 
   // ─── Input change with debounce & suggestions ────────────
   const handleTextChange = useCallback((text: string) => {
@@ -666,24 +742,9 @@ function SearchPageInner() {
     localStorage.removeItem("lastSearch");
   };
 
-  // Save current search state to localStorage
-  const saveSearchState = useCallback(() => {
-    if (searchQuery || hasSearched) {
-      const searchState = {
-        query: searchQuery,
-        source: selectedSource,
-        filter: selectedFilter,
-        results: searchResults, // Save the actual results
-        timestamp: Date.now(),
-      };
-      localStorage.setItem("lastSearch", JSON.stringify(searchState));
-    }
-  }, [searchQuery, selectedSource, selectedFilter, searchResults, hasSearched]);
-
   // ─── Navigation handlers ─────────────────────────────────
   const buildArtistUrl = (item: SearchResult) => {
-    const name =
-      item.title || item.author || item.name || (item as any).name || "";
+    const name = item.title || item.author || item.name || "";
     const image =
       item.thumbnailUrl ||
       item.img ||
@@ -694,6 +755,7 @@ function SearchPageInner() {
     const params = new URLSearchParams();
     if (name) params.set("name", name);
     if (image) params.set("image", image);
+    if (item.source) params.set("source", item.source);
 
     // Preserve search state
     if (searchQuery) params.set("search_query", searchQuery);
@@ -722,7 +784,44 @@ function SearchPageInner() {
   const handleAlbumPress = (item: SearchResult) => {
     // Save search state before navigation
     saveSearchState();
-    router.push(`/album/${item.id}`);
+    const kind = item.type === "album" ? "album" : "playlist";
+    const params = new URLSearchParams();
+    params.set("title", item.title || "");
+    if (item.author) params.set("author", item.author);
+    if (item.source) params.set("source", item.source);
+    if (item.thumbnailUrl || item.img || item.thumbnail) {
+      params.set(
+        "image",
+        item.thumbnailUrl || item.img || item.thumbnail || ""
+      );
+    }
+    if (item.href || item.url) params.set("href", item.href || item.url || "");
+    if (item.videoCount != null) params.set("count", String(item.videoCount));
+    if (searchQuery) params.set("search_query", searchQuery);
+    if (selectedSource !== "youtube")
+      params.set("search_source", selectedSource);
+    if (selectedFilter !== "all") params.set("search_filter", selectedFilter);
+    // #region debug-point H5:collection-nav
+    reportDebugEvent(
+      `pre-collection-nav-${Date.now()}`,
+      "H5",
+      "app/search/page.tsx:handleAlbumPress",
+      "[DEBUG] collection navigation requested",
+      {
+        id: item.id,
+        source: item.source || null,
+        type: item.type || null,
+        title: item.title,
+        href: item.href || item.url || null,
+        count: item.videoCount ?? null,
+        hasTracks: Array.isArray(item.tracks),
+        hasVideos: Array.isArray(item.videos),
+      }
+    );
+    // #endregion
+    router.push(
+      `/collection/${kind}/${encodeURIComponent(item.id)}?${params.toString()}`
+    );
   };
   const handleSongPress = async (item: SearchResult) => {
     if (loadingSongId === item.id) return;
@@ -743,7 +842,15 @@ function SearchPageInner() {
 
     try {
       // Fetch actual video details with audio URL
-      const response = await fetch(`/api/video?id=${item.id}`);
+      const params = new URLSearchParams();
+      params.set("id", item.id);
+      if (item.source) params.set("source", item.source);
+      if (item.title) params.set("title", item.title);
+      if (item.author) params.set("artist", item.author);
+      if (item.href || item.url || item.permalink_url) {
+        params.set("url", item.href || item.url || item.permalink_url || "");
+      }
+      const response = await fetch(`/api/video?${params.toString()}`);
       const videoData = await response.json();
 
       if (videoData.audioUrl) {

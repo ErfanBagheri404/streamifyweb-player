@@ -115,6 +115,7 @@ export async function searchYouTube(
           duration: item.lengthSeconds.toString(),
           views: item.viewCount.toString(),
           thumbnailUrl: item.videoThumbnails?.[0]?.url || "",
+          href: `https://www.youtube.com/watch?v=${item.videoId}`,
           type: "video",
         });
         break;
@@ -126,6 +127,8 @@ export async function searchYouTube(
           author: item.author,
           thumbnailUrl: item.playlistThumbnail || "",
           videoCount: item.videoCount,
+          href: `https://www.youtube.com/playlist?list=${item.playlistId}`,
+          videos: item.videos,
           type: "playlist",
           duration: "0",
         });
@@ -140,6 +143,8 @@ export async function searchYouTube(
           videoCount: item.videoCount,
           channelDescription: item.description,
           verified: !!item.authorVerified,
+          href: item.authorUrl,
+          subCount: item.subCount,
           type: "channel",
           duration: "0",
         });

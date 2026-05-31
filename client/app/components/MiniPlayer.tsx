@@ -50,7 +50,9 @@ const MiniPlayer: React.FC = () => {
     toggleRepeat,
     playNext,
     playPrevious,
+    isFullscreenOpen,
     openFullscreen,
+    closeFullscreen,
   } = useAudio();
 
   const compactWaveformRef = useRef<HTMLButtonElement>(null);
@@ -83,6 +85,15 @@ const MiniPlayer: React.FC = () => {
     } else {
       resumeSong();
     }
+  };
+
+  const handleFullscreenToggle = () => {
+    if (isFullscreenOpen) {
+      closeFullscreen();
+      return;
+    }
+
+    openFullscreen();
   };
 
   const progress =
@@ -333,9 +344,13 @@ const MiniPlayer: React.FC = () => {
 
           <button
             type="button"
-            onClick={openFullscreen}
+            onClick={handleFullscreenToggle}
             className="rounded-full pr-2 transition-colors"
-            aria-label="Open fullscreen player"
+            aria-label={
+              isFullscreenOpen
+                ? "Close fullscreen player"
+                : "Open fullscreen player"
+            }
           >
             <Image
               src="/Fullscreen.svg"

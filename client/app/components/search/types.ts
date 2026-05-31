@@ -29,7 +29,28 @@ export interface SearchResult {
   videoCount?: number;
   channelDescription?: string;
   verified?: boolean;
+  subCount?: number | string;
   authorThumbnails?: AuthorThumbnail[];
+  url?: string;
+  permalink_url?: string;
+  videos?: Array<{
+    title: string;
+    videoId?: string;
+    id?: string;
+    lengthSeconds?: number;
+    videoThumbnails?: AuthorThumbnail[];
+  }>;
+  tracks?: Array<{
+    id?: string | number;
+    title?: string;
+    duration?: number | string;
+    artwork_url?: string;
+    permalink_url?: string;
+    user?: {
+      username?: string;
+      avatar_url?: string;
+    };
+  }>;
   // Additional fields for different sources
   name?: string;
 }

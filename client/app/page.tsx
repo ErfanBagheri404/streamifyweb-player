@@ -1,5 +1,5 @@
 export default function Home() {
   return (
-    <div>home</div>
+    <div>Disabled, for now....</div>
   );
 }

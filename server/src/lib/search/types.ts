@@ -12,9 +12,18 @@ export interface SearchResult {
   albumName?: string;
   uploaded?: string;
   href?: string;
+  url?: string;
   videoCount?: number;
   channelDescription?: string;
   verified?: boolean;
+  subCount?: number | string;
+  videos?: Array<{
+    title: string;
+    videoId?: string;
+    lengthSeconds?: number;
+    videoThumbnails?: InvidiousThumbnail[];
+  }>;
+  tracks?: unknown[];
 }
 
 export interface SearchResponse {
@@ -97,7 +106,10 @@ export interface InvidiousChannelItem {
   descriptionHtml: string;
 }
 
-export type InvidiousSearchItem = InvidiousVideoItem | InvidiousPlaylistItem | InvidiousChannelItem;
+export type InvidiousSearchItem =
+  | InvidiousVideoItem
+  | InvidiousPlaylistItem
+  | InvidiousChannelItem;
 
 // SoundCloud
 export interface SoundCloudTrackResponse {

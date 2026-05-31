@@ -4,6 +4,7 @@ const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
 const INVIDIOUS_BASE = "https://yt.omada.cafe";
+const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
 
 function isYouTubeChannelId(id: string): boolean {
   return id.startsWith("UC") || id.startsWith("U") || id.length === 24;
@@ -20,6 +21,16 @@ function safeNumber(value: unknown): number {
     return Number.isNaN(n) ? 0 : n;
   }
   return 0;
+}
+
+function toRecord(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : {};
+}
+
+function toArray(value: unknown): any[] {
+  return Array.isArray(value) ? value : [];
 }
 
 async function fetchJson(url: string): Promise<unknown> {
@@ -45,6 +56,8 @@ type ArtistPayload = {
     subscribers?: number;
     verified?: boolean;
     description?: string;
+    source?: string;
+    url?: string;
   };
   songs: Array<{
     id: string;
@@ -52,6 +65,8 @@ type ArtistPayload = {
     thumbnail?: string;
     views?: number;
     duration?: number;
+    artist?: string;
+    url?: string;
   }>;
   albums: Array<{
     id: string;
@@ -59,6 +74,8 @@ type ArtistPayload = {
     thumbnail?: string;
     year?: string;
     videoCount?: number;
+    songCount?: number;
+    url?: string;
   }>;
   playlists: Array<{
     id: string;
@@ -109,6 +126,124 @@ function pickBestImageUrl(arr: unknown, urlKey: string = "url"): string {
   return absolutizeUrl(url);
 }
 
+function qualityScore(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const match = value.match(/(\d+)/);
+    if (match) return Number(match[1]);
+  }
+  return 0;
+}
+
+function pickJioSaavnImage(arr: unknown): string {
+  const sorted = toArray(arr)
+    .map((entry) => toRecord(entry))
+    .sort(
+      (a, b) =>
+        qualityScore(b.quality || b.size) - qualityScore(a.quality || a.size)
+    );
+
+  for (const image of sorted) {
+    const url = safeString(image.url || image.link);
+    if (url) return url;
+  }
+
+  return "";
+}
+
+function pickJioSaavnArtistNames(value: unknown): string {
+  const artists = toRecord(value);
+  const groups = [artists.primary, artists.featured, artists.all];
+
+  for (const group of groups) {
+    const names = toArray(group)
+      .map((entry) => safeString(toRecord(entry).name))
+      .filter(Boolean);
+    if (names.length) return names.join(", ");
+  }
+
+  return "";
+}
+
+function normalizeJioSaavnSong(song: unknown): ArtistPayload["songs"][number] {
+  const record = toRecord(song);
+  return {
+    id: safeString(record.id || record.songid || record.url),
+    title: safeString(record.name || record.title || record.song) || "Unknown",
+    thumbnail: pickJioSaavnImage(record.image),
+    duration: safeNumber(record.duration),
+    artist: pickJioSaavnArtistNames(record.artists),
+    url: safeString(record.url),
+  };
+}
+
+function normalizeJioSaavnAlbum(
+  album: unknown
+): ArtistPayload["albums"][number] {
+  const record = toRecord(album);
+  return {
+    id: safeString(record.id || record.url),
+    title: safeString(record.name || record.title) || "Unknown",
+    thumbnail: pickJioSaavnImage(record.image),
+    year: safeString(record.year),
+    videoCount: safeNumber(record.songCount),
+    songCount: safeNumber(record.songCount),
+    url: safeString(record.url),
+  };
+}
+
+async function fetchJioSaavnArtist(id: string): Promise<ArtistPayload> {
+  const [artistPayload, songsPayload, albumsPayload] = await Promise.all([
+    fetchJson(`${JIOSAAVN_API_BASE}/api/artists/${encodeURIComponent(id)}`),
+    fetchJson(
+      `${JIOSAAVN_API_BASE}/api/artists/${encodeURIComponent(id)}/songs`
+    ).catch(() => null),
+    fetchJson(
+      `${JIOSAAVN_API_BASE}/api/artists/${encodeURIComponent(id)}/albums`
+    ).catch(() => null),
+  ]);
+
+  const artistData = toRecord(toRecord(artistPayload).data);
+  const songsData = toRecord(toRecord(songsPayload).data);
+  const albumsData = toRecord(toRecord(albumsPayload).data);
+
+  const artist: ArtistPayload["artist"] = {
+    id: safeString(artistData.id || id),
+    name: safeString(artistData.name) || "Artist",
+    image: pickJioSaavnImage(artistData.image),
+    banner: pickJioSaavnImage(artistData.image),
+    subscribers:
+      safeNumber(artistData.followerCount) || safeNumber(artistData.fanCount),
+    verified: Boolean(artistData.isVerified),
+    description:
+      safeString(artistData.dominantType) ||
+      toArray(artistData.bio)
+        .map((entry) => safeString(toRecord(entry).text || entry))
+        .filter(Boolean)
+        .join(" "),
+    source: "jiosaavn",
+    url: safeString(artistData.url),
+  };
+
+  const songsFromEndpoint = toArray(songsData.songs).map((song) =>
+    normalizeJioSaavnSong(song)
+  );
+  const songs =
+    songsFromEndpoint.length > 0
+      ? songsFromEndpoint
+      : toArray(artistData.topSongs).map((song) => normalizeJioSaavnSong(song));
+  const albums = toArray(albumsData.albums).map((album) =>
+    normalizeJioSaavnAlbum(album)
+  );
+
+  return {
+    artist,
+    songs: songs.filter((song) => song.id),
+    albums: albums.filter((album) => album.id),
+    playlists: [],
+  };
+}
+
 function isAutoGeneratedAlbumPlaylistId(playlistId: string): boolean {
   return playlistId.startsWith("OLAK5uy") || playlistId.startsWith("MPREb_");
 }
@@ -116,7 +251,20 @@ function isAutoGeneratedAlbumPlaylistId(playlistId: string): boolean {
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const id = searchParams.get("id");
+  const source = (searchParams.get("source") || "").toLowerCase();
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+  if (source === "jiosaavn") {
+    try {
+      const payload = await fetchJioSaavnArtist(id);
+      return NextResponse.json(payload, { status: 200 });
+    } catch {
+      return NextResponse.json(
+        { error: "Failed to load artist" },
+        { status: 500 }
+      );
+    }
+  }
 
   if (!isYouTubeChannelId(id)) {
     return NextResponse.json(

@@ -4,8 +4,8 @@ import https from "node:https";
 import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
 
-const DEBUG_SERVER_URL = "http://127.0.0.1:7777/event";
-const DEBUG_SESSION_ID = "playback-api";
+const DEBUG_SERVER_URL = "";
+const DEBUG_SESSION_ID = "playback-source-500";
 const AUDIO_REQUEST_TIMEOUT_MS = 20000;
 const MAX_REDIRECTS = 5;
 const RETRYABLE_ERROR_CODES = new Set([
@@ -13,7 +13,12 @@ const RETRYABLE_ERROR_CODES = new Set([
   "ETIMEDOUT",
   "ECONNREFUSED",
   "EPIPE",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "EHOSTUNREACH",
 ]);
+const DEFAULT_MAX_RETRIES = 1;
+const JIOSAAVN_MAX_RETRIES = 3;
 
 function reportDebugEvent(
   runId: string,
@@ -22,6 +27,8 @@ function reportDebugEvent(
   msg: string,
   data: Record<string, unknown>
 ) {
+  if (!DEBUG_SERVER_URL) return;
+
   fetch(DEBUG_SERVER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -73,6 +80,9 @@ async function requestAudioStream(
 ): Promise<ProxiedAudioResponse> {
   const url = new URL(audioUrl);
   const transport = url.protocol === "https:" ? https : http;
+  const maxRetries = url.hostname.includes("saavncdn.com")
+    ? JIOSAAVN_MAX_RETRIES
+    : DEFAULT_MAX_RETRIES;
 
   return new Promise((resolve, reject) => {
     const req = transport.request(
@@ -80,6 +90,7 @@ async function requestAudioStream(
       {
         method: "GET",
         headers,
+        ...(url.hostname.includes("saavncdn.com") ? { family: 4 } : {}),
       },
       (response) => {
         const statusCode = response.statusCode ?? 502;
@@ -126,16 +137,19 @@ async function requestAudioStream(
     });
 
     req.on("error", (error) => {
-      if (retryCount < 1 && isRetryableError(error)) {
-        resolve(
-          requestAudioStream(
-            audioUrl,
-            headers,
-            redirectCount,
-            retryCount + 1,
-            redirectChain
-          )
-        );
+      if (retryCount < maxRetries && isRetryableError(error)) {
+        const delayMs = 250 * (retryCount + 1);
+        setTimeout(() => {
+          resolve(
+            requestAudioStream(
+              audioUrl,
+              headers,
+              redirectCount,
+              retryCount + 1,
+              redirectChain
+            )
+          );
+        }, delayMs);
         return;
       }
 
@@ -206,13 +220,39 @@ export async function GET(request: NextRequest) {
       "Accept-Language": "en-US,en;q=0.9",
       "Accept-Encoding": "identity",
       DNT: "1",
-      Referer: "https://www.youtube.com/",
-      Origin: "https://www.youtube.com",
-      "Sec-Fetch-Dest": "audio",
-      "Sec-Fetch-Mode": "cors",
-      "Sec-Fetch-Site": "cross-site",
       "Cache-Control": "no-cache",
     };
+
+    // Set appropriate referer and origin based on the audio URL domain
+    try {
+      const audioUrlObj = new URL(audioUrl);
+      if (audioUrlObj.hostname.includes("saavncdn.com")) {
+        // JioSaavn specific headers
+        headers.Referer = "https://www.jiosaavn.com/";
+        headers.Origin = "https://www.jiosaavn.com";
+      } else if (
+        audioUrlObj.hostname.includes("soundcloud.com") ||
+        audioUrlObj.hostname.includes("sndcdn.com")
+      ) {
+        // SoundCloud specific headers
+        headers.Referer = "https://soundcloud.com/";
+        headers.Origin = "https://soundcloud.com";
+      } else {
+        // Default YouTube headers
+        headers.Referer = "https://www.youtube.com/";
+        headers.Origin = "https://www.youtube.com";
+        headers["Sec-Fetch-Dest"] = "audio";
+        headers["Sec-Fetch-Mode"] = "cors";
+        headers["Sec-Fetch-Site"] = "cross-site";
+      }
+    } catch {
+      // Fallback to YouTube headers if URL parsing fails
+      headers.Referer = "https://www.youtube.com/";
+      headers.Origin = "https://www.youtube.com";
+      headers["Sec-Fetch-Dest"] = "audio";
+      headers["Sec-Fetch-Mode"] = "cors";
+      headers["Sec-Fetch-Site"] = "cross-site";
+    }
 
     if (range) headers.Range = range;
 
