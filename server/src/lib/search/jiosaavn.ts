@@ -29,14 +29,22 @@ interface JioSaavnArtist {
   description?: string;
   image?: JioSaavnImage[];
 }
+interface JioSaavnPlaylist {
+  id: string;
+  title: string;
+  description?: string;
+  url?: string;
+  image?: JioSaavnImage[];
+}
 interface JioSaavnResultSet {
-  results?: JioSaavnSong[] | JioSaavnAlbum[] | JioSaavnArtist[] | unknown[];
+  results?: JioSaavnSong[] | JioSaavnAlbum[] | JioSaavnArtist[] | JioSaavnPlaylist[] | unknown[];
 }
 interface JioSaavnSearchData {
   topQuery?: { results?: unknown[] };
   songs?: JioSaavnResultSet;
   albums?: JioSaavnResultSet;
   artists?: JioSaavnResultSet;
+  playlists?: JioSaavnResultSet;
 }
 interface JioSaavnSearchResponse {
   success: boolean;
@@ -49,6 +57,8 @@ export async function searchJioSaavn(query: string): Promise<SearchResponse> {
     const res = await fetchWithProxy(url, {
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
     });
+    if (!res.ok) return { items: [], nextpage: null };
+
     const json: unknown = await res.json();
     const data = json as JioSaavnSearchResponse;
 
@@ -58,14 +68,23 @@ export async function searchJioSaavn(query: string): Promise<SearchResponse> {
     const songs: JioSaavnSong[] = (data.data?.songs?.results as JioSaavnSong[]) ?? [];
     const albums: JioSaavnAlbum[] = (data.data?.albums?.results as JioSaavnAlbum[]) ?? [];
     const artists: JioSaavnArtist[] = (data.data?.artists?.results as JioSaavnArtist[]) ?? [];
+    const playlists: JioSaavnPlaylist[] =
+      (data.data?.playlists?.results as JioSaavnPlaylist[]) ?? [];
 
     const results: SearchResult[] = [];
 
     for (const item of topQuery) {
-      const obj = item as { id?: string; title?: string; description?: string; image?: JioSaavnImage[] };
-      const thumb = obj.image?.find((img) => img.quality === "500x500")?.url || obj.image?.[0]?.url;
+      const obj = item as {
+        id?: string;
+        title?: string;
+        description?: string;
+        image?: JioSaavnImage[];
+      };
+      const thumb =
+        obj.image?.find((img) => img.quality === "500x500")?.url ||
+        obj.image?.[0]?.url;
       results.push({
-        id: String(obj.id),
+        id: String(obj.id || ""),
         title: obj.title || "",
         author: obj.description || "",
         thumbnailUrl: thumb,
@@ -76,7 +95,9 @@ export async function searchJioSaavn(query: string): Promise<SearchResponse> {
     }
 
     for (const s of songs) {
-      const thumb = s.image?.find((img) => img.quality === "500x500")?.url || s.image?.[0]?.url;
+      const thumb =
+        s.image?.find((img) => img.quality === "500x500")?.url ||
+        s.image?.[0]?.url;
       results.push({
         id: String(s.id || s.url || ""),
         title: s.song || s.name || "",
@@ -93,9 +114,11 @@ export async function searchJioSaavn(query: string): Promise<SearchResponse> {
     }
 
     for (const alb of albums) {
-      const thumb = alb.image?.find((img) => img.quality === "500x500")?.url || alb.image?.[0]?.url;
+      const thumb =
+        alb.image?.find((img) => img.quality === "500x500")?.url ||
+        alb.image?.[0]?.url;
       results.push({
-        id: String(alb.id),
+        id: String(alb.id || ""),
         title: alb.title,
         author: alb.artist || "",
         thumbnailUrl: thumb,
@@ -107,15 +130,34 @@ export async function searchJioSaavn(query: string): Promise<SearchResponse> {
     }
 
     for (const art of artists) {
-      const thumb = art.image?.find((img) => img.quality === "500x500")?.url || art.image?.[0]?.url;
+      const thumb =
+        art.image?.find((img) => img.quality === "500x500")?.url ||
+        art.image?.[0]?.url;
       results.push({
-        id: String(art.id),
+        id: String(art.id || ""),
         title: art.title,
         author: art.description || "",
         thumbnailUrl: thumb,
         type: "artist",
         source: "jiosaavn",
         duration: "",
+      });
+    }
+
+    for (const playlist of playlists) {
+      const thumb =
+        playlist.image?.find((img) => img.quality === "500x500")?.url ||
+        playlist.image?.[0]?.url;
+      results.push({
+        id: String(playlist.id || playlist.url || ""),
+        title: playlist.title || "",
+        author: playlist.description || "",
+        thumbnailUrl: thumb,
+        type: "playlist",
+        source: "jiosaavn",
+        duration: "",
+        href: playlist.url,
+        url: playlist.url,
       });
     }
 

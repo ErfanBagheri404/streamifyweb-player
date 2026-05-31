@@ -27,6 +27,57 @@ function rgbToCss([r, g, b]: [number, number, number], alpha = 1): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function ChevronDownGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function ExpandGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M14.5 4.75h4.75V9.5"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="m19.25 4.75-6.5 6.5"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9.5 19.25H4.75V14.5"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="m4.75 19.25 6.5-6.5"
+      />
+    </svg>
+  );
+}
+
 function extractPaletteFromImage(image: HTMLImageElement): {
   primary: [number, number, number];
   secondary: [number, number, number];
@@ -287,7 +338,7 @@ export default function FullscreenPlayer() {
     : DEFAULT_PALETTE;
 
   return (
-    <div className="h-full overflow-hidden  bg-[#070707] shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+    <div className="h-full overflow-hidden rounded-xl">
       <div className="grid h-full w-full gap-2 bg-[#070707] lg:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)]">
         <section className="relative min-h-[320px] overflow-hidden rounded-xl bg-[#8a1207]">
           {currentSong.coverUrl ? (
@@ -310,12 +361,14 @@ export default function FullscreenPlayer() {
             <button
               type="button"
               onClick={closeFullscreen}
-              className="rounded-full bg-black/25 px-4 py-2 text-sm font-medium text-white backdrop-blur-md transition hover:bg-black/35"
+              className="inline-flex items-center gap-2 rounded-full bg-black/25 px-4 py-2 text-sm font-medium text-white backdrop-blur-md transition hover:bg-black/35"
             >
               Minimize
+              <ChevronDownGlyph />
             </button>
-            <div className="rounded-full bg-black/25 px-4 py-2 text-sm font-medium text-white backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 rounded-full bg-black/25 px-4 py-2 text-sm font-medium text-white backdrop-blur-md">
               Full Screen
+              <ExpandGlyph />
             </div>
           </div>
 
@@ -359,7 +412,6 @@ export default function FullscreenPlayer() {
                   {lyricsState.loading ? (
                     <div className="space-y-3 py-2">
                       <p className="text-white/45">Loading lyrics...</p>
-                      <p className="text-white/25">Synced Lyrics Loading...</p>
                     </div>
                   ) : lyricLines.length > 0 ? (
                     <>

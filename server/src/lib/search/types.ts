@@ -176,14 +176,27 @@ export interface JioSaavnArtist {
   description?: string;
   image?: JioSaavnImage[];
 }
+export interface JioSaavnPlaylist {
+  id: string;
+  title: string;
+  description?: string;
+  url?: string;
+  image?: JioSaavnImage[];
+}
 export interface JioSaavnResultSet {
-  results?: JioSaavnSong[] | JioSaavnAlbum[] | JioSaavnArtist[] | unknown[];
+  results?:
+    | JioSaavnSong[]
+    | JioSaavnAlbum[]
+    | JioSaavnArtist[]
+    | JioSaavnPlaylist[]
+    | unknown[];
 }
 export interface JioSaavnSearchData {
   topQuery?: { results?: unknown[] };
   songs?: JioSaavnResultSet;
   albums?: JioSaavnResultSet;
   artists?: JioSaavnResultSet;
+  playlists?: JioSaavnResultSet;
 }
 export interface JioSaavnSearchResponse {
   success: boolean;

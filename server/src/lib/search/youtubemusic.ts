@@ -16,10 +16,15 @@ function musicFilterMap(filter: string): string {
 export async function searchYouTubeMusic(
   query: string,
   filter: string,
-  page: number = 1,       // new parameter with default
-  limit: number = 20,      // new parameter with default
+  page: number = 1,
+  limit: number = 20,
   nextpage?: string
 ): Promise<SearchResponse> {
   const musicFilter = musicFilterMap(filter || "songs");
-  return searchYouTube(query, musicFilter, page, limit, nextpage);
+  const result = await searchYouTube(query, musicFilter, page, limit, nextpage);
+
+  return {
+    items: result.items.map((item) => ({ ...item, source: "youtubemusic" })),
+    nextpage: result.nextpage ?? null,
+  };
 }

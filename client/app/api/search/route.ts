@@ -16,9 +16,9 @@ const INVIDIOUS_INSTANCES = [
 
 type SearchResponse = { items: unknown[]; nextpage?: string | null };
 
-const DEBUG_ENV_PATH = ".dbg/youtube-search-500.env";
-const DEBUG_SERVER_URL_FALLBACK = "";
-const DEBUG_SESSION_ID_FALLBACK = "youtube-search-500";
+const DEBUG_ENV_PATH = ".dbg/soundcloud-collection-bug.env";
+const DEBUG_SERVER_URL_FALLBACK = "http://127.0.0.1:7777/event";
+const DEBUG_SESSION_ID_FALLBACK = "soundcloud-collection-bug";
 
 function getDebugConfig(): { url: string; sessionId: string } {
   let url = DEBUG_SERVER_URL_FALLBACK;
@@ -139,6 +139,15 @@ function absolutizeUrl(url: string, base: string): string {
   return url;
 }
 
+function upgradeSoundCloudImage(url: string): string {
+  if (!url) return "";
+
+  return url
+    .replace("-large.", "-t500x500.")
+    .replace("large.jpg", "t500x500.jpg")
+    .replace("large.png", "t500x500.png");
+}
+
 function rewriteInvidiousThumbs(item: unknown, instanceBase: string): unknown {
   const obj = item as Record<string, unknown>;
   const rewriteArray = (key: string) => {
@@ -200,7 +209,7 @@ async function searchPiped(
     const data = (await res.json()) as unknown;
     const parsed = data as { items?: unknown[]; nextpage?: string | null };
     const items = (parsed.items ?? []).map((item) => {
-      const entry = item as Record<string, any>;
+      const entry = item as Record<string, unknown>;
       // Prioritize videoId for the main 'id' field
       if (entry.videoId) {
         entry.id = entry.videoId;
@@ -345,7 +354,7 @@ async function searchInvidious(
       const items = data.map((item) => {
         const entry = rewriteInvidiousThumbs(item, instance) as Record<
           string,
-          any
+          unknown
         >;
         // Prioritize videoId for the main 'id' field
         if (entry.videoId) {
@@ -363,7 +372,7 @@ async function searchInvidious(
             if (videoId) {
               entry.id = videoId;
             }
-          } catch (e) {
+          } catch {
             /* ignore */
           }
         }
@@ -426,14 +435,108 @@ async function searchSoundCloud(
   const f = (filter || "").toLowerCase();
   const offset = (page - 1) * limit;
   try {
-    const proxyUrl =
-      f === "playlists" || f === "albums"
-        ? `https://proxy.searchsoundcloud.com/${
-            f === "playlists" ? "playlists" : "albums"
-          }?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`
-        : `https://proxy.searchsoundcloud.com/tracks?q=${encodeURIComponent(
-            query
-          )}&limit=${limit}&offset=${offset}`;
+    if (f === "playlists" || f === "albums") {
+      const beatseekUrl = `https://beatseek.io/api/search?query=${encodeURIComponent(
+        query
+      )}&platform=soundcloud&type=${encodeURIComponent(
+        f
+      )}&sort=both&limit=${limit}`;
+      // #region debug-point B:soundcloud-search-upstream-start
+      reportDebugEvent(
+        `pre-soundcloud-${Date.now()}`,
+        "B",
+        "app/api/search/route.ts:searchSoundCloud:upstream-start",
+        "[DEBUG] SoundCloud collection search hitting Beatseek",
+        {
+          query,
+          filter: f,
+          page,
+          limit,
+          beatseekUrl,
+        }
+      );
+      // #endregion
+      const res = await fetch(beatseekUrl, {
+        headers: { "User-Agent": USER_AGENT, accept: "application/json" },
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        // #region debug-point B:soundcloud-search-upstream-non-ok
+        reportDebugEvent(
+          `pre-soundcloud-${Date.now()}`,
+          "B",
+          "app/api/search/route.ts:searchSoundCloud:upstream-non-ok",
+          "[DEBUG] SoundCloud collection search upstream returned non-OK",
+          {
+            query,
+            filter: f,
+            status: res.status,
+            statusText: res.statusText,
+          }
+        );
+        // #endregion
+        return { items: [], nextpage: null };
+      }
+
+      const json = (await res.json()) as unknown;
+      const results = (json as { results?: unknown[] }).results ?? [];
+      // #region debug-point B:soundcloud-search-upstream-success
+      reportDebugEvent(
+        `pre-soundcloud-${Date.now()}`,
+        "B",
+        "app/api/search/route.ts:searchSoundCloud:upstream-success",
+        "[DEBUG] SoundCloud collection search upstream payload parsed",
+        {
+          query,
+          filter: f,
+          resultCount: Array.isArray(results) ? results.length : -1,
+          payloadKeys:
+            json && typeof json === "object" && !Array.isArray(json)
+              ? Object.keys(json as Record<string, unknown>)
+              : [],
+          firstUrl:
+            Array.isArray(results) && results[0]
+              ? String((results[0] as Record<string, unknown>).url ?? "")
+              : null,
+        }
+      );
+      // #endregion
+      const items = results.map((entry) => {
+        const record = entry as Record<string, unknown>;
+        const artwork = upgradeSoundCloudImage(
+          (record.artworkUrl as string) || ""
+        );
+
+        return {
+          ...record,
+          id: String(record.id || record.url || ""),
+          url: record.url || "",
+          href: record.url || "",
+          title: record.title || "",
+          author: record.artist || "",
+          thumbnailUrl: artwork,
+          img: artwork,
+          videoCount:
+            typeof record.trackCount === "number"
+              ? record.trackCount
+              : typeof record.trackCount === "string"
+              ? Number.parseInt(record.trackCount, 10)
+              : undefined,
+          duration: normalizeTrackDuration(record.duration),
+          uploaded:
+            typeof record.createdAt === "string" ? record.createdAt : undefined,
+          type: f === "albums" ? "album" : "playlist",
+          source: "soundcloud",
+        };
+      });
+
+      return { items, nextpage: null };
+    }
+
+    const proxyUrl = `https://proxy.searchsoundcloud.com/tracks?q=${encodeURIComponent(
+      query
+    )}&limit=${limit}&offset=${offset}`;
 
     const res = await fetch(proxyUrl, {
       headers: { "User-Agent": USER_AGENT, accept: "application/json" },
@@ -446,28 +549,26 @@ async function searchSoundCloud(
     const data = json as { collection?: unknown[]; results?: unknown[] };
     const collection = data.collection ?? data.results ?? [];
 
-    if (f === "playlists" || f === "albums") {
-      const items = collection.map((entry) => ({
-        ...(entry as Record<string, unknown>),
-        id:
-          (entry as Record<string, unknown>).permalink_url ||
-          (entry as Record<string, unknown>).url ||
-          "",
-        url:
-          (entry as Record<string, unknown>).permalink_url ||
-          (entry as Record<string, unknown>).url ||
-          "",
-        type: f === "playlists" ? "playlist" : "album",
-        source: "soundcloud",
-      }));
-      return { items, nextpage: null };
-    }
-
     const items = collection.map((entry) =>
       normalizeTrackItem(entry as Record<string, unknown>)
     );
     return { items, nextpage: null };
-  } catch {
+  } catch (error) {
+    // #region debug-point B:soundcloud-search-exception
+    reportDebugEvent(
+      `pre-soundcloud-${Date.now()}`,
+      "B",
+      "app/api/search/route.ts:searchSoundCloud:exception",
+      "[DEBUG] SoundCloud search threw exception",
+      {
+        query,
+        filter: f,
+        page,
+        limit,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
+    // #endregion
     return { items: [], nextpage: null };
   }
 }
@@ -490,6 +591,8 @@ async function searchJioSaavn(query: string): Promise<SearchResponse> {
     const songs = (data.data?.songs as { results?: unknown[] })?.results;
     const albums = (data.data?.albums as { results?: unknown[] })?.results;
     const artists = (data.data?.artists as { results?: unknown[] })?.results;
+    const playlists = (data.data?.playlists as { results?: unknown[] })
+      ?.results;
 
     const items: Array<Record<string, unknown>> = [];
     for (const entry of topQuery ?? []) {
@@ -531,6 +634,17 @@ async function searchJioSaavn(query: string): Promise<SearchResponse> {
         source: "jiosaavn",
       };
       // Ensure the entry has the correct 'id' field for the frontend
+      if (!item.id && typeof item.videoId === "string") {
+        item.id = item.videoId;
+      }
+      items.push(item);
+    }
+    for (const entry of playlists ?? []) {
+      const item: Record<string, unknown> = {
+        ...(entry as Record<string, unknown>),
+        source: "jiosaavn",
+        type: "playlist",
+      };
       if (!item.id && typeof item.videoId === "string") {
         item.id = item.videoId;
       }
@@ -587,10 +701,39 @@ export async function GET(request: NextRequest) {
 
   const origin = request.nextUrl.origin;
   const backendBaseUrl = getBackendBaseUrl(origin);
+  // #region debug-point A:search-route-proxy-config
+  reportDebugEvent(
+    runId,
+    "A",
+    "app/api/search/route.ts:GET:proxy-config",
+    "[DEBUG] search route proxy configuration",
+    {
+      origin,
+      backendBaseUrl,
+      sourceParam,
+      filterParam,
+    }
+  );
+  // #endregion
   if (backendBaseUrl) {
     try {
       const proxied = await tryProxyToBackend(backendBaseUrl, searchParams);
       if (proxied) {
+        // #region debug-point B:search-route-proxy-success
+        reportDebugEvent(
+          runId,
+          "B",
+          "app/api/search/route.ts:GET:proxy-success",
+          "[DEBUG] search route used backend proxy",
+          {
+            backendBaseUrl,
+            sourceParam,
+            filterParam,
+            itemCount: proxied.items.length,
+            nextpage: proxied.nextpage ?? null,
+          }
+        );
+        // #endregion
         return NextResponse.json(
           { items: proxied.items, nextpage: proxied.nextpage ?? null },
           { status: 200 }
@@ -650,6 +793,29 @@ export async function GET(request: NextRequest) {
         break;
       case "soundcloud":
         result = await searchSoundCloud(q, filterParam, pageNum, limitNum);
+        // #region debug-point B:search-route-soundcloud-result
+        reportDebugEvent(
+          runId,
+          "B",
+          "app/api/search/route.ts:GET:soundcloud-result",
+          "[DEBUG] search route used built-in SoundCloud provider",
+          {
+            sourceParam,
+            filterParam,
+            pageNum,
+            limitNum,
+            itemCount: result.items.length,
+            sampleId:
+              Array.isArray(result.items) && result.items[0]
+                ? String(
+                    (result.items[0] as Record<string, unknown>).id ??
+                      (result.items[0] as Record<string, unknown>).url ??
+                      ""
+                  )
+                : null,
+          }
+        );
+        // #endregion
         break;
       case "jiosaavn":
         result = await searchJioSaavn(q);

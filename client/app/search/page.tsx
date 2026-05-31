@@ -152,6 +152,19 @@ function formatUploadedLabel(value?: string | number): string | undefined {
   return cleaned || raw;
 }
 
+function extractYouTubePlaylistId(value?: string): string {
+  if (!value) return "";
+
+  const listMatch = value.match(/[?&]list=([^&]+)/);
+  if (listMatch?.[1]) return listMatch[1];
+
+  if (/^[A-Za-z0-9_-]{10,}$/.test(value) && !value.includes("/")) {
+    return value;
+  }
+
+  return "";
+}
+
 function getBestThumbnail(raw: RawPipedItem, source: string): string {
   if (Array.isArray(raw.authorThumbnails) && raw.authorThumbnails.length > 0) {
     return [...raw.authorThumbnails].sort(
@@ -327,8 +340,21 @@ function SearchPageInner() {
   const mapToSearchResult = (raw: RawPipedItem): SearchResult => {
     const source = raw.source || selectedSourceRef.current || "youtube";
     const rawUrl = raw.url || "";
+    const playlistIdFromUrl = extractYouTubePlaylistId(rawUrl);
+    const rawDisplayTitle =
+      typeof raw.title === "string" && raw.title.trim()
+        ? raw.title
+        : typeof raw.name === "string"
+          ? raw.name
+          : "";
     let id =
-      raw.videoId || raw.playlistId || raw.authorId || raw.id || rawUrl || "";
+      raw.videoId ||
+      raw.playlistId ||
+      playlistIdFromUrl ||
+      raw.authorId ||
+      raw.id ||
+      rawUrl ||
+      "";
 
     if (!id && rawUrl) {
       const videoMatch = rawUrl.match(/[?&]v=([^&]+)/);
@@ -351,9 +377,9 @@ function SearchPageInner() {
 
     // For channels/artists, the "title" from Piped is often empty, use "author" as the name
     const displayTitle =
-      mappedType === "artist" && !raw.title
+      mappedType === "artist" && !rawDisplayTitle
         ? raw.author || raw.uploaderName || ""
-        : raw.title || "";
+        : rawDisplayTitle;
 
     // #region debug-point H5:search-map-item
     reportDebugEvent(
@@ -646,12 +672,19 @@ function SearchPageInner() {
           }
 
           const data = await response.json();
-          // Piped returns: ["query", "suggestion1", "suggestion2", ...]
-          if (Array.isArray(data) && data.length > 1) {
-            setSuggestions(data.slice(1, 8)); // Take up to 7 suggestions
-          } else {
-            setSuggestions([]);
-          }
+          const suggestionCandidates = Array.isArray(data)
+            ? Array.isArray(data[1])
+              ? data[1]
+              : data.slice(1)
+            : [];
+
+          const normalizedSuggestions = suggestionCandidates
+            .flatMap((value) => (Array.isArray(value) ? value : [value]))
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => value.trim())
+            .filter(Boolean);
+
+          setSuggestions([...new Set(normalizedSuggestions)].slice(0, 8));
         } catch (error) {
           if ((error as Error).name !== "AbortError") {
             console.error("Error fetching suggestions:", error);
@@ -931,7 +964,19 @@ function SearchPageInner() {
         placeholder={`Search ${
           sourceFilters.find((s) => s.id === selectedSource)?.label
         }...`}
-      />
+      >
+        <SuggestionsDropdown
+          suggestions={suggestions}
+          onSelect={(item) => {
+            setSearchQuery(item);
+            searchQueryRef.current = item;
+            handleSearch(item);
+          }}
+          onClose={() => setSuggestions([])}
+          isLoading={isLoadingSuggestions}
+        />
+      </SearchInput>
+
       <FilterBar
         showFilters={showFilters}
         sourceFilters={sourceFilters}
@@ -940,17 +985,6 @@ function SearchPageInner() {
         filterOptions={currentFilterOptions}
         selectedFilter={selectedFilter}
         onFilterSelect={handleFilterSelect}
-      />
-
-      <SuggestionsDropdown
-        suggestions={suggestions}
-        onSelect={(item) => {
-          setSearchQuery(item);
-          searchQueryRef.current = item;
-          handleSearch(item);
-        }}
-        onClose={() => setSuggestions([])}
-        isLoading={isLoadingSuggestions}
       />
 
       <div

@@ -3,7 +3,7 @@
 
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAudio } from "../contexts/AudioContext";
 import { LibraryIcon, LogoIcon, SearchIcon } from "./icons/NavIcons";
 
@@ -26,6 +26,23 @@ export default function LeftPanel() {
     }
   });
   const navIconStrokeWidth = 0.45;
+
+  useEffect(() => {
+    router.prefetch("/");
+    router.prefetch("/library");
+
+    if (lastSearch?.query) {
+      const params = new URLSearchParams();
+      params.set("q", lastSearch.query);
+      if (lastSearch.source !== "youtube")
+        params.set("source", lastSearch.source);
+      if (lastSearch.filter !== "all") params.set("filter", lastSearch.filter);
+      router.prefetch(`/search?${params.toString()}`);
+      return;
+    }
+
+    router.prefetch("/search");
+  }, [lastSearch, router]);
 
   const openSearch = () => {
     if (lastSearch?.query) {
