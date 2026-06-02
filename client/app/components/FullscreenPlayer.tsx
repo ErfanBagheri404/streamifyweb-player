@@ -14,6 +14,8 @@ const DEFAULT_PALETTE = {
   primary: [138, 18, 7] as [number, number, number],
   secondary: [52, 16, 14] as [number, number, number],
 };
+const LYRICS_MANUAL_SCROLL_HOLD_MS = 1500;
+const LYRICS_USER_SCROLL_INTENT_MS = 1200;
 
 function formatTime(time: number): string {
   const minutes = Math.floor(time / 60);
@@ -150,11 +152,14 @@ export default function FullscreenPlayer() {
   const {
     currentSong,
     recentSongs,
+    playbackQueue,
+    queueIndex,
     currentTime,
     duration,
     seekTo,
     closeFullscreen,
-    playSong,
+    playQueueIndex,
+    resolveAndPlaySong,
   } = useAudio();
   const [relatedPalette, setRelatedPalette] = useState(DEFAULT_PALETTE);
   const [lyricsText, setLyricsText] = useState("");
@@ -167,12 +172,38 @@ export default function FullscreenPlayer() {
     error: null,
     isSynced: false,
   });
+  const [manualLyricsArtist, setManualLyricsArtist] = useState("");
+  const [manualLyricsTitle, setManualLyricsTitle] = useState("");
+  const [lyricsManualModeUntil, setLyricsManualModeUntil] = useState(0);
   const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
   const lyricItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const isProgrammaticLyricsScrollRef = useRef(false);
+  const lyricsScrollReleaseTimerRef = useRef<number | null>(null);
+  const lyricsUserScrollIntentUntilRef = useRef(0);
 
-  const relatedSongs = useMemo(() => {
+  const upNextSongs = useMemo(() => {
+    if (!currentSong || queueIndex < 0) return [];
+    const deduped: (typeof playbackQueue)[number][] = [];
+    const seen = new Set<string>();
+    for (const song of playbackQueue.slice(queueIndex + 1, queueIndex + 5)) {
+      if (!song || seen.has(song.id)) continue;
+      seen.add(song.id);
+      deduped.push(song);
+    }
+    return deduped;
+  }, [currentSong, playbackQueue, queueIndex]);
+
+  const fallbackRelatedSongs = useMemo(() => {
     if (!currentSong) return [];
-    return recentSongs.filter((song) => song.id !== currentSong.id).slice(0, 4);
+    const deduped: typeof recentSongs = [];
+    const seen = new Set<string>([currentSong.id]);
+    for (const song of recentSongs) {
+      if (!song || seen.has(song.id)) continue;
+      seen.add(song.id);
+      deduped.push(song);
+      if (deduped.length >= 4) break;
+    }
+    return deduped;
   }, [currentSong, recentSongs]);
 
   useEffect(() => {
@@ -288,21 +319,67 @@ export default function FullscreenPlayer() {
     currentSong?.duration,
   ]);
 
+  useEffect(() => {
+    if (!currentSong) {
+      setManualLyricsArtist("");
+      setManualLyricsTitle("");
+      return;
+    }
+
+    setManualLyricsArtist(currentSong.artist || "");
+    setManualLyricsTitle(currentSong.title || "");
+  }, [currentSong]);
+
   const lyricLines = useMemo<TimedLyricLine[]>(
     () => (lyricsState.isSynced ? buildTimedLyrics(lyricsText) : []),
     [lyricsText, lyricsState.isSynced]
   );
 
   const plainLyricsText = useMemo(() => lyricsText.trim(), [lyricsText]);
+  const sectionSongs =
+    upNextSongs.length > 0 ? upNextSongs : fallbackRelatedSongs;
+  const sectionTitle = upNextSongs.length > 0 ? "Up Next" : "Related";
 
   const activeLyricIndex = useMemo(
     () => findActiveLyricIndex(lyricLines, currentTime),
     [lyricLines, currentTime]
   );
+  const isLyricsManualMode = lyricsManualModeUntil > Date.now();
+
+  useEffect(() => {
+    if (!lyricsManualModeUntil) return;
+
+    const remainingMs = lyricsManualModeUntil - Date.now();
+    if (remainingMs <= 0) {
+      setLyricsManualModeUntil(0);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setLyricsManualModeUntil(0);
+    }, remainingMs);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [lyricsManualModeUntil]);
+
+  useEffect(() => {
+    setLyricsManualModeUntil(0);
+  }, [currentSong?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (lyricsScrollReleaseTimerRef.current !== null) {
+        window.clearTimeout(lyricsScrollReleaseTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!lyricsState.isSynced) return;
     if (activeLyricIndex < 0) return;
+    if (isLyricsManualMode) return;
 
     const container = lyricsContainerRef.current;
     const activeElement = lyricItemRefs.current[activeLyricIndex];
@@ -316,11 +393,29 @@ export default function FullscreenPlayer() {
       container.clientHeight / 2 +
       activeElement.clientHeight / 2;
 
+    isProgrammaticLyricsScrollRef.current = true;
+    if (lyricsScrollReleaseTimerRef.current !== null) {
+      window.clearTimeout(lyricsScrollReleaseTimerRef.current);
+    }
     container.scrollTo({
       top: Math.max(0, targetScrollTop),
       behavior: "smooth",
     });
-  }, [activeLyricIndex, lyricsState.isSynced]);
+    lyricsScrollReleaseTimerRef.current = window.setTimeout(() => {
+      isProgrammaticLyricsScrollRef.current = false;
+    }, 500);
+  }, [activeLyricIndex, isLyricsManualMode, lyricsState.isSynced]);
+
+  const markLyricsUserScrollIntent = () => {
+    lyricsUserScrollIntentUntilRef.current =
+      Date.now() + LYRICS_USER_SCROLL_INTENT_MS;
+  };
+
+  const handleLyricsContainerScroll = () => {
+    if (isProgrammaticLyricsScrollRef.current) return;
+    if (lyricsUserScrollIntentUntilRef.current < Date.now()) return;
+    setLyricsManualModeUntil(Date.now() + LYRICS_MANUAL_SCROLL_HOLD_MS);
+  };
 
   if (!currentSong) {
     return null;
@@ -336,6 +431,70 @@ export default function FullscreenPlayer() {
   const displayPalette = currentSong.coverUrl
     ? relatedPalette
     : DEFAULT_PALETTE;
+
+  const runManualLyricsSearch = async () => {
+    if (!currentSong) return;
+
+    const nextArtist = manualLyricsArtist.trim() || currentSong.artist || "";
+    const nextTitle = manualLyricsTitle.trim() || currentSong.title || "";
+
+    setLyricsState({
+      loading: true,
+      error: null,
+      isSynced: false,
+    });
+
+    try {
+      const payload = await fetchLyrics({
+        id: currentSong.id,
+        title: nextTitle,
+        artist: nextArtist,
+        duration: currentSong.duration,
+      });
+
+      if (!payload?.lyrics) {
+        setLyricsText("");
+        setLyricsState({
+          loading: false,
+          error: "No lyrics found. Try another artist or song title.",
+          isSynced: false,
+        });
+        return;
+      }
+
+      setLyricsText(payload.lyrics);
+      setLyricsState({
+        loading: false,
+        error: null,
+        isSynced: Boolean(payload.isSynced),
+      });
+    } catch {
+      setLyricsText("");
+      setLyricsState({
+        loading: false,
+        error: "Couldn't load lyrics for that search. Try another spelling.",
+        isSynced: false,
+      });
+    }
+  };
+
+  const handleSectionSongPress = (
+    song: (typeof sectionSongs)[number],
+    index: number
+  ) => {
+    if (upNextSongs.length > 0) {
+      playQueueIndex(queueIndex + index + 1);
+      return;
+    }
+
+    const relatedQueue = [currentSong, ...fallbackRelatedSongs];
+    void resolveAndPlaySong(song, {
+      queue: relatedQueue,
+      currentIndex: index + 1,
+    }).catch((error) => {
+      console.error("Failed to play related song:", error);
+    });
+  };
 
   return (
     <div className="h-full overflow-hidden rounded-xl">
@@ -406,6 +565,9 @@ export default function FullscreenPlayer() {
               </div>
               <div
                 ref={lyricsContainerRef}
+                onWheel={markLyricsUserScrollIntent}
+                onTouchStart={markLyricsUserScrollIntent}
+                onScroll={handleLyricsContainerScroll}
                 className="mt-5 flex-1 overflow-y-auto hide-scrollbar pr-1 text-white/90"
               >
                 <div className="space-y-2 text-lg leading-9 md:text-[22px] md:leading-[1.5]">
@@ -425,10 +587,15 @@ export default function FullscreenPlayer() {
                               lyricItemRefs.current[index] = element;
                             }}
                             type="button"
-                            onClick={() => seekTo(line.startTime)}
+                            onClick={() => {
+                              setLyricsManualModeUntil(0);
+                              seekTo(line.startTime);
+                            }}
                             className={`block w-full rounded-xl px-2 py-1 text-left transition ${
                               isActive
                                 ? "bg-white/8 font-semibold text-white"
+                                : isLyricsManualMode
+                                ? "text-white hover:bg-white/5"
                                 : isPassed
                                 ? "text-white/45"
                                 : "text-white/72 hover:bg-white/5 hover:text-white"
@@ -445,7 +612,7 @@ export default function FullscreenPlayer() {
                       <p className="pb-3 text-sm text-white/40">
                         Synced lyrics were not available for this track.
                       </p>
-                      <pre className="whitespace-pre-wrap font-sans text-lg leading-9 text-white/72 md:text-[22px] md:leading-[1.5]">
+                      <pre className="whitespace-pre-wrap font-sans text-lg leading-9 text-white md:text-[22px] md:leading-[1.5]">
                         {plainLyricsText}
                       </pre>
                     </>
@@ -455,6 +622,45 @@ export default function FullscreenPlayer() {
                         {lyricsState.error ||
                           "Lyrics are not available for this track yet."}
                       </p>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <p className="text-sm text-white/70">
+                          Search manually for lyrics
+                        </p>
+                        <div className="mt-3 grid gap-3">
+                          <input
+                            type="text"
+                            value={manualLyricsArtist}
+                            onChange={(event) =>
+                              setManualLyricsArtist(event.target.value)
+                            }
+                            placeholder="Artist name"
+                            className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-white/25"
+                          />
+                          <input
+                            type="text"
+                            value={manualLyricsTitle}
+                            onChange={(event) =>
+                              setManualLyricsTitle(event.target.value)
+                            }
+                            placeholder="Song title"
+                            className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-white/25"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void runManualLyricsSearch();
+                            }}
+                            disabled={
+                              lyricsState.loading ||
+                              (!manualLyricsArtist.trim() &&
+                                !manualLyricsTitle.trim())
+                            }
+                            className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+                          >
+                            Try Lyrics Search
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -463,7 +669,7 @@ export default function FullscreenPlayer() {
           </section>
 
           <section
-            className="rounded-xl px-3 py-3 md:px-4 md:py-4"
+            className="flex max-h-[230px] min-h-0 flex-col overflow-hidden rounded-xl px-3 py-3 md:max-h-[250px] md:px-4 md:py-4"
             style={{
               backgroundImage: `linear-gradient(180deg, ${rgbToCss(
                 displayPalette.primary,
@@ -476,34 +682,28 @@ export default function FullscreenPlayer() {
           >
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-white/55">Related Music Videos</p>
+                <p className="text-sm text-white/55">{sectionTitle}</p>
               </div>
-              <button
-                type="button"
-                className="text-sm text-white/60 transition hover:text-white"
-              >
-                See All
-              </button>
             </div>
 
-            {relatedSongs.length > 0 ? (
-              <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-                {relatedSongs.map((song) => (
+            {sectionSongs.length > 0 ? (
+              <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto hide-scrollbar pr-1">
+                {sectionSongs.map((song, index) => (
                   <button
-                    key={song.id}
+                    key={`${sectionTitle}-${song.id}-${index}`}
                     type="button"
-                    onClick={() => playSong(song)}
-                    className="text-left transition"
+                    onClick={() => handleSectionSongPress(song, index)}
+                    className="flex w-full items-center gap-2.5 rounded-xl bg-black/10 px-2.5 py-1.5 text-left transition hover:bg-black/20"
                     title={song.title}
                   >
-                    <div className="relative rounded-md aspect-[1]">
+                    <div className="relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-md">
                       {song.coverUrl ? (
                         <Image
                           src={song.coverUrl}
                           alt={song.title}
                           fill
-                          className="object-cover rounded-lg"
-                          sizes="(max-width: 1024px) 40vw, 18vw"
+                          className="rounded-md object-cover"
+                          sizes="44px"
                           unoptimized
                         />
                       ) : (
@@ -511,27 +711,32 @@ export default function FullscreenPlayer() {
                           <Image
                             src="/StreamifyLogo.svg"
                             alt="Default cover"
-                            width={36}
-                            height={36}
+                            width={24}
+                            height={24}
                             className="opacity-45"
                           />
                         </div>
                       )}
                     </div>
-                    <div className="text-center px-3 pb-3 pt-2">
-                      <p className="truncate text-sm font-medium text-white">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium leading-5 text-white">
                         {song.title}
                       </p>
-                      <p className="mt-1 truncate text-xs text-white/60">
+                      <p className="truncate text-[11px] text-white/60">
                         {song.artist}
                       </p>
                     </div>
+                    {upNextSongs.length > 0 ? (
+                      <span className="text-xs text-white/45">
+                        {queueIndex + index + 2}
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>
             ) : (
               <div className="mt-4 rounded-2xl bg-white/5 px-4 py-6 text-sm text-white/55">
-                Play a few songs and related videos will show up here.
+                Play a few more songs and related tracks will show up here.
               </div>
             )}
           </section>

@@ -11,9 +11,6 @@ const INVIDIOUS_INSTANCES = [
   "https://inv.nadeko.net",
   "https://invidious.tiekoetter.com",
 ];
-const SOUNDCLOUD_WIDGET_BASE = "https://api-widget.soundcloud.com";
-const SOUNDCLOUD_WIDGET_CLIENT_ID = "gqKBMSuBw5rbN9rDRYPqKNvF17ovlObu";
-const SOUNDCLOUD_WIDGET_APP_VERSION = "1779361243";
 const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
 
 const USER_AGENT =
@@ -163,23 +160,55 @@ async function fetchTextWithHeaders(
   headers: Record<string, string>,
   timeoutMs: number
 ): Promise<string> {
-  const res = await fetch(url, {
-    headers,
-    cache: "no-store",
-    signal: withTimeout(undefined, timeoutMs),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(
-      `HTTP ${res.status}${text ? `: ${text.slice(0, 160)}` : ""}`
-    );
+  try {
+    const res = await fetch(url, {
+      headers,
+      cache: "no-store",
+      signal: withTimeout(undefined, timeoutMs),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(
+        `HTTP ${res.status}${text ? `: ${text.slice(0, 160)}` : ""}`
+      );
+    }
+    return text;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const shouldTryPowerShell =
+      process.platform === "win32" &&
+      (/fetch failed|ECONNRESET|aborted|UND_ERR_CONNECT_TIMEOUT/i.test(
+        message
+      ) ||
+        message.includes("This operation was aborted"));
+
+    if (!shouldTryPowerShell) {
+      throw error;
+    }
+
+    return fetchTextViaPowerShell(url, headers, timeoutMs);
   }
-  return text;
 }
 
 function buildDirectProxyAudioUrl(streamUrl: string | null): string | null {
   if (!streamUrl) return null;
   return `/api/audio-proxy?url=${encodeURIComponent(streamUrl)}`;
+}
+
+function buildSoundCloudWidevineLicenseUrl(licenseAuthToken: string): string {
+  const u = new URL(
+    "https://license.media-streaming.soundcloud.cloud/playback/widevine"
+  );
+  u.searchParams.set("license_token", licenseAuthToken);
+  return u.toString();
+}
+
+function isSoundCloudEncryptedStreamUrl(streamUrl: string): boolean {
+  try {
+    return /\/(cbcs|cenc)\//i.test(new URL(streamUrl).pathname);
+  } catch {
+    return false;
+  }
 }
 
 function pickArrayString(entry: unknown, keys: string[]): string | undefined {
@@ -627,23 +656,6 @@ async function fetchSoundCloudJson(url: string): Promise<unknown> {
   }
 }
 
-async function fetchSoundCloudWidgetJson(
-  url: string,
-  extraParams?: Record<string, string>
-): Promise<unknown> {
-  const requestUrl = new URL(url);
-  requestUrl.searchParams.set("client_id", SOUNDCLOUD_WIDGET_CLIENT_ID);
-  requestUrl.searchParams.set("app_version", SOUNDCLOUD_WIDGET_APP_VERSION);
-
-  if (extraParams) {
-    for (const [key, value] of Object.entries(extraParams)) {
-      if (value) requestUrl.searchParams.set(key, value);
-    }
-  }
-
-  return fetchJson(requestUrl.toString(), undefined, 12000);
-}
-
 function normalizeSoundCloudUrlHint(urlHint?: string): string | undefined {
   if (!urlHint) return undefined;
 
@@ -671,7 +683,81 @@ function extractSoundCloudTrackId(value?: string): string | undefined {
   const apiTrackMatch = value.match(/api\.soundcloud\.com\/tracks\/(\d+)/i);
   if (apiTrackMatch?.[1]) return apiTrackMatch[1];
 
+  const apiV2TrackMatch = value.match(
+    /api-v2\.soundcloud\.com\/tracks\/(\d+)/i
+  );
+  if (apiV2TrackMatch?.[1]) return apiV2TrackMatch[1];
+
   return undefined;
+}
+
+function soundCloudTranscodingScore(entry: Record<string, any>): number {
+  const format = toRecord(entry.format);
+  const protocol = String(format.protocol || "").toLowerCase();
+  const mimeType = String(format.mime_type || "").toLowerCase();
+  let score = 0;
+
+  if (protocol === "progressive") score += 100;
+  if (protocol === "ctr-encrypted-hls") score += 90;
+  if (protocol === "cbc-encrypted-hls") score += 80;
+  if (protocol.includes("encrypted")) score += 20;
+  if (protocol === "hls") score += 10;
+  if (!entry.is_legacy_transcoding) score += 5;
+  if (mimeType.includes("audio/mp4")) score += 2;
+  if (String(entry.quality || "").toLowerCase() === "sq") score += 1;
+
+  return score;
+}
+
+async function fetchSoundCloudStreamPayload(
+  transcodings: Record<string, any>[],
+  trackAuthorization: string | null
+): Promise<{
+  streamPayload: Record<string, any>;
+  transcoding: Record<string, any>;
+}> {
+  const candidates = [...transcodings].sort(
+    (a, b) => soundCloudTranscodingScore(b) - soundCloudTranscodingScore(a)
+  );
+  const errors: string[] = [];
+
+  for (const candidate of candidates) {
+    const transcodingUrl =
+      typeof candidate.url === "string" ? candidate.url : undefined;
+    if (!transcodingUrl) continue;
+
+    try {
+      const requestUrl = new URL(transcodingUrl);
+      if (trackAuthorization) {
+        requestUrl.searchParams.set("track_authorization", trackAuthorization);
+      }
+
+      const streamPayload = toRecord(
+        await fetchSoundCloudJson(requestUrl.toString())
+      );
+      if (typeof streamPayload.url === "string" && streamPayload.url) {
+        return { streamPayload, transcoding: candidate };
+      }
+
+      errors.push(
+        `${
+          toRecord(candidate.format).protocol || "unknown"
+        }: missing stream url`
+      );
+    } catch (error) {
+      errors.push(
+        `${toRecord(candidate.format).protocol || "unknown"}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  throw new Error(
+    `SoundCloud stream URL lookup failed${
+      errors.length ? ` (${errors.join(" | ")})` : ""
+    }`
+  );
 }
 
 async function fetchSoundCloudDetails(
@@ -680,9 +766,10 @@ async function fetchSoundCloudDetails(
 ): Promise<Record<string, unknown>> {
   const normalizedUrlHint = normalizeSoundCloudUrlHint(urlHint);
   const hintedTrackId = extractSoundCloudTrackId(normalizedUrlHint);
-  const resolveTarget = hintedTrackId
-    ? `https://api.soundcloud.com/tracks/${hintedTrackId}`
-    : normalizedUrlHint || `https://api.soundcloud.com/tracks/${id}`;
+  const resolvedTrackId = hintedTrackId || id;
+  const resolveTarget =
+    normalizedUrlHint ||
+    `https://api-v2.soundcloud.com/tracks/${resolvedTrackId}`;
 
   // #region debug-point A:soundcloud-resolve-start
   reportDebugEvent(
@@ -699,11 +786,17 @@ async function fetchSoundCloudDetails(
   );
   // #endregion
 
-  const payload = await fetchSoundCloudWidgetJson(
-    `${SOUNDCLOUD_WIDGET_BASE}/resolve?url=${encodeURIComponent(
-      resolveTarget
-    )}&format=json`
-  );
+  const payload = normalizedUrlHint
+    ? await fetchSoundCloudJson(
+        `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(
+          resolveTarget
+        )}`
+      )
+    : await fetchSoundCloudJson(
+        `https://api-v2.soundcloud.com/tracks/${encodeURIComponent(
+          resolvedTrackId
+        )}`
+      );
 
   const track = toRecord(payload);
   if (!track.id) {
@@ -730,17 +823,23 @@ async function fetchSoundCloudDetails(
   const transcodings = toArray(toRecord(track.media).transcodings).map(
     (entry) => toRecord(entry)
   );
-  const bestTranscoding =
-    transcodings.find(
-      (entry) => toRecord(entry.format).protocol === "progressive"
-    ) ||
-    transcodings.find((entry) => toRecord(entry.format).protocol === "hls") ||
-    transcodings[0];
-
-  const transcodingUrl =
-    typeof bestTranscoding?.url === "string" ? bestTranscoding.url : null;
-  if (!transcodingUrl) {
+  if (!transcodings.length) {
     throw new Error("SoundCloud track did not expose a playable transcoding");
+  }
+
+  const trackAuthorization =
+    typeof track.track_authorization === "string"
+      ? track.track_authorization
+      : null;
+
+  const { streamPayload, transcoding: bestTranscoding } =
+    await fetchSoundCloudStreamPayload(transcodings, trackAuthorization);
+  const transcodingUrl =
+    typeof bestTranscoding.url === "string" ? bestTranscoding.url : null;
+  const streamUrl =
+    typeof streamPayload.url === "string" ? streamPayload.url : null;
+  if (!streamUrl) {
+    throw new Error("SoundCloud stream URL lookup failed");
   }
 
   // #region debug-point C:soundcloud-transcoding-picked
@@ -765,24 +864,6 @@ async function fetchSoundCloudDetails(
   );
   // #endregion
 
-  const trackAuthorization =
-    typeof track.track_authorization === "string"
-      ? track.track_authorization
-      : null;
-
-  const streamPayload = toRecord(
-    await fetchSoundCloudWidgetJson(transcodingUrl, {
-      ...(trackAuthorization
-        ? { track_authorization: trackAuthorization }
-        : {}),
-    })
-  );
-  const streamUrl =
-    typeof streamPayload.url === "string" ? streamPayload.url : null;
-  if (!streamUrl) {
-    throw new Error("SoundCloud stream URL lookup failed");
-  }
-
   // #region debug-point D:soundcloud-stream-resolved
   reportDebugEvent(
     `pre-${Date.now()}`,
@@ -799,9 +880,61 @@ async function fetchSoundCloudDetails(
           return null;
         }
       })(),
+      streamPath: (() => {
+        try {
+          return new URL(streamUrl).pathname;
+        } catch {
+          return null;
+        }
+      })(),
+      isCbcsOrCenc: isSoundCloudEncryptedStreamUrl(streamUrl),
+      hasLicenseAuthToken: Boolean(streamPayload.licenseAuthToken),
+      payloadKeys:
+        streamPayload && typeof streamPayload === "object"
+          ? Object.keys(streamPayload).slice(0, 12)
+          : [],
     }
   );
   // #endregion
+
+  const isEncrypted = isSoundCloudEncryptedStreamUrl(streamUrl);
+  const licenseAuthToken =
+    typeof streamPayload.licenseAuthToken === "string"
+      ? streamPayload.licenseAuthToken
+      : null;
+  const widgetTrackUrl =
+    typeof track.permalink_url === "string" && track.permalink_url.trim()
+      ? track.permalink_url
+      : normalizedUrlHint ||
+        `https://api.soundcloud.com/tracks/${encodeURIComponent(
+          String(track.id)
+        )}`;
+
+  if (isEncrypted) {
+    if (!licenseAuthToken) {
+      throw new Error(
+        "SoundCloud encrypted stream did not include a licenseAuthToken"
+      );
+    }
+    return {
+      id: track.id,
+      title: track.title,
+      author: toRecord(track.user).username,
+      lengthSeconds: Math.floor((toNumber(track.duration) ?? 0) / 1000),
+      thumbnailUrl: track.artwork_url || toRecord(track.user).avatar_url,
+      url: widgetTrackUrl,
+      audioType: "soundcloud-drm",
+      audioUrl: streamUrl,
+      drmLicenseUrl: buildSoundCloudWidevineLicenseUrl(licenseAuthToken),
+      drmScheme: "com.widevine.alpha",
+      drmProvider: "soundcloud",
+      source: "soundcloud",
+      drmHeaders: {
+        "Content-Type": "application/octet-stream",
+      },
+      playbackStrategy: "widget",
+    };
+  }
 
   return {
     id: track.id,
@@ -809,7 +942,10 @@ async function fetchSoundCloudDetails(
     author: toRecord(track.user).username,
     lengthSeconds: Math.floor((toNumber(track.duration) ?? 0) / 1000),
     thumbnailUrl: track.artwork_url || toRecord(track.user).avatar_url,
+    url: widgetTrackUrl,
+    source: "soundcloud",
     audioUrl: buildDirectProxyAudioUrl(streamUrl),
+    playbackStrategy: "widget",
   };
 }
 
@@ -843,6 +979,42 @@ async function fetchJsonViaPowerShell(
     stdout,
     "Invalid JSON response from PowerShell fallback"
   );
+}
+
+async function fetchTextViaPowerShell(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number
+): Promise<string> {
+  const escapedUrl = url.replace(/'/g, "''");
+  const headerEntries = Object.entries(headers).map(
+    ([key, value]) =>
+      `'${key.replace(/'/g, "''")}' = '${value.replace(/'/g, "''")}'`
+  );
+  const headerScript = headerEntries.length
+    ? `@{ ${headerEntries.join("; ")} }`
+    : "@{}";
+  const script = [
+    "$ProgressPreference = 'SilentlyContinue'",
+    "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
+    `$headers = ${headerScript}`,
+    `$response = Invoke-WebRequest -UseBasicParsing -Uri '${escapedUrl}' -Headers $headers -TimeoutSec ${Math.max(
+      1,
+      Math.ceil(timeoutMs / 1000)
+    )}`,
+    "$response.Content",
+  ].join("; ");
+
+  const { stdout } = await execFileAsync(
+    "powershell",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    {
+      timeout: timeoutMs + 3000,
+      maxBuffer: 1024 * 1024 * 5,
+    }
+  );
+
+  return stdout;
 }
 
 async function fetchJson(

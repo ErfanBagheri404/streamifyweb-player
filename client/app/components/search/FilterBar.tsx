@@ -1,4 +1,5 @@
 import React from "react";
+import { HorizontalScrollRow } from "../HorizontalScrollRow";
 import { SourceType, SourceFilter, FilterOption } from "./types";
 
 interface FilterBarProps {
@@ -29,50 +30,50 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       }`}
     >
       {/* Source filters */}
-      <div className="overflow-x-auto whitespace-nowrap pb-2 hide-scrollbar">
-        <div className="flex gap-2">
-          {sourceFilters.map((source) => (
-            <button
-              key={source.id}
-              onClick={() => source.id !== "spotify" && onSourceSelect(source.id)}
-              disabled={source.id === "spotify"}
-              className={`px-5 h-9 rounded-full font-bold text-sm uppercase transition-colors ${
-                selectedSource === source.id
-                  ? "text-black"
-                  : "bg-neutral-800 text-neutral-400"
-              } ${
-                source.id === "spotify" ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-              style={{
-                backgroundColor:
-                  selectedSource === source.id ? source.color : undefined,
-              }}
-            >
-              {source.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <HorizontalScrollRow
+        containerClassName="whitespace-nowrap pb-2 pr-12"
+        contentClassName="flex w-max gap-2"
+      >
+        {sourceFilters.map((source) => (
+          <button
+            key={source.id}
+            onClick={() => source.id !== "spotify" && onSourceSelect(source.id)}
+            disabled={source.id === "spotify"}
+            className={`px-5 h-9 rounded-full font-bold text-sm uppercase transition-colors ${
+              selectedSource === source.id
+                ? "text-black"
+                : "bg-neutral-800 text-neutral-400"
+            } ${source.id === "spotify" ? "opacity-50 cursor-not-allowed" : ""}`}
+            style={{
+              backgroundColor:
+                selectedSource === source.id ? source.color : undefined,
+            }}
+          >
+            {source.label}
+          </button>
+        ))}
+      </HorizontalScrollRow>
 
       {/* Sub-filters */}
       {showSubFilters && (
-        <div className="overflow-x-auto whitespace-nowrap pb-3 hide-scrollbar">
-          <div className="flex gap-2">
-            {filterOptions.map((filter) => (
-              <button
-                key={filter.value}
-                onClick={() => onFilterSelect(filter.value)}
-                className={`px-4 h-8 rounded-full text-sm font-bold uppercase transition-colors ${
-                  selectedFilter === filter.value
-                    ? "bg-white text-black"
-                    : "bg-neutral-800 text-white"
-                }`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <HorizontalScrollRow
+          containerClassName="whitespace-nowrap pb-3 pr-12"
+          contentClassName="flex w-max gap-2"
+        >
+          {filterOptions.map((filter) => (
+            <button
+              key={filter.value}
+              onClick={() => onFilterSelect(filter.value)}
+              className={`px-4 h-8 rounded-full text-sm font-bold uppercase transition-colors ${
+                selectedFilter === filter.value
+                  ? "bg-white text-black"
+                  : "bg-neutral-800 text-white"
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </HorizontalScrollRow>
       )}
     </div>
   );

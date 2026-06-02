@@ -1,11 +1,31 @@
+import fs from "node:fs";
 import type { IncomingHttpHeaders } from "node:http";
 import http from "node:http";
 import https from "node:https";
 import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
 
-const DEBUG_SERVER_URL = "";
-const DEBUG_SESSION_ID = "playback-source-500";
+const DEBUG_ENV_FILE = ".dbg/soundcloud-geekin-fail.env";
+const DEBUG_SERVER_URL_FALLBACK = "";
+const DEBUG_SESSION_ID_FALLBACK = "soundcloud-geekin-fail";
+const debugConfig = (() => {
+  let serverUrl = DEBUG_SERVER_URL_FALLBACK;
+  let sessionId = DEBUG_SESSION_ID_FALLBACK;
+
+  try {
+    const envContents = fs.readFileSync(DEBUG_ENV_FILE, "utf8");
+    const parsedUrl = envContents
+      .match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]
+      ?.trim();
+    const parsedSessionId = envContents
+      .match(/^DEBUG_SESSION_ID=(.+)$/m)?.[1]
+      ?.trim();
+    if (parsedUrl) serverUrl = parsedUrl;
+    if (parsedSessionId) sessionId = parsedSessionId;
+  } catch {}
+
+  return { serverUrl, sessionId };
+})();
 const AUDIO_REQUEST_TIMEOUT_MS = 20000;
 const MAX_REDIRECTS = 5;
 const RETRYABLE_ERROR_CODES = new Set([
@@ -18,6 +38,7 @@ const RETRYABLE_ERROR_CODES = new Set([
   "EHOSTUNREACH",
 ]);
 const DEFAULT_MAX_RETRIES = 1;
+const GOOGLEVIDEO_MAX_RETRIES = 3;
 const JIOSAAVN_MAX_RETRIES = 3;
 
 function reportDebugEvent(
@@ -27,13 +48,13 @@ function reportDebugEvent(
   msg: string,
   data: Record<string, unknown>
 ) {
-  if (!DEBUG_SERVER_URL) return;
+  if (!debugConfig.serverUrl) return;
 
-  fetch(DEBUG_SERVER_URL, {
+  fetch(debugConfig.serverUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      sessionId: DEBUG_SESSION_ID,
+      sessionId: debugConfig.sessionId,
       runId,
       hypothesisId,
       location,
@@ -47,7 +68,7 @@ function reportDebugEvent(
 interface ProxiedAudioResponse {
   statusCode: number;
   headers: IncomingHttpHeaders;
-  body: Readable;
+  body: Readable | ReadableStream;
   finalUrl: string;
   redirectChain: string[];
 }
@@ -59,7 +80,11 @@ function isRedirectStatus(statusCode: number): boolean {
 function isRetryableError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code = "code" in error ? String(error.code) : "";
-  return RETRYABLE_ERROR_CODES.has(code);
+  const message = "message" in error ? String(error.message) : "";
+  return (
+    RETRYABLE_ERROR_CODES.has(code) ||
+    /fetch failed|aborted|timeout/i.test(message)
+  );
 }
 
 function readHeader(
@@ -71,6 +96,101 @@ function readHeader(
   return typeof value === "string" ? value : null;
 }
 
+function buildProxyAudioUrl(audioUrl: string): string {
+  return `/api/audio-proxy?url=${encodeURIComponent(audioUrl)}`;
+}
+
+function buildLicenseProxyUrl(licenseUrl: string): string {
+  return `/api/license-proxy?url=${encodeURIComponent(licenseUrl)}`;
+}
+
+function readInterestingHeaders(headers: IncomingHttpHeaders) {
+  return {
+    contentType: readHeader(headers, "content-type"),
+    contentLength: readHeader(headers, "content-length"),
+    contentRange: readHeader(headers, "content-range"),
+    cacheControl: readHeader(headers, "cache-control"),
+    acceptRanges: readHeader(headers, "accept-ranges"),
+    location: readHeader(headers, "location"),
+    server: readHeader(headers, "server"),
+    via: readHeader(headers, "via"),
+  };
+}
+
+function isGoogleVideoHost(hostname: string): boolean {
+  return hostname.includes("googlevideo.com");
+}
+
+function isSoundCloudHost(hostname: string): boolean {
+  return (
+    hostname.includes("soundcloud.com") ||
+    hostname.includes("sndcdn.com") ||
+    hostname.includes("soundcloud.cloud")
+  );
+}
+
+function headersToIncomingHttpHeaders(headers: Headers): IncomingHttpHeaders {
+  const result: IncomingHttpHeaders = {};
+  headers.forEach((value, key) => {
+    result[key] = value;
+  });
+  return result;
+}
+
+async function requestAudioStreamViaFetch(
+  audioUrl: string,
+  headers: Record<string, string>,
+  retryCount = 0,
+  redirectChain: string[] = []
+): Promise<ProxiedAudioResponse> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    AUDIO_REQUEST_TIMEOUT_MS
+  );
+
+  try {
+    const response = await fetch(audioUrl, {
+      method: "GET",
+      headers,
+      cache: "no-store",
+      redirect: "follow",
+      signal: controller.signal,
+    });
+
+    if (!response.body) {
+      throw new Error("Audio proxy received empty upstream body");
+    }
+
+    const finalUrl = response.url || audioUrl;
+    const nextRedirectChain =
+      finalUrl !== audioUrl ? [...redirectChain, finalUrl] : redirectChain;
+
+    return {
+      statusCode: response.status,
+      headers: headersToIncomingHttpHeaders(response.headers),
+      body: response.body,
+      finalUrl,
+      redirectChain: nextRedirectChain,
+    };
+  } catch (error) {
+    if (retryCount < GOOGLEVIDEO_MAX_RETRIES && isRetryableError(error)) {
+      const delayMs = 250 * (retryCount + 1);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return requestAudioStreamViaFetch(
+        audioUrl,
+        headers,
+        retryCount + 1,
+        redirectChain
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function requestAudioStream(
   audioUrl: string,
   headers: Record<string, string>,
@@ -79,9 +199,21 @@ async function requestAudioStream(
   redirectChain: string[] = []
 ): Promise<ProxiedAudioResponse> {
   const url = new URL(audioUrl);
+  if (isGoogleVideoHost(url.hostname)) {
+    return requestAudioStreamViaFetch(
+      audioUrl,
+      headers,
+      retryCount,
+      redirectChain
+    );
+  }
+
   const transport = url.protocol === "https:" ? https : http;
+  const shouldForceIpv4 = url.hostname.includes("saavncdn.com");
   const maxRetries = url.hostname.includes("saavncdn.com")
     ? JIOSAAVN_MAX_RETRIES
+    : isGoogleVideoHost(url.hostname)
+    ? GOOGLEVIDEO_MAX_RETRIES
     : DEFAULT_MAX_RETRIES;
 
   return new Promise((resolve, reject) => {
@@ -90,7 +222,7 @@ async function requestAudioStream(
       {
         method: "GET",
         headers,
-        ...(url.hostname.includes("saavncdn.com") ? { family: 4 } : {}),
+        ...(shouldForceIpv4 ? { family: 4 } : {}),
       },
       (response) => {
         const statusCode = response.statusCode ?? 502;
@@ -165,6 +297,11 @@ function buildProxyResponseHeaders(headers: IncomingHttpHeaders): Headers {
     "Accept-Ranges": readHeader(headers, "accept-ranges") || "bytes",
     "Cache-Control": "public, max-age=3600",
     "Content-Type": readHeader(headers, "content-type") || "audio/mp4",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    "Access-Control-Allow-Headers": "Range, Content-Type, Origin, Referer",
+    "Access-Control-Expose-Headers":
+      "Content-Length, Content-Range, Content-Type, Accept-Ranges",
   });
 
   const contentLength = readHeader(headers, "content-length");
@@ -174,6 +311,106 @@ function buildProxyResponseHeaders(headers: IncomingHttpHeaders): Headers {
   if (contentRange) responseHeaders.set("Content-Range", contentRange);
 
   return responseHeaders;
+}
+
+function summarizeAudioUrl(audioUrl: string) {
+  try {
+    const parsed = new URL(audioUrl);
+    return {
+      urlHost: parsed.host,
+      urlPath: parsed.pathname,
+      itag: parsed.searchParams.get("itag"),
+      mime: parsed.searchParams.get("mime"),
+      source: parsed.searchParams.get("source"),
+      expire: parsed.searchParams.get("expire"),
+      hasSignature: parsed.searchParams.has("sig"),
+      hasPot: parsed.searchParams.has("pot"),
+      queryLength: parsed.search.length,
+    };
+  } catch {
+    return {
+      urlHost: null,
+      urlPath: null,
+      itag: null,
+      mime: null,
+      source: null,
+      expire: null,
+      hasSignature: null,
+      hasPot: null,
+      queryLength: null,
+    };
+  }
+}
+
+function isHlsPlaylistResponse(
+  finalUrl: string,
+  headers: IncomingHttpHeaders
+): boolean {
+  const contentType = readHeader(headers, "content-type") || "";
+  return (
+    /mpegurl|vnd\.apple\.mpegurl/i.test(contentType) ||
+    /\.m3u8(?:$|\?)/i.test(finalUrl)
+  );
+}
+
+function rewriteHlsAttributeUris(line: string, playlistUrl: string): string {
+  const isKeyLine = /^#EXT-X-KEY(?::[^,\s]+)?\b/i.test(line.trim());
+
+  return line.replace(
+    /URI=(?:"([^"]+)"|'([^']+)'|([^",\s]+))/g,
+    (_match, doubleQuoted, singleQuoted, bare) => {
+      const uri =
+        typeof doubleQuoted === "string" && doubleQuoted
+          ? doubleQuoted
+          : typeof singleQuoted === "string" && singleQuoted
+          ? singleQuoted
+          : typeof bare === "string" && bare
+          ? bare
+          : "";
+
+      if (!uri || /^data:/i.test(uri)) return `URI="${uri}"`;
+      const absoluteUrl = new URL(uri, playlistUrl).toString();
+      const proxied = isKeyLine
+        ? buildLicenseProxyUrl(absoluteUrl)
+        : buildProxyAudioUrl(absoluteUrl);
+      return `URI="${proxied}"`;
+    }
+  );
+}
+
+function rewriteHlsPlaylist(playlistText: string, playlistUrl: string): string {
+  return playlistText
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+      if (trimmed.startsWith("#")) {
+        return rewriteHlsAttributeUris(line, playlistUrl);
+      }
+      if (/^data:/i.test(trimmed)) return line;
+      return buildProxyAudioUrl(new URL(trimmed, playlistUrl).toString());
+    })
+    .join("\n");
+}
+
+async function readResponseBodyAsText(
+  body: Readable | ReadableStream
+): Promise<string> {
+  const stream =
+    body instanceof Readable ? (Readable.toWeb(body) as ReadableStream) : body;
+  return new Response(stream).text();
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      "Access-Control-Allow-Headers": "Range, Content-Type, Origin, Referer",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
 }
 
 export async function GET(request: NextRequest) {
@@ -191,6 +428,7 @@ export async function GET(request: NextRequest) {
       hasAudioUrl: Boolean(audioUrl),
       audioHost: audioUrl ? new URL(audioUrl).host : null,
       hasRange: Boolean(request.headers.get("range")),
+      urlSummary: audioUrl ? summarizeAudioUrl(audioUrl) : null,
     }
   );
   // #endregion
@@ -230,13 +468,12 @@ export async function GET(request: NextRequest) {
         // JioSaavn specific headers
         headers.Referer = "https://www.jiosaavn.com/";
         headers.Origin = "https://www.jiosaavn.com";
-      } else if (
-        audioUrlObj.hostname.includes("soundcloud.com") ||
-        audioUrlObj.hostname.includes("sndcdn.com")
-      ) {
+      } else if (isSoundCloudHost(audioUrlObj.hostname)) {
         // SoundCloud specific headers
         headers.Referer = "https://soundcloud.com/";
         headers.Origin = "https://soundcloud.com";
+        headers.Accept =
+          "application/vnd.apple.mpegurl,application/x-mpegURL,audio/mp4,audio/*;q=0.9,*/*;q=0.5";
       } else {
         // Default YouTube headers
         headers.Referer = "https://www.youtube.com/";
@@ -266,6 +503,18 @@ export async function GET(request: NextRequest) {
         audioHost: new URL(audioUrl).host,
         hasRange: Boolean(range),
         upstreamPath: `${new URL(audioUrl).host}${new URL(audioUrl).pathname}`,
+        configuredDebugSession: debugConfig.sessionId,
+        range: range || null,
+        urlSummary: summarizeAudioUrl(audioUrl),
+        requestHeaders: {
+          accept: headers.Accept || null,
+          referer: headers.Referer || null,
+          origin: headers.Origin || null,
+          secFetchDest: headers["Sec-Fetch-Dest"] || null,
+          secFetchMode: headers["Sec-Fetch-Mode"] || null,
+          secFetchSite: headers["Sec-Fetch-Site"] || null,
+          range: headers.Range || null,
+        },
       }
     );
     // #endregion
@@ -283,6 +532,7 @@ export async function GET(request: NextRequest) {
           toHost: new URL(response.finalUrl).host,
           status: response.statusCode,
           redirectChain: response.redirectChain,
+          finalUrlSummary: summarizeAudioUrl(response.finalUrl),
         }
       );
       // #endregion
@@ -299,7 +549,9 @@ export async function GET(request: NextRequest) {
           status: response.statusCode,
           audioHost: new URL(response.finalUrl).host,
           finalUrl: response.finalUrl,
+          finalUrlSummary: summarizeAudioUrl(response.finalUrl),
           redirectChain: response.redirectChain,
+          headers: readInterestingHeaders(response.headers),
         }
       );
       // #endregion
@@ -312,6 +564,69 @@ export async function GET(request: NextRequest) {
 
     const responseHeaders = buildProxyResponseHeaders(response.headers);
 
+    const treatAsHlsPlaylist =
+      isHlsPlaylistResponse(response.finalUrl, response.headers) ||
+      /\.m3u8(?:$|\?)/i.test(audioUrl);
+
+    if (treatAsHlsPlaylist) {
+      const playlistText = await readResponseBodyAsText(response.body);
+      const rewrittenPlaylist = rewriteHlsPlaylist(
+        playlistText,
+        response.finalUrl
+      );
+      responseHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
+      responseHeaders.delete("Content-Length");
+      // HLS playlists contain short-lived signed URLs (Policy/Signature
+      // tokens with an `expires=` timestamp). Caching them for an hour
+      // would mean Shaka keeps using an expired manifest and would keep
+      // hitting a stale #EXT-X-KEY URI. Force a re-fetch every time.
+      responseHeaders.set("Cache-Control", "no-store, max-age=0");
+      responseHeaders.set("Pragma", "no-cache");
+
+      // Surface the rewritten license URIs so we can see in the proxy
+      // logs that #EXT-X-KEY is being routed through /api/license-proxy.
+      const rewrittenKeyLines = rewrittenPlaylist
+        .split(/\r?\n/)
+        .filter((line) => /^#EXT-X-KEY/i.test(line.trim()));
+      console.log(
+        `[audio-proxy] ${runId} HLS rewrite`,
+        JSON.stringify({
+          audioHost: new URL(response.finalUrl).host,
+          finalUrl: response.finalUrl,
+          lineCount: playlistText.split(/\r?\n/).length,
+          extXKeyLineCount: rewrittenKeyLines.length,
+          extXKeySample: rewrittenKeyLines[0] || null,
+        })
+      );
+
+      responseHeaders.set("X-Streamify-RunId", runId);
+      responseHeaders.set("X-Streamify-HlsRewrite", "1");
+      responseHeaders.set(
+        "X-Streamify-HasExtXKey",
+        String(rewrittenKeyLines.length)
+      );
+
+      reportDebugEvent(
+        runId,
+        "H4",
+        "app/api/audio-proxy/route.ts:GET:hls-playlist-rewritten",
+        "[DEBUG] audio proxy HLS playlist rewritten",
+        {
+          audioHost: new URL(response.finalUrl).host,
+          finalUrl: response.finalUrl,
+          redirectChain: response.redirectChain,
+          lineCount: playlistText.split(/\r?\n/).length,
+          extXKeyLineCount: rewrittenKeyLines.length,
+          extXKeySample: rewrittenKeyLines[0] || null,
+        }
+      );
+
+      return new NextResponse(rewrittenPlaylist, {
+        status: response.statusCode,
+        headers: responseHeaders,
+      });
+    }
+
     // #region debug-point H4:audio-proxy-success
     reportDebugEvent(
       runId,
@@ -323,15 +638,22 @@ export async function GET(request: NextRequest) {
         contentType: readHeader(response.headers, "content-type"),
         audioHost: new URL(response.finalUrl).host,
         finalUrl: response.finalUrl,
+        finalUrlSummary: summarizeAudioUrl(response.finalUrl),
         redirectChain: response.redirectChain,
         contentRange: readHeader(response.headers, "content-range"),
+        contentLength: readHeader(response.headers, "content-length"),
       }
     );
     // #endregion
-    return new NextResponse(Readable.toWeb(response.body) as ReadableStream, {
-      status: response.statusCode,
-      headers: responseHeaders,
-    });
+    return new NextResponse(
+      response.body instanceof Readable
+        ? (Readable.toWeb(response.body) as ReadableStream)
+        : response.body,
+      {
+        status: response.statusCode,
+        headers: responseHeaders,
+      }
+    );
   } catch (error) {
     // #region debug-point H4:audio-proxy-exception
     reportDebugEvent(
@@ -342,6 +664,11 @@ export async function GET(request: NextRequest) {
       {
         error: error instanceof Error ? error.message : String(error),
         audioHost: audioUrl ? new URL(audioUrl).host : null,
+        urlSummary: audioUrl ? summarizeAudioUrl(audioUrl) : null,
+        errorCode:
+          error && typeof error === "object" && "code" in error
+            ? String((error as { code?: unknown }).code)
+            : null,
       }
     );
     // #endregion

@@ -39,6 +39,7 @@ const MiniPlayer: React.FC = () => {
     currentSong,
     isPlaying,
     isSongLoading,
+    playbackError,
     currentTime,
     duration,
     volume,
@@ -182,6 +183,12 @@ const MiniPlayer: React.FC = () => {
     return null;
   }
 
+  const statusText = isSongLoading
+    ? "Loading track..."
+    : playbackError
+    ? playbackError
+    : null;
+
   return (
     <div className="fixed bottom-3 left-3 right-3 z-50 rounded-full bg-[#181818] p-3">
       <div className="mx-auto flex max-w-full items-center justify-between">
@@ -212,8 +219,16 @@ const MiniPlayer: React.FC = () => {
             <h4 className="truncate text-sm font-medium text-white">
               {currentSong.title}
             </h4>
-            <p className="truncate text-xs text-gray-400">
-              {currentSong.artist}
+            <p
+              className={`truncate text-xs ${
+                statusText
+                  ? isSongLoading
+                    ? "text-gray-400"
+                    : "text-red-300"
+                  : "text-gray-400"
+              }`}
+            >
+              {statusText || currentSong.artist}
             </p>
           </div>
         </div>

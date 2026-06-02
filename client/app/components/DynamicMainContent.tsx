@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useAudio } from "../contexts/AudioContext";
 import FullscreenPlayer from "./FullscreenPlayer";
 
@@ -11,11 +12,26 @@ interface DynamicMainContentProps {
 export default function DynamicMainContent({
   children,
 }: DynamicMainContentProps) {
-  const { isFullscreenOpen } = useAudio();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { isFullscreenOpen, closeFullscreen } = useAudio();
   const [shouldRenderFullscreen, setShouldRenderFullscreen] =
     useState(isFullscreenOpen);
   const [isFullscreenVisible, setIsFullscreenVisible] =
     useState(isFullscreenOpen);
+  const navigationKey = `${pathname}?${searchParams.toString()}`;
+  const previousNavigationKeyRef = useRef(navigationKey);
+
+  useEffect(() => {
+    if (
+      previousNavigationKeyRef.current !== navigationKey &&
+      isFullscreenOpen
+    ) {
+      closeFullscreen();
+    }
+
+    previousNavigationKeyRef.current = navigationKey;
+  }, [navigationKey, isFullscreenOpen, closeFullscreen]);
 
   useEffect(() => {
     let enterFrameId: number | undefined;

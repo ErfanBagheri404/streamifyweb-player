@@ -259,13 +259,23 @@ function SmartPlaylistArtwork({
   }
 
   if (variant === "history") {
-    const covers = songs.filter((song) => song.coverUrl).slice(0, 4);
+    const covers = (() => {
+      const seen = new Set<string>();
+      const out: typeof songs = [];
+      for (const song of songs) {
+        if (!song?.coverUrl || seen.has(song.id)) continue;
+        seen.add(song.id);
+        out.push(song);
+        if (out.length >= 4) break;
+      }
+      return out;
+    })();
 
     if (covers.length > 0) {
       return (
         <div className="grid aspect-square w-full grid-cols-2 overflow-hidden rounded-xl bg-white/6">
-          {covers.map((song) => (
-            <div key={song.id} className="relative h-full w-full">
+          {covers.map((song, index) => (
+            <div key={`history-cover-${song.id}-${index}`} className="relative h-full w-full">
               <Image
                 src={song.coverUrl!}
                 alt={song.title}

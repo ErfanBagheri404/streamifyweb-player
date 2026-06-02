@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useAudio } from "../../contexts/AudioContext";
+import { HorizontalScrollRow } from "../../components/HorizontalScrollRow";
 
 type ArtistPayload = {
   artist: {
@@ -367,7 +368,10 @@ export default function ArtistPage() {
           {data.albums.length > 0 && (
             <div className="mb-10">
               <h2 className="text-xl font-bold mb-3">Albums</h2>
-              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+              <HorizontalScrollRow
+                containerClassName="pb-2 px-12"
+                contentClassName="flex w-max gap-4"
+              >
                 {data.albums.map((album, idx) =>
                   isJioSaavnArtist ? (
                     <Link
@@ -452,14 +456,17 @@ export default function ArtistPage() {
                 {data.albums.length === 0 && (
                   <div className="text-neutral-400">No albums found.</div>
                 )}
-              </div>
+              </HorizontalScrollRow>
             </div>
           )}
 
           {data.playlists.length > 0 && (
             <div className="mb-10">
               <h2 className="text-xl font-bold mb-3">Playlists</h2>
-              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+              <HorizontalScrollRow
+                containerClassName="pb-2 px-12"
+                contentClassName="flex w-max gap-4"
+              >
                 {data.playlists.map((p, idx) => (
                   <a
                     key={`${p.id}-${idx}`}
@@ -501,7 +508,7 @@ export default function ArtistPage() {
                 {data.playlists.length === 0 && (
                   <div className="text-neutral-400">No playlists found.</div>
                 )}
-              </div>
+              </HorizontalScrollRow>
             </div>
           )}
         </div>

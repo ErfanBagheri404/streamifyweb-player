@@ -22,6 +22,7 @@ export interface SearchResult {
   thumbnail?: string;
   source?: string;
   type?: string;
+  playlistId?: string;
   albumId?: string;
   albumName?: string;
   uploaded?: string;

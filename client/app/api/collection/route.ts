@@ -1,14 +1,25 @@
 import { readFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { NextRequest, NextResponse } from "next/server";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
-const PIPED_INSTANCE = "https://api.piped.private.coffee";
+const PIPED_INSTANCES = ["https://api.piped.private.coffee"];
+const INVIDIOUS_INSTANCES = [
+  "https://yt.omada.cafe",
+  "https://lekker.gay",
+  "https://yt.chocolatemoo53.com",
+  "https://inv.nadeko.net",
+  "https://invidious.tiekoetter.com",
+];
 const BEATSEEK_API_BASE = "https://beatseek.io/api";
 const DEBUG_ENV_PATH = ".dbg/soundcloud-collection-bug.env";
-const DEBUG_SERVER_URL_FALLBACK = "http://127.0.0.1:7777/event";
+const DEBUG_SERVER_URL_FALLBACK = "";
 const DEBUG_SESSION_ID_FALLBACK = "soundcloud-collection-bug";
+const COLLECTION_FETCH_TIMEOUT_MS = 12000;
+const execFileAsync = promisify(execFile);
 
 type CollectionResponse = {
   collection: {
@@ -172,6 +183,10 @@ function extractYouTubePlaylistId(value: string): string {
   return "";
 }
 
+function isYouTubeMixId(value: string): boolean {
+  return /^RD[A-Za-z0-9_-]{6,}$/.test(value);
+}
+
 function upgradeSoundCloudImage(url: string): string {
   if (!url) return "";
 
@@ -215,17 +230,61 @@ function pickSoundCloudCollectionImage(
 }
 
 async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT, accept: "application/json" },
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), COLLECTION_FETCH_TIMEOUT_MS);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} ${text}`.trim());
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT, accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} ${text}`.trim());
+    }
+
+    return JSON.parse(text.replace(/^\uFEFF/, "").trim() || "null");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const shouldTryPowerShell =
+      process.platform === "win32" &&
+      (/fetch failed|aborted|ECONNRESET|UND_ERR_CONNECT_TIMEOUT/i.test(
+        message
+      ) ||
+        message.includes("This operation was aborted"));
+
+    if (!shouldTryPowerShell) {
+      throw error;
+    }
+
+    const escapedUrl = url.replace(/'/g, "''");
+    const escapedUserAgent = USER_AGENT.replace(/'/g, "''");
+    const script = [
+      "$ProgressPreference = 'SilentlyContinue'",
+      "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
+      `$headers = @{ 'User-Agent' = '${escapedUserAgent}'; 'Accept' = 'application/json, text/plain;q=0.9, */*;q=0.8' }`,
+      `$response = Invoke-RestMethod -Uri '${escapedUrl}' -Headers $headers -TimeoutSec ${Math.max(
+        1,
+        Math.ceil(COLLECTION_FETCH_TIMEOUT_MS / 1000)
+      )}`,
+      "$response | ConvertTo-Json -Depth 100 -Compress",
+    ].join("; ");
+
+    const { stdout } = await execFileAsync(
+      "powershell",
+      ["-NoProfile", "-NonInteractive", "-Command", script],
+      {
+        timeout: COLLECTION_FETCH_TIMEOUT_MS + 3000,
+        maxBuffer: 1024 * 1024 * 5,
+      }
+    );
+
+    return JSON.parse(stdout.replace(/^\uFEFF/, "").trim() || "null");
+  } finally {
+    clearTimeout(timer);
   }
-
-  return res.json() as Promise<unknown>;
 }
 
 function normalizeJioSaavnSong(song: unknown, albumTitle?: string) {
@@ -302,54 +361,146 @@ async function fetchPipedPlaylist(
   source: "youtube" | "youtubemusic"
 ): Promise<CollectionResponse> {
   const playlistId = extractYouTubePlaylistId(id) || id;
-  const payload = toRecord(
-    await fetchJson(
-      `${PIPED_INSTANCE}/playlists/${encodeURIComponent(playlistId)}`
-    )
-  );
-  const title = safeString(payload.name) || "Playlist";
-  const entries = toArray(payload.relatedStreams)
-    .map((stream, index) => {
-      const record = toRecord(stream);
-      const streamUrl = safeString(record.url);
-      const videoId =
-        safeString(record.videoId || record.id) ||
-        extractYouTubeVideoId(streamUrl);
+  const errors: string[] = [];
+
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const payload = toRecord(
+        await fetchJson(
+          `${instance}/playlists/${encodeURIComponent(playlistId)}`
+        )
+      );
+      const title = safeString(payload.name) || "Playlist";
+      const entries = toArray(payload.relatedStreams)
+        .map((stream, index) => {
+          const record = toRecord(stream);
+          const streamUrl = safeString(record.url);
+          const videoId =
+            safeString(record.videoId || record.id) ||
+            extractYouTubeVideoId(streamUrl);
+
+          return {
+            id: videoId || `${playlistId}-${index}`,
+            title: safeString(record.title) || `Track ${index + 1}`,
+            subtitle: safeString(record.uploaderName),
+            artist: safeString(record.uploaderName),
+            thumbnailUrl: safeString(record.thumbnail),
+            duration: safeNumber(record.duration),
+            url: streamUrl,
+            album: title,
+            addedAt: safeString(record.uploadedDate),
+          };
+        })
+        .filter((entry) => entry.id);
 
       return {
-        id: videoId || `${playlistId}-${index}`,
-        title: safeString(record.title) || `Track ${index + 1}`,
-        subtitle: safeString(record.uploaderName),
-        artist: safeString(record.uploaderName),
-        thumbnailUrl: safeString(record.thumbnail),
-        duration: safeNumber(record.duration),
-        url: streamUrl,
-        album: title,
-        addedAt: safeString(record.uploadedDate),
+        collection: {
+          id: playlistId,
+          title,
+          author: safeString(payload.uploader),
+          thumbnailUrl: safeString(payload.thumbnailUrl),
+          url:
+            source === "youtubemusic"
+              ? `https://music.youtube.com/playlist?list=${encodeURIComponent(
+                  playlistId
+                )}`
+              : `https://www.youtube.com/playlist?list=${encodeURIComponent(
+                  playlistId
+                )}`,
+          count: safeNumber(payload.videos) || entries.length,
+          source,
+          description: safeString(payload.description),
+        },
+        entries,
       };
-    })
-    .filter((entry) => entry.id);
+    } catch (error) {
+      errors.push(
+        `${instance}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
 
-  return {
-    collection: {
-      id: playlistId,
-      title,
-      author: safeString(payload.uploader),
-      thumbnailUrl: safeString(payload.thumbnailUrl),
-      url:
-        source === "youtubemusic"
-          ? `https://music.youtube.com/playlist?list=${encodeURIComponent(
-              playlistId
-            )}`
-          : `https://www.youtube.com/playlist?list=${encodeURIComponent(
-              playlistId
-            )}`,
-      count: safeNumber(payload.videos) || entries.length,
-      source,
-      description: safeString(payload.description),
-    },
-    entries,
-  };
+  throw new Error(errors.join(" | ") || "Failed to load YouTube playlist");
+}
+
+async function fetchInvidiousMix(
+  id: string,
+  source: "youtube" | "youtubemusic"
+): Promise<CollectionResponse> {
+  const mixId = extractYouTubePlaylistId(id) || id;
+  const errors: string[] = [];
+
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const payload = toRecord(
+        await fetchJson(`${instance}/api/v1/mixes/${encodeURIComponent(mixId)}`)
+      );
+      const title = safeString(payload.title) || "Mix";
+      const entries = toArray(payload.videos)
+        .map((video, index) => {
+          const record = toRecord(video);
+          const thumbnails = toArray(record.videoThumbnails).map((entry) =>
+            toRecord(entry)
+          );
+          const thumbnail = thumbnails.sort(
+            (a, b) =>
+              qualityScore(b.width || b.quality) -
+              qualityScore(a.width || a.quality)
+          )[0];
+
+          return {
+            id: safeString(record.videoId) || `${mixId}-${index}`,
+            title: safeString(record.title) || `Track ${index + 1}`,
+            subtitle: safeString(record.author),
+            artist: safeString(record.author),
+            thumbnailUrl: safeString(thumbnail?.url),
+            duration: safeNumber(record.lengthSeconds),
+            url: safeString(record.videoId)
+              ? `https://www.youtube.com/watch?v=${encodeURIComponent(
+                  safeString(record.videoId)
+                )}&list=${encodeURIComponent(mixId)}`
+              : "",
+            album: title,
+          };
+        })
+        .filter((entry) => entry.id);
+
+      return {
+        collection: {
+          id: mixId,
+          title,
+          count: entries.length,
+          source,
+          url:
+            source === "youtubemusic"
+              ? `https://music.youtube.com/playlist?list=${encodeURIComponent(
+                  mixId
+                )}`
+              : `https://www.youtube.com/playlist?list=${encodeURIComponent(
+                  mixId
+                )}`,
+          description: "Mix",
+        },
+        entries,
+      };
+    } catch (error) {
+      errors.push(
+        `${instance}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  try {
+    return await fetchPipedPlaylist(mixId, source);
+  } catch (error) {
+    errors.push(
+      `piped-playlist-fallback: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+
+  throw new Error(errors.join(" | ") || "Failed to load YouTube mix");
 }
 
 async function fetchSoundCloudCollection(
@@ -464,19 +615,17 @@ export async function GET(request: NextRequest) {
       kind === "playlist" &&
       normalizedYouTubePlaylistId
     ) {
-      response = await fetchPipedPlaylist(
-        normalizedYouTubePlaylistId,
-        "youtube"
-      );
+      response = isYouTubeMixId(normalizedYouTubePlaylistId)
+        ? await fetchInvidiousMix(normalizedYouTubePlaylistId, "youtube")
+        : await fetchPipedPlaylist(normalizedYouTubePlaylistId, "youtube");
     } else if (
       source === "youtubemusic" &&
       kind === "playlist" &&
       normalizedYouTubePlaylistId
     ) {
-      response = await fetchPipedPlaylist(
-        normalizedYouTubePlaylistId,
-        "youtubemusic"
-      );
+      response = isYouTubeMixId(normalizedYouTubePlaylistId)
+        ? await fetchInvidiousMix(normalizedYouTubePlaylistId, "youtubemusic")
+        : await fetchPipedPlaylist(normalizedYouTubePlaylistId, "youtubemusic");
     } else if (source === "soundcloud" && url) {
       response = await fetchSoundCloudCollection(url, runId);
     }

@@ -7,7 +7,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import type { SearchResult } from "../../../components/search";
 import { useAudio } from "../../../contexts/AudioContext";
 
-const DEBUG_SERVER_URL = "http://127.0.0.1:7777/event";
+const DEBUG_SERVER_URL = "";
 const DEBUG_SESSION_ID = "soundcloud-collection-bug";
 
 function reportDebugEvent(
@@ -17,6 +17,7 @@ function reportDebugEvent(
   msg: string,
   data: Record<string, unknown>
 ) {
+  if (!DEBUG_SERVER_URL) return;
   fetch(DEBUG_SERVER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -271,8 +272,7 @@ function getCollectionEntries(item: SearchResult | null): CollectionEntry[] {
 export default function CollectionPage() {
   const params = useParams<{ kind: string; id: string }>();
   const searchParams = useSearchParams();
-  const { currentSong, isPlaying, beginSongLoad, playSong, clearSongLoading } =
-    useAudio();
+  const { currentSong, isPlaying, resolveAndPlaySong } = useAudio();
 
   const kind = params.kind === "album" ? "album" : "playlist";
   const id = decodeURIComponent(params.id);
@@ -490,8 +490,6 @@ export default function CollectionPage() {
     storedItem?.thumbnailUrl ||
     storedItem?.img ||
     image;
-  const displayHref =
-    remoteState.collection?.url || storedItem?.href || storedItem?.url || href;
   const collectionSource =
     remoteState.collection?.source || storedItem?.source || source;
 
@@ -528,50 +526,39 @@ export default function CollectionPage() {
     if (!canPlayEntries || loadingSongId === entry.id) return;
 
     setLoadingSongId(entry.id);
-    beginSongLoad({
-      id: entry.id,
-      title: entry.title,
-      artist:
-        entry.artist || entry.subtitle || displayAuthor || "Unknown Artist",
-      coverUrl: entry.thumbnailUrl || displayImage,
-      duration: entry.duration,
-      cachedAt: Date.now(),
-    });
 
     try {
-      const params = new URLSearchParams();
-      params.set("id", entry.id);
-      params.set("source", collectionSource);
-      params.set("title", entry.title);
-      params.set(
-        "artist",
-        entry.artist || entry.subtitle || displayAuthor || "Unknown Artist"
-      );
-      if (entry.url) params.set("url", entry.url);
-
-      const response = await fetch(`/api/video?${params.toString()}`);
-      const payload = (await response.json()) as Record<string, unknown>;
-
-      if (!response.ok || typeof payload.audioUrl !== "string") {
-        throw new Error("Failed to resolve audio");
-      }
-
-      playSong({
-        id: entry.id,
-        title: entry.title,
+      const queue = entries.map((item) => ({
+        id: item.id,
+        title: item.title,
         artist:
-          entry.artist || entry.subtitle || displayAuthor || "Unknown Artist",
-        coverUrl: entry.thumbnailUrl || displayImage,
-        audioUrl: payload.audioUrl,
-        duration:
-          typeof payload.lengthSeconds === "number"
-            ? payload.lengthSeconds
-            : entry.duration,
-        cachedAt: Date.now(),
-      });
+          item.artist || item.subtitle || displayAuthor || "Unknown Artist",
+        coverUrl: item.thumbnailUrl || displayImage,
+        duration: item.duration,
+        source: collectionSource,
+        url: item.url,
+      }));
+
+      const currentIndex = queue.findIndex((song) => song.id === entry.id);
+
+      await resolveAndPlaySong(
+        {
+          id: entry.id,
+          title: entry.title,
+          artist:
+            entry.artist || entry.subtitle || displayAuthor || "Unknown Artist",
+          coverUrl: entry.thumbnailUrl || displayImage,
+          duration: entry.duration,
+          source: collectionSource,
+          url: entry.url,
+        },
+        {
+          queue,
+          currentIndex: currentIndex >= 0 ? currentIndex : 0,
+        }
+      );
     } catch (error) {
       console.error("Failed to play collection entry:", error);
-      clearSongLoading();
     } finally {
       setLoadingSongId((current) => (current === entry.id ? null : current));
     }
@@ -658,16 +645,6 @@ export default function CollectionPage() {
           >
             <MoreGlyph />
           </button>
-          {displayHref ? (
-            <a
-              href={displayHref}
-              target="_blank"
-              rel="noreferrer"
-              className="ml-auto inline-flex rounded-full border border-white/12 px-4 py-2 text-sm text-white/75 transition hover:border-white/20 hover:bg-white/6 hover:text-white"
-            >
-              Open source page
-            </a>
-          ) : null}
         </div>
 
         {remoteState.error ? (

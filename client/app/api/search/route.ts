@@ -17,7 +17,7 @@ const INVIDIOUS_INSTANCES = [
 type SearchResponse = { items: unknown[]; nextpage?: string | null };
 
 const DEBUG_ENV_PATH = ".dbg/soundcloud-collection-bug.env";
-const DEBUG_SERVER_URL_FALLBACK = "http://127.0.0.1:7777/event";
+const DEBUG_SERVER_URL_FALLBACK = "";
 const DEBUG_SESSION_ID_FALLBACK = "soundcloud-collection-bug";
 
 function getDebugConfig(): { url: string; sessionId: string } {

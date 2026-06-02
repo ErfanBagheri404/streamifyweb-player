@@ -16,7 +16,8 @@ interface SearchState {
 export default function LeftPanel() {
   const router = useRouter();
   const pathname = usePathname();
-  const { recentSongs, playSong } = useAudio();
+  const { recentSongs, resolveAndPlaySong, closeFullscreen, isPlayerVisible } =
+    useAudio();
   const [lastSearch] = useState<SearchState | null>(() => {
     try {
       const saved = localStorage.getItem("lastSearch");
@@ -45,6 +46,8 @@ export default function LeftPanel() {
   }, [lastSearch, router]);
 
   const openSearch = () => {
+    closeFullscreen();
+
     if (lastSearch?.query) {
       const params = new URLSearchParams();
       params.set("q", lastSearch.query);
@@ -58,7 +61,16 @@ export default function LeftPanel() {
     router.push("/search");
   };
 
-  const recentCovers = recentSongs.filter((song) => song.coverUrl);
+  const recentCovers = (() => {
+    const seen = new Set<string>();
+    const out: typeof recentSongs = [];
+    for (const song of recentSongs) {
+      if (!song?.coverUrl || seen.has(song.id)) continue;
+      seen.add(song.id);
+      out.push(song);
+    }
+    return out;
+  })();
   const isHomePage = pathname === "/";
   const isSearchPage = pathname.startsWith("/search");
   const isLibraryPage = pathname.startsWith("/library");
@@ -74,7 +86,10 @@ export default function LeftPanel() {
       <div className="flex w-[86px] flex-col items-center gap-7 rounded-xl bg-[#181818] px-7 py-6">
         <button
           type="button"
-          onClick={() => router.push("/")}
+          onClick={() => {
+            closeFullscreen();
+            router.push("/");
+          }}
           className="flex items-center justify-center"
           aria-label="Go to home"
         >
@@ -96,7 +111,10 @@ export default function LeftPanel() {
         </button>
         <button
           type="button"
-          onClick={() => router.push("/library")}
+          onClick={() => {
+            closeFullscreen();
+            router.push("/library");
+          }}
           className="flex items-center justify-center"
           aria-label="Open library"
         >
@@ -108,14 +126,23 @@ export default function LeftPanel() {
       </div>
 
       {/* Second Box */}
-      <div className="mb-20 flex w-[86px] flex-1 min-h-0 flex-col items-center rounded-xl bg-[#181818] py-6">
+      <div
+        className={[
+          "flex w-[86px] flex-1 min-h-0 flex-col items-center rounded-xl bg-[#181818] py-6",
+          isPlayerVisible ? "mb-20" : "",
+        ].join(" ")}
+      >
         <div className="flex w-full flex-1 flex-col items-center gap-3 overflow-y-auto hide-scrollbar pr-1">
           {recentCovers.length > 0
-            ? recentCovers.map((song) => (
+            ? recentCovers.map((song, index) => (
                 <button
-                  key={song.id}
+                  key={`recent-${song.id}-${index}`}
                   type="button"
-                  onClick={() => playSong(song)}
+                  onClick={() => {
+                    void resolveAndPlaySong(song).catch((error) => {
+                      console.error("Failed to replay recent song:", error);
+                    });
+                  }}
                   className="h-[40px] w-[40px] shrink-0 overflow-hidden rounded-sm"
                   title={song.title}
                 >

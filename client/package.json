@@ -10,10 +10,12 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "hls.js": "^1.6.16",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-audio-visualize": "^1.2.0",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "shaka-player": "^5.1.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

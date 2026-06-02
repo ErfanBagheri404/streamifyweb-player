@@ -165,6 +165,27 @@ function extractYouTubePlaylistId(value?: string): string {
   return "";
 }
 
+function normalizeArtistRouteId(value?: string): string {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) return "";
+
+  if (/^https?:\/\//i.test(rawValue)) {
+    try {
+      const parsed = new URL(rawValue);
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      if (segments[0] === "channel" && segments[1]) {
+        return segments[1];
+      }
+    } catch {}
+  }
+
+  const normalized = rawValue.replace(/^\/+/, "");
+  const channelMatch = normalized.match(/^channel\/([^/?#]+)/i);
+  if (channelMatch?.[1]) return channelMatch[1];
+
+  return normalized;
+}
+
 function getBestThumbnail(raw: RawPipedItem, source: string): string {
   if (Array.isArray(raw.authorThumbnails) && raw.authorThumbnails.length > 0) {
     return [...raw.authorThumbnails].sort(
@@ -209,7 +230,7 @@ export default function SearchPage() {
 function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { playSong, beginSongLoad, clearSongLoading } = useAudio();
+  const { resolveAndPlaySong } = useAudio();
 
   // State
   const [searchQuery, setSearchQuery] = useState(() => {
@@ -784,6 +805,7 @@ function SearchPageInner() {
       item.authorThumbnails?.[0]?.url ||
       item.thumbnail ||
       "";
+    const artistId = normalizeArtistRouteId(item.id);
 
     const params = new URLSearchParams();
     if (name) params.set("name", name);
@@ -797,7 +819,9 @@ function SearchPageInner() {
     if (selectedFilter !== "all") params.set("search_filter", selectedFilter);
 
     const qs = params.toString();
-    return `/artist/${item.id}${qs ? `?${qs}` : ""}`;
+    return `/artist/${encodeURIComponent(artistId || item.id)}${
+      qs ? `?${qs}` : ""
+    }`;
   };
 
   const handleTopResultPress = (item: SearchResult) => {
@@ -818,6 +842,10 @@ function SearchPageInner() {
     // Save search state before navigation
     saveSearchState();
     const kind = item.type === "album" ? "album" : "playlist";
+    const collectionId =
+      item.playlistId ||
+      extractYouTubePlaylistId(item.href || item.url || "") ||
+      item.id;
     const params = new URLSearchParams();
     params.set("title", item.title || "");
     if (item.author) params.set("author", item.author);
@@ -846,6 +874,7 @@ function SearchPageInner() {
         type: item.type || null,
         title: item.title,
         href: item.href || item.url || null,
+        collectionId,
         count: item.videoCount ?? null,
         hasTracks: Array.isArray(item.tracks),
         hasVideos: Array.isArray(item.videos),
@@ -853,7 +882,7 @@ function SearchPageInner() {
     );
     // #endregion
     router.push(
-      `/collection/${kind}/${encodeURIComponent(item.id)}?${params.toString()}`
+      `/collection/${kind}/${encodeURIComponent(collectionId)}?${params.toString()}`
     );
   };
   const handleSongPress = async (item: SearchResult) => {
@@ -863,58 +892,46 @@ function SearchPageInner() {
     saveSearchState();
     setLoadingSongId(item.id);
 
-    beginSongLoad({
-      id: item.id,
-      title: item.title,
-      artist: item.author || "Unknown Artist",
-      coverUrl: item.thumbnailUrl || item.img || item.thumbnail,
-      uploaded: item.uploaded,
-      duration: item.duration ? parseInt(item.duration, 10) : undefined,
-      cachedAt: Date.now(),
-    });
-
     try {
-      // Fetch actual video details with audio URL
-      const params = new URLSearchParams();
-      params.set("id", item.id);
-      if (item.source) params.set("source", item.source);
-      if (item.title) params.set("title", item.title);
-      if (item.author) params.set("artist", item.author);
-      if (item.href || item.url || item.permalink_url) {
-        params.set("url", item.href || item.url || item.permalink_url || "");
-      }
-      const response = await fetch(`/api/video?${params.toString()}`);
-      const videoData = await response.json();
+      const songResults = searchResults.filter(
+        (result) =>
+          result.type === "song" ||
+          result.type === "video" ||
+          result.type === "stream" ||
+          (!result.type && result.duration)
+      );
 
-      if (videoData.audioUrl) {
-        // Play the song using the actual YouTube audio URL
-        const song = {
+      const queue = songResults.map((result) => ({
+        id: result.id,
+        title: result.title,
+        artist: result.author || "Unknown Artist",
+        coverUrl: result.thumbnailUrl || result.img || result.thumbnail,
+        uploaded: result.uploaded,
+        duration: result.duration ? parseInt(result.duration, 10) : undefined,
+        source: result.source,
+        url: result.href || result.url || result.permalink_url,
+      }));
+
+      const currentIndex = queue.findIndex((song) => song.id === item.id);
+
+      await resolveAndPlaySong(
+        {
           id: item.id,
           title: item.title,
           artist: item.author || "Unknown Artist",
           coverUrl: item.thumbnailUrl || item.img || item.thumbnail,
           uploaded: item.uploaded,
-          audioUrl: videoData.audioUrl,
-          duration: videoData.lengthSeconds
-            ? parseInt(videoData.lengthSeconds)
-            : undefined,
-          cachedAt: Date.now(),
-        };
-
-        playSong(song);
-        console.log(
-          "Playing song:",
-          item.title,
-          "with audio URL:",
-          videoData.audioUrl
-        );
-      } else {
-        console.error("No audio URL found for video:", item.id);
-        clearSongLoading();
-      }
+          duration: item.duration ? parseInt(item.duration, 10) : undefined,
+          source: item.source,
+          url: item.href || item.url || item.permalink_url,
+        },
+        {
+          queue,
+          currentIndex: currentIndex >= 0 ? currentIndex : 0,
+        }
+      );
     } catch (error) {
-      console.error("Failed to fetch video details:", error);
-      clearSongLoading();
+      console.error("Failed to play search result:", error);
     } finally {
       setLoadingSongId((current) => (current === item.id ? null : current));
     }
