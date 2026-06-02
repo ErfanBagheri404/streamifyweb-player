@@ -15,6 +15,7 @@ export interface SearchResult {
   id: string;
   title: string;
   author?: string;
+  authorId?: string;
   duration: string;
   views?: string;
   thumbnailUrl?: string;
@@ -32,6 +33,8 @@ export interface SearchResult {
   verified?: boolean;
   subCount?: number | string;
   authorThumbnails?: AuthorThumbnail[];
+  uploaderAvatar?: string;
+  uploaderUrl?: string;
   url?: string;
   permalink_url?: string;
   videos?: Array<{

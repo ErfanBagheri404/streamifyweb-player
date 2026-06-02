@@ -893,6 +893,8 @@ function SearchPageInner() {
     setLoadingSongId(item.id);
 
     try {
+      const artistId = normalizeArtistRouteId(item.authorId || item.uploaderUrl);
+      const artistImage = item.uploaderAvatar || item.authorThumbnails?.[0]?.url;
       const songResults = searchResults.filter(
         (result) =>
           result.type === "song" ||
@@ -905,6 +907,10 @@ function SearchPageInner() {
         id: result.id,
         title: result.title,
         artist: result.author || "Unknown Artist",
+        artistId: normalizeArtistRouteId(result.authorId || result.uploaderUrl),
+        artistImage:
+          result.uploaderAvatar || result.authorThumbnails?.[0]?.url,
+        artistSource: result.source,
         coverUrl: result.thumbnailUrl || result.img || result.thumbnail,
         uploaded: result.uploaded,
         duration: result.duration ? parseInt(result.duration, 10) : undefined,
@@ -919,6 +925,9 @@ function SearchPageInner() {
           id: item.id,
           title: item.title,
           artist: item.author || "Unknown Artist",
+          artistId: artistId || undefined,
+          artistImage,
+          artistSource: item.source,
           coverUrl: item.thumbnailUrl || item.img || item.thumbnail,
           uploaded: item.uploaded,
           duration: item.duration ? parseInt(item.duration, 10) : undefined,

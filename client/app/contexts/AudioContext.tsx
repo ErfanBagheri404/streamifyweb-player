@@ -19,6 +19,9 @@ export interface Song {
   id: string;
   title: string;
   artist: string;
+  artistId?: string;
+  artistImage?: string;
+  artistSource?: string;
   coverUrl?: string;
   audioUrl?: string;
   audioUrls?: string[];
@@ -498,6 +501,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const playbackFrameRef = useRef<number | null>(null);
   const soundCloudWidgetProgressIntervalRef = useRef<number | null>(null);
   const playbackRunIdRef = useRef("post-fix");
+  const isRepeatRef = useRef(false);
+  const playbackQueueRef = useRef<Song[]>([]);
+  const queueIndexRef = useRef(-1);
+  const volumeRef = useRef(1);
   const hlsControllerRef = useRef<{ destroy: () => void } | null>(null);
   const hlsSourceRef = useRef<string | null>(null);
   const shakaPlayerRef = useRef<{
@@ -740,6 +747,22 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   );
 
   useEffect(() => {
+    isRepeatRef.current = isRepeat;
+  }, [isRepeat]);
+
+  useEffect(() => {
+    playbackQueueRef.current = playbackQueue;
+  }, [playbackQueue]);
+
+  useEffect(() => {
+    queueIndexRef.current = queueIndex;
+  }, [queueIndex]);
+
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     const needsCrossOrigin =
@@ -784,7 +807,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     let cancelled = false;
 
     const handleWidgetFinish = () => {
-      if (isRepeat) {
+      if (isRepeatRef.current) {
         const widget = soundCloudWidgetRef.current;
         if (widget) {
           try {
@@ -797,12 +820,19 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         return;
       }
 
+      // Tear down the finished widget immediately so it cannot restart
+      // while the next queued track is still being resolved.
+      destroySoundCloudWidgetPlayback();
+
+      const queuedSongs = playbackQueueRef.current;
+      const activeQueueIndex = queueIndexRef.current;
       if (
-        playbackQueue.length > 0 &&
-        queueIndex >= 0 &&
-        queueIndex < playbackQueue.length - 1
+        queuedSongs.length > 0 &&
+        activeQueueIndex >= 0 &&
+        activeQueueIndex < queuedSongs.length - 1
       ) {
-        const nextSong = playbackQueue[queueIndex + 1];
+        const nextQueueIndex = activeQueueIndex + 1;
+        const nextSong = queuedSongs[nextQueueIndex];
         if (!nextSong) return;
 
         setIsPlaying(false);
@@ -811,15 +841,19 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
         void resolveSongForPlayback(nextSong)
           .then((resolvedSong) => {
-            const nextQueue = playbackQueue.map((entry) =>
-              normalizeSong(entry)
-            );
-            nextQueue[queueIndex + 1] = {
-              ...nextQueue[queueIndex + 1],
-              ...resolvedSong,
-            };
-            setPlaybackQueue(nextQueue);
-            setQueueIndex(queueIndex + 1);
+            setPlaybackQueue((previousQueue) => {
+              const nextQueue = previousQueue.map((entry) =>
+                normalizeSong(entry)
+              );
+              if (nextQueue[nextQueueIndex]) {
+                nextQueue[nextQueueIndex] = {
+                  ...nextQueue[nextQueueIndex],
+                  ...resolvedSong,
+                };
+              }
+              return nextQueue;
+            });
+            setQueueIndex(nextQueueIndex);
             setCurrentSong(resolvedSong);
             setDuration(resolvedSong.duration || 0);
             setPlaybackError(null);
@@ -923,7 +957,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         soundCloudWidgetReadyRef.current = true;
         setPlaybackError(null);
         setIsSongLoading(false);
-        widget.setVolume(Math.round(volume * 100));
+        widget.setVolume(Math.round(volumeRef.current * 100));
         syncSoundCloudWidgetProgress(currentSong.duration);
         if (isPlaying) {
           widget.play();
@@ -1009,7 +1043,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         setIsPlaying(false);
       });
 
-      widget.setVolume(Math.round(volume * 100));
+      widget.setVolume(Math.round(volumeRef.current * 100));
 
       if (soundCloudWidgetSourceRef.current !== soundCloudWidgetTrackUrl) {
         // #region debug-point A:widget-load-call
@@ -1115,6 +1149,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     destroySoundCloudWidgetPlayback();
 
     if (!nextAudioUrl) {
+      if (isSongLoading) {
+        return;
+      }
       // #region debug-point H4:audio-missing-url
       reportDebugEvent(
         playbackRunIdRef.current,
@@ -1848,7 +1885,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     return () => {
       cancelled = true;
     };
-  }, [currentSong, isPlaying]);
+  }, [currentSong, isPlaying, isSongLoading, syncSoundCloudWidgetProgress]);
 
   useEffect(() => {
     if (soundCloudWidgetProgressIntervalRef.current !== null) {
@@ -2010,6 +2047,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         }
       );
       // #endregion
+      if (isSongLoading && !currentSong?.audioUrl) {
+        return;
+      }
       setIsSongLoading(false);
     };
 
@@ -2064,7 +2104,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       audio.removeEventListener("emptied", handleEmptied);
       audio.removeEventListener("error", handleError);
     };
-  }, [currentSong?.id]);
+  }, [currentSong?.id, currentSong?.audioUrl, isSongLoading]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -2316,7 +2356,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
     audio.addEventListener("ended", handleEnded);
     return () => audio.removeEventListener("ended", handleEnded);
-  }, [isRepeat, playbackQueue, queueIndex]);
+  }, [currentSong, isRepeat, playbackQueue, queueIndex]);
 
   const playSong = (song: Song, options?: PlaybackOptions) => {
     const audio = audioRef.current;

@@ -1269,18 +1269,29 @@ async function fetchVideoDetails(
     ];
 
     const errors: string[] = [];
-    for (const provider of providers) {
-      try {
-        const value = await provider.run();
-        return value;
-      } catch (error) {
-        errors.push(
-          `${provider.label}: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
-      }
+    const controller = new AbortController();
+
+    try {
+      const value = await Promise.any(
+        providers.map(async (provider) => {
+          try {
+            return await provider.run(controller.signal);
+          } catch (error) {
+            errors.push(
+              `${provider.label}: ${
+                error instanceof Error ? error.message : String(error)
+              }`
+            );
+            throw error;
+          }
+        })
+      );
+      controller.abort();
+      return value;
+    } catch {
+      controller.abort();
     }
+
     throw new Error(errors.join(" | ") || "All YouTube providers failed");
   }
 

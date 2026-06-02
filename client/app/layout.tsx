@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import LeftPanel from "./components/LeftPanel";
 import MiniPlayer from "./components/MiniPlayer";
@@ -26,7 +27,9 @@ export default function RootLayout({
       >
         <AudioProvider>
           <LeftPanel />
-          <DynamicMainContent>{children}</DynamicMainContent>
+          <Suspense fallback={null}>
+            <DynamicMainContent>{children}</DynamicMainContent>
+          </Suspense>
           <MiniPlayer />
         </AudioProvider>
       </body>
