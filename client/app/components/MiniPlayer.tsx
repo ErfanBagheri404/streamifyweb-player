@@ -37,6 +37,9 @@ function createStaticWaveform(seedInput: string, count: number): number[] {
 const MiniPlayer: React.FC = () => {
   const {
     currentSong,
+    recentSongs,
+    playbackQueue,
+    queueIndex,
     isPlaying,
     isSongLoading,
     playbackError,
@@ -54,6 +57,10 @@ const MiniPlayer: React.FC = () => {
     isFullscreenOpen,
     openFullscreen,
     closeFullscreen,
+    showAutoRetryPrompt,
+    autoRetryStatusMessage,
+    enableAutoRetry,
+    disableAutoRetry,
   } = useAudio();
 
   const compactWaveformRef = useRef<HTMLButtonElement>(null);
@@ -102,6 +109,13 @@ const MiniPlayer: React.FC = () => {
   const progressPercent = progress * 100;
   const playedBars = Math.round(progress * waveformBars.length);
   const volumePercent = Math.round(volume * 100);
+  const canGoPrevious =
+    currentTime > 3 || queueIndex > 0 || recentSongs.length > 1;
+  const canGoNext = queueIndex >= 0 && queueIndex < playbackQueue.length - 1;
+  const queuePositionLabel =
+    playbackQueue.length > 1 && queueIndex >= 0
+      ? `${queueIndex + 1} of ${playbackQueue.length}`
+      : null;
 
   const seekFromClientX = useCallback(
     (clientX: number) => {
@@ -190,190 +204,255 @@ const MiniPlayer: React.FC = () => {
     : null;
 
   return (
-    <div className="fixed bottom-3 left-3 right-3 z-50 rounded-full bg-[#181818] p-3">
-      <div className="mx-auto flex max-w-full items-center justify-between">
-        <div className="flex min-w-0 flex-1 items-center space-x-3">
-          <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-gray-700">
-            {currentSong.coverUrl ? (
-              <Image
-                src={currentSong.coverUrl}
-                alt={currentSong.title}
-                fill
-                style={{ objectFit: "cover" }}
-                sizes="48px"
-                unoptimized
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-gray-600">
-                <Image
-                  src="/StreamifyLogo.svg"
-                  alt="Default cover"
-                  width={24}
-                  height={24}
-                  className="opacity-50"
-                />
-              </div>
-            )}
+    <div className="fixed bottom-3 left-3 right-3 z-50">
+      <div
+        className={`pointer-events-none absolute bottom-full left-1/2 mb-3 flex -translate-x-1/2 transition-all duration-200 ${
+          showAutoRetryPrompt || autoRetryStatusMessage
+            ? "translate-y-0 opacity-100"
+            : "translate-y-2 opacity-0"
+        }`}
+      >
+        {showAutoRetryPrompt ? (
+          <div className="pointer-events-auto w-[min(92vw,420px)] rounded-[28px] border border-white/10 bg-[#181818]/95 p-4 text-white shadow-[0_22px_55px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+              Playback Help
+            </p>
+            <p className="mt-2 text-sm font-medium text-white">
+              Enable auto retry if playback fails?
+            </p>
+            <p className="mt-1 text-sm text-white/60">
+              Streamify retries once automatically and lets you know when it is
+              retrying.
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={disableAutoRetry}
+                className="rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:text-white"
+              >
+                No thanks
+              </button>
+              <button
+                type="button"
+                onClick={enableAutoRetry}
+                className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:scale-[1.02]"
+              >
+                Enable auto retry
+              </button>
+            </div>
           </div>
-          <div className="flex min-w-0 flex-col gap-1">
-            <h4 className="truncate text-sm font-medium text-white">
-              {currentSong.title}
-            </h4>
-            <p
-              className={`truncate text-xs ${
-                statusText
-                  ? isSongLoading
-                    ? "text-gray-400"
-                    : "text-red-300"
-                  : "text-gray-400"
+        ) : autoRetryStatusMessage ? (
+          <div className="pointer-events-auto rounded-full border border-white/10 bg-black/70 px-4 py-2 text-sm font-medium text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+            {autoRetryStatusMessage}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="rounded-full bg-[#181818] p-3 shadow-[0_20px_50px_rgba(0,0,0,0.35)]">
+        <div className="mx-auto flex max-w-full items-center justify-between">
+          <div className="flex min-w-0 flex-1 items-center space-x-3">
+            <div
+              className={`relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-gray-700 transition ${
+                isPlaying
+                  ? "ring-2 ring-white/18 ring-offset-2 ring-offset-[#181818]"
+                  : ""
               }`}
             >
-              {statusText || currentSong.artist}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex min-w-0 flex-1 items-center justify-center space-x-3 px-4">
-          <button
-            ref={compactWaveformRef}
-            type="button"
-            onPointerDown={handleCompactWaveformPointerDown}
-            onPointerMove={handleCompactWaveformPointerMove}
-            onPointerUp={handleCompactWaveformPointerEnd}
-            onPointerCancel={handleCompactWaveformPointerEnd}
-            className="relative h-8 flex-1 min-w-[180px] max-w-[240px] cursor-ew-resize overflow-hidden touch-none"
-            aria-label="Seek playback"
-          >
-            <div className="absolute inset-0 flex items-center gap-[2px]">
-              {waveformBars.map((height, index) => (
-                <span
-                  key={`${currentSong.id}-${index}`}
-                  className="w-full rounded-full transition-colors duration-150"
-                  style={{
-                    height: `${Math.max(18, Math.round(height * 100))}%`,
-                    backgroundColor:
-                      index < playedBars
-                        ? "rgba(255, 255, 255, 1)"
-                        : "rgba(255, 255, 255, 0.45)",
-                  }}
+              {currentSong.coverUrl ? (
+                <Image
+                  src={currentSong.coverUrl}
+                  alt={currentSong.title}
+                  fill
+                  style={{ objectFit: "cover" }}
+                  sizes="48px"
+                  unoptimized
                 />
-              ))}
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-gray-600">
+                  <Image
+                    src="/StreamifyLogo.svg"
+                    alt="Default cover"
+                    width={24}
+                    height={24}
+                    className="opacity-50"
+                  />
+                </div>
+              )}
             </div>
-            <div
-              className="pointer-events-none absolute inset-y-0 z-10 w-px bg-white/90"
-              style={{
-                left:
-                  progressPercent <= 0
-                    ? "0px"
-                    : `calc(${progressPercent}% - 0.5px)`,
-              }}
-            />
-          </button>
-          <div
-            className={`${spaceMono.className} whitespace-nowrap text-xs tabular-nums`}
-          >
-            <span className="text-white">{formatTime(currentTime)}</span>
-            <span className="text-white/50">
-              {" "}
-              / {formatTime(duration || 0)}
-            </span>
+            <div className="flex min-w-0 flex-col gap-1">
+              <h4 className="truncate text-sm font-medium text-white">
+                {currentSong.title}
+              </h4>
+              <p
+                className={`truncate text-xs ${
+                  statusText
+                    ? isSongLoading
+                      ? "text-gray-400"
+                      : "text-red-300"
+                    : "text-gray-400"
+                }`}
+              >
+                {statusText || currentSong.artist}
+              </p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-1 items-center justify-end space-x-2">
-          <button
-            type="button"
-            onClick={playPrevious}
-            className="rounded-full transition-colors"
-          >
-            <Image src="/Previous.svg" alt="Previous" width={42} height={42} />
-          </button>
-
-          <button
-            type="button"
-            disabled={isSongLoading}
-            onClick={handlePlayPause}
-            className="flex h-10 w-10 items-center justify-center transition-colors"
-          >
-            {isSongLoading ? (
-              <div className="h-5 w-5 rounded-full border-2 border-white/80 border-t-transparent animate-spin" />
-            ) : isPlaying ? (
-              <Image src="/Pause.svg" alt="Pause" width={32} height={32} />
-            ) : (
-              <Image src="/Play.svg" alt="Play" width={32} height={32} />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={playNext}
-            className="rounded-full transition-colors"
-          >
-            <Image src="/Next.svg" alt="Next" width={42} height={42} />
-          </button>
-
-          <button
-            type="button"
-            onClick={toggleRepeat}
-            className={`rounded-full transition-colors ${
-              isRepeat ? "opacity-100" : "opacity-70"
-            }`}
-          >
-            <Image src="/Repeat.svg" alt="Repeat" width={42} height={42} />
-          </button>
-
-          <div
-            ref={volumeControlRef}
-            className="relative flex items-center pr-2"
-          >
-            {isVolumeOpen ? (
-              <div className="absolute bottom-full right-1 mb-3 rounded-full bg-[#202020] px-4 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.4)]">
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={volumePercent}
-                  onChange={(event) =>
-                    setVolume(Number(event.target.value) / 100)
-                  }
-                  className="volume-slider h-4 w-20 cursor-pointer appearance-none bg-transparent"
-                  style={
-                    {
-                      "--volume-progress": `${volumePercent}%`,
-                    } as React.CSSProperties
-                  }
-                  aria-label="Adjust volume"
-                />
+          <div className="flex min-w-0 flex-1 items-center justify-center space-x-3 px-4">
+            <button
+              ref={compactWaveformRef}
+              type="button"
+              onPointerDown={handleCompactWaveformPointerDown}
+              onPointerMove={handleCompactWaveformPointerMove}
+              onPointerUp={handleCompactWaveformPointerEnd}
+              onPointerCancel={handleCompactWaveformPointerEnd}
+              className="relative h-8 flex-1 min-w-[180px] max-w-[240px] cursor-ew-resize overflow-hidden touch-none"
+              aria-label="Seek playback"
+            >
+              <div className="absolute inset-0 flex items-center gap-[2px]">
+                {waveformBars.map((height, index) => (
+                  <span
+                    key={`${currentSong.id}-${index}`}
+                    className="w-full rounded-full transition-colors duration-150"
+                    style={{
+                      height: `${Math.max(18, Math.round(height * 100))}%`,
+                      backgroundColor:
+                        index < playedBars
+                          ? "rgba(255, 255, 255, 1)"
+                          : "rgba(255, 255, 255, 0.45)",
+                    }}
+                  />
+                ))}
               </div>
+              <div
+                className="pointer-events-none absolute inset-y-0 z-10 w-px bg-white/90"
+                style={{
+                  left:
+                    progressPercent <= 0
+                      ? "0px"
+                      : `calc(${progressPercent}% - 0.5px)`,
+                }}
+              />
+            </button>
+            <div
+              className={`${spaceMono.className} whitespace-nowrap text-xs tabular-nums`}
+            >
+              <span className="text-white">{formatTime(currentTime)}</span>
+              <span className="text-white/50">
+                {" "}
+                / {formatTime(duration || 0)}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-1 items-center justify-end space-x-2">
+            {queuePositionLabel ? (
+              <span className="hidden rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/55 xl:inline-flex">
+                Queue {queuePositionLabel}
+              </span>
             ) : null}
             <button
               type="button"
-              onClick={() => setIsVolumeOpen((prev) => !prev)}
-              className="rounded-full transition-colors"
-              aria-label="Toggle volume slider"
-              aria-expanded={isVolumeOpen}
+              onClick={playPrevious}
+              disabled={!canGoPrevious}
+              className="rounded-full transition duration-150 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100"
+              aria-label="Previous track"
             >
-              <Image src="/Volume.svg" alt="Volume" width={42} height={42} />
+              <Image
+                src="/Previous.svg"
+                alt="Previous"
+                width={42}
+                height={42}
+              />
+            </button>
+
+            <button
+              type="button"
+              disabled={isSongLoading}
+              onClick={handlePlayPause}
+              className="flex h-10 w-10 items-center justify-center transition duration-150 hover:scale-[1.03] disabled:hover:scale-100"
+            >
+              {isSongLoading ? (
+                <div className="h-5 w-5 rounded-full border-2 border-white/80 border-t-transparent animate-spin" />
+              ) : isPlaying ? (
+                <Image src="/Pause.svg" alt="Pause" width={32} height={32} />
+              ) : (
+                <Image src="/Play.svg" alt="Play" width={32} height={32} />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={playNext}
+              disabled={!canGoNext}
+              className="rounded-full transition duration-150 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100"
+              aria-label="Next track"
+            >
+              <Image src="/Next.svg" alt="Next" width={42} height={42} />
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleRepeat}
+              className={`rounded-full transition-colors ${
+                isRepeat ? "opacity-100" : "opacity-70"
+              }`}
+            >
+              <Image src="/Repeat.svg" alt="Repeat" width={42} height={42} />
+            </button>
+
+            <div
+              ref={volumeControlRef}
+              className="relative flex items-center pr-2"
+            >
+              {isVolumeOpen ? (
+                <div className="absolute bottom-full right-1 mb-3 rounded-full bg-[#202020] px-4 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.4)]">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={volumePercent}
+                    onChange={(event) =>
+                      setVolume(Number(event.target.value) / 100)
+                    }
+                    className="volume-slider h-4 w-20 cursor-pointer appearance-none bg-transparent"
+                    style={
+                      {
+                        "--volume-progress": `${volumePercent}%`,
+                      } as React.CSSProperties
+                    }
+                    aria-label="Adjust volume"
+                  />
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setIsVolumeOpen((prev) => !prev)}
+                className="rounded-full transition duration-150 hover:scale-[1.03]"
+                aria-label="Toggle volume slider"
+                aria-expanded={isVolumeOpen}
+              >
+                <Image src="/Volume.svg" alt="Volume" width={42} height={42} />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleFullscreenToggle}
+              className="rounded-full pr-2 transition duration-150 hover:scale-[1.03]"
+              aria-label={
+                isFullscreenOpen
+                  ? "Close fullscreen player"
+                  : "Open fullscreen player"
+              }
+            >
+              <Image
+                src="/Fullscreen.svg"
+                alt="Fullscreen"
+                width={16}
+                height={16}
+              />
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={handleFullscreenToggle}
-            className="rounded-full pr-2 transition-colors"
-            aria-label={
-              isFullscreenOpen
-                ? "Close fullscreen player"
-                : "Open fullscreen player"
-            }
-          >
-            <Image
-              src="/Fullscreen.svg"
-              alt="Fullscreen"
-              width={16}
-              height={16}
-            />
-          </button>
         </div>
       </div>
     </div>

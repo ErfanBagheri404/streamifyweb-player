@@ -12,8 +12,11 @@ import React, {
 
 type AudioType = "file" | "hls" | "soundcloud-drm";
 type PlaybackStrategy = "audio" | "widget";
+type AutoRetryPreference = "unknown" | "enabled" | "disabled";
 const DEFAULT_PLAYBACK_ERROR =
   "Couldn't play this track. Try again or choose another one.";
+const AUTO_RETRY_STORAGE_KEY = "streamifyAutoRetryPlayback";
+const AUTO_RETRY_MESSAGE = "Auto retry is enabled and retrying...";
 
 export interface Song {
   id: string;
@@ -72,6 +75,13 @@ interface AudioContextType {
   closeFullscreen: () => void;
   audioRef: React.RefObject<HTMLAudioElement>;
   isPlayerVisible: boolean; // Add this
+  autoRetryPreference: AutoRetryPreference;
+  showAutoRetryPrompt: boolean;
+  isAutoRetrying: boolean;
+  autoRetryStatusMessage: string | null;
+  enableAutoRetry: () => void;
+  disableAutoRetry: () => void;
+  dismissAutoRetryPrompt: () => void;
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
@@ -457,6 +467,16 @@ function normalizeSong(song: Song): Song {
   };
 }
 
+function buildSongArtwork(song: Song): MediaImage[] {
+  if (!song.coverUrl) return [];
+
+  return [
+    { src: song.coverUrl, sizes: "96x96", type: "image/png" },
+    { src: song.coverUrl, sizes: "192x192", type: "image/png" },
+    { src: song.coverUrl, sizes: "512x512", type: "image/png" },
+  ];
+}
+
 function shouldRefreshResolvedAudio(song: Song): boolean {
   const source = (song.source || "").toLowerCase();
 
@@ -495,11 +515,23 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const [volume, setVolumeState] = useState(1);
   const [isRepeat, setIsRepeat] = useState(false);
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+  const [autoRetryPreference, setAutoRetryPreference] =
+    useState<AutoRetryPreference>("unknown");
+  const [showAutoRetryPrompt, setShowAutoRetryPrompt] = useState(false);
+  const [isAutoRetrying, setIsAutoRetrying] = useState(false);
+  const [autoRetryStatusMessage, setAutoRetryStatusMessage] = useState<
+    string | null
+  >(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const hasHydratedRef = useRef(false);
   const playbackFrameRef = useRef<number | null>(null);
   const soundCloudWidgetProgressIntervalRef = useRef<number | null>(null);
+  const autoRetryStatusTimerRef = useRef<number | null>(null);
+  const autoRetryInFlightRef = useRef(false);
+  const autoRetryAttemptCountRef = useRef<Record<string, number>>({});
+  const currentSongRef = useRef<Song | null>(null);
+  const autoRetryPreferenceRef = useRef<AutoRetryPreference>("unknown");
   const playbackRunIdRef = useRef("post-fix");
   const isRepeatRef = useRef(false);
   const playbackQueueRef = useRef<Song[]>([]);
@@ -519,6 +551,103 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     songId: string;
     audioUrl: string;
   } | null>(null);
+
+  const setTransientAutoRetryStatus = useCallback((message: string | null) => {
+    if (autoRetryStatusTimerRef.current !== null) {
+      window.clearTimeout(autoRetryStatusTimerRef.current);
+      autoRetryStatusTimerRef.current = null;
+    }
+
+    setAutoRetryStatusMessage(message);
+
+    if (message) {
+      autoRetryStatusTimerRef.current = window.setTimeout(() => {
+        setAutoRetryStatusMessage(null);
+        autoRetryStatusTimerRef.current = null;
+      }, 2400);
+    }
+  }, []);
+
+  const clearAutoRetryState = useCallback(() => {
+    autoRetryInFlightRef.current = false;
+    setIsAutoRetrying(false);
+  }, []);
+
+  const enableAutoRetry = useCallback(() => {
+    autoRetryPreferenceRef.current = "enabled";
+    setAutoRetryPreference("enabled");
+    setShowAutoRetryPrompt(false);
+    if (playbackError && currentSongRef.current) {
+      scheduleAutoRetry(currentSongRef.current, "user-enabled-auto-retry");
+    }
+  }, [playbackError]);
+
+  const disableAutoRetry = useCallback(() => {
+    autoRetryPreferenceRef.current = "disabled";
+    setAutoRetryPreference("disabled");
+    setShowAutoRetryPrompt(false);
+  }, []);
+
+  const dismissAutoRetryPrompt = useCallback(() => {
+    setShowAutoRetryPrompt(false);
+  }, []);
+
+  function scheduleAutoRetry(song: Song | null, reason: string): boolean {
+    if (!song) return false;
+
+    if (autoRetryPreferenceRef.current === "unknown") {
+      setShowAutoRetryPrompt(true);
+      return false;
+    }
+
+    if (autoRetryPreferenceRef.current !== "enabled") {
+      return false;
+    }
+
+    const attempts = autoRetryAttemptCountRef.current[song.id] ?? 0;
+    if (attempts >= 1 || autoRetryInFlightRef.current) {
+      return false;
+    }
+
+    autoRetryAttemptCountRef.current[song.id] = attempts + 1;
+    autoRetryInFlightRef.current = true;
+    setShowAutoRetryPrompt(false);
+    setIsAutoRetrying(true);
+    setPlaybackError(null);
+    setTransientAutoRetryStatus(AUTO_RETRY_MESSAGE);
+
+    window.setTimeout(() => {
+      const activeSong = currentSongRef.current;
+      if (!activeSong || activeSong.id !== song.id) {
+        clearAutoRetryState();
+        return;
+      }
+
+      const queue = playbackQueueRef.current;
+      const nextOptions =
+        queue.length > 0 && queueIndexRef.current >= 0
+          ? { queue, currentIndex: queueIndexRef.current }
+          : undefined;
+      const retrySong = shouldRefreshResolvedAudio(activeSong)
+        ? {
+            ...activeSong,
+            audioUrl: undefined,
+            audioUrls: undefined,
+            audioType: undefined,
+          }
+        : activeSong;
+
+      void resolveAndPlaySong(retrySong, nextOptions)
+        .catch((error) => {
+          console.error(`Auto retry failed after ${reason}:`, error);
+        })
+        .finally(() => {
+          clearAutoRetryState();
+        });
+    }, 900);
+
+    return true;
+  }
 
   const tryNextAudioCandidate = (
     song: Song | null,
@@ -681,6 +810,16 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   // Load saved state from localStorage on mount
   useEffect(() => {
     const savedState = localStorage.getItem("audioPlayerState");
+    const savedAutoRetryPreference = localStorage.getItem(
+      AUTO_RETRY_STORAGE_KEY
+    );
+    if (
+      savedAutoRetryPreference === "enabled" ||
+      savedAutoRetryPreference === "disabled"
+    ) {
+      setAutoRetryPreference(savedAutoRetryPreference);
+    }
+
     if (savedState) {
       try {
         const state = JSON.parse(savedState);
@@ -740,6 +879,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
   useEffect(
     () => () => {
+      if (autoRetryStatusTimerRef.current !== null) {
+        window.clearTimeout(autoRetryStatusTimerRef.current);
+      }
       destroyManagedPlayback();
       destroySoundCloudWidgetPlayback();
     },
@@ -759,8 +901,33 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   }, [queueIndex]);
 
   useEffect(() => {
+    currentSongRef.current = currentSong;
+  }, [currentSong]);
+
+  useEffect(() => {
+    autoRetryPreferenceRef.current = autoRetryPreference;
+    localStorage.setItem(AUTO_RETRY_STORAGE_KEY, autoRetryPreference);
+  }, [autoRetryPreference]);
+
+  useEffect(() => {
     volumeRef.current = volume;
   }, [volume]);
+
+  useEffect(() => {
+    if (!currentSong) {
+      autoRetryAttemptCountRef.current = {};
+      clearAutoRetryState();
+      setShowAutoRetryPrompt(false);
+      return;
+    }
+
+    autoRetryAttemptCountRef.current[currentSong.id] ??= 0;
+  }, [clearAutoRetryState, currentSong]);
+
+  useEffect(() => {
+    if (!playbackError || !currentSong || isSongLoading) return;
+    scheduleAutoRetry(currentSong, "playback-error");
+  }, [currentSong, isSongLoading, playbackError]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -2371,6 +2538,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
 
     setCurrentSong(normalizedSong);
+    if (!autoRetryInFlightRef.current) {
+      autoRetryAttemptCountRef.current[normalizedSong.id] = 0;
+      clearAutoRetryState();
+      setTransientAutoRetryStatus(null);
+      setShowAutoRetryPrompt(false);
+    }
     applyPlaybackOptions(normalizedSong, options);
     setRecentSongs((prev) => {
       const existing = prev.find((entry) => entry.id === normalizedSong.id);
@@ -2404,6 +2577,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
 
     setCurrentSong(normalizedSong);
+    if (!autoRetryInFlightRef.current) {
+      autoRetryAttemptCountRef.current[normalizedSong.id] = 0;
+      clearAutoRetryState();
+      setTransientAutoRetryStatus(null);
+      setShowAutoRetryPrompt(false);
+    }
     applyPlaybackOptions(normalizedSong, options);
     setRecentSongs((prev) => {
       const existing = prev.find((entry) => entry.id === normalizedSong.id);
@@ -2605,6 +2784,115 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setIsFullscreenOpen(false);
   };
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !currentSong || shouldUseSoundCloudWidget(currentSong))
+      return;
+
+    const syncActualPlaybackState = () => {
+      const isActuallyPlaying =
+        !audio.paused && !audio.ended && audio.currentSrc.length > 0;
+
+      if (!isSongLoading && isPlaying !== isActuallyPlaying) {
+        setIsPlaying(isActuallyPlaying);
+      }
+    };
+
+    syncActualPlaybackState();
+    const timer = window.setInterval(syncActualPlaybackState, 900);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [currentSong, isPlaying, isSongLoading]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+
+    const mediaSession = navigator.mediaSession;
+
+    if (!currentSong) {
+      mediaSession.metadata = null;
+      mediaSession.playbackState = "none";
+      return;
+    }
+
+    mediaSession.metadata = new MediaMetadata({
+      title: currentSong.title || "Unknown Track",
+      artist: currentSong.artist || "Unknown Artist",
+      album:
+        playbackQueue.length > 1 && queueIndex >= 0
+          ? `Queue ${queueIndex + 1} of ${playbackQueue.length}`
+          : currentSong.source || "Streamify",
+      artwork: buildSongArtwork(currentSong),
+    });
+
+    mediaSession.playbackState = isPlaying ? "playing" : "paused";
+
+    try {
+      mediaSession.setPositionState?.({
+        duration: duration || currentSong.duration || 0,
+        playbackRate: 1,
+        position: currentTime,
+      });
+    } catch {}
+
+    const setHandler = (
+      action: MediaSessionAction,
+      handler: MediaSessionActionHandler | null
+    ) => {
+      try {
+        mediaSession.setActionHandler(action, handler);
+      } catch {}
+    };
+
+    setHandler("play", () => resumeSong());
+    setHandler("pause", () => pauseSong());
+    setHandler("previoustrack", () => playPrevious());
+    setHandler("nexttrack", () => playNext());
+    setHandler("seekbackward", (details) =>
+      seekTo(Math.max(0, currentTime - (details.seekOffset || 10)))
+    );
+    setHandler("seekforward", (details) =>
+      seekTo(
+        Math.min(
+          duration || currentSong.duration || currentTime + 10,
+          currentTime + (details.seekOffset || 10)
+        )
+      )
+    );
+    setHandler("seekto", (details) => {
+      if (typeof details.seekTime === "number") {
+        seekTo(details.seekTime);
+      }
+    });
+    setHandler("stop", () => pauseSong());
+
+    return () => {
+      setHandler("play", null);
+      setHandler("pause", null);
+      setHandler("previoustrack", null);
+      setHandler("nexttrack", null);
+      setHandler("seekbackward", null);
+      setHandler("seekforward", null);
+      setHandler("seekto", null);
+      setHandler("stop", null);
+    };
+  }, [
+    currentSong,
+    currentTime,
+    duration,
+    isPlaying,
+    pauseSong,
+    playNext,
+    playPrevious,
+    playbackQueue.length,
+    queueIndex,
+    resumeSong,
+    seekTo,
+  ]);
+
   const value: AudioContextType = {
     currentSong,
     recentSongs,
@@ -2634,6 +2922,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     audioRef,
     playbackError,
     isPlayerVisible: currentSong !== null, // Player is visible if a song is loaded
+    autoRetryPreference,
+    showAutoRetryPrompt,
+    isAutoRetrying,
+    autoRetryStatusMessage,
+    enableAutoRetry,
+    disableAutoRetry,
+    dismissAutoRetryPrompt,
   };
 
   // Browser-console diagnostic so the user can verify the proxy is

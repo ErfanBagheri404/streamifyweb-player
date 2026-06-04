@@ -3,9 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { SearchResult } from "../../../components/search";
-import { useAudio } from "../../../contexts/AudioContext";
+import { type Song, useAudio } from "../../../contexts/AudioContext";
+import {
+  LOCAL_LIBRARY_UPDATED_EVENT,
+  readLocalCollection,
+  removeStoredPlaylist,
+} from "../../../lib/local-library";
 
 const DEBUG_SERVER_URL = "";
 const DEBUG_SESSION_ID = "soundcloud-collection-bug";
@@ -132,6 +137,8 @@ function formatDateAdded(value?: string): string {
 
 function getSourceLabel(source?: string): string {
   switch ((source || "").toLowerCase()) {
+    case "local":
+      return "Your Library";
     case "youtubemusic":
       return "YouTube Music";
     case "youtube":
@@ -197,6 +204,26 @@ function MoreGlyph() {
       <circle cx="5" cy="12" r="1.8" />
       <circle cx="12" cy="12" r="1.8" />
       <circle cx="19" cy="12" r="1.8" />
+    </svg>
+  );
+}
+
+function TrashGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4.75 7.75h14.5M9.25 10.75v5.5M14.75 10.75v5.5M8 4.75h8l.75 3H7.25l.75-3Zm-.75 3h9.5l-.6 10.02a1.5 1.5 0 0 1-1.5 1.41H9.35a1.5 1.5 0 0 1-1.5-1.41L7.25 7.75Z"
+      />
     </svg>
   );
 }
@@ -270,6 +297,7 @@ function getCollectionEntries(item: SearchResult | null): CollectionEntry[] {
 }
 
 export default function CollectionPage() {
+  const router = useRouter();
   const params = useParams<{ kind: string; id: string }>();
   const searchParams = useSearchParams();
   const { currentSong, isPlaying, resolveAndPlaySong } = useAudio();
@@ -301,6 +329,35 @@ export default function CollectionPage() {
     isLoading: false,
   });
   const [loadingSongId, setLoadingSongId] = useState<string | null>(null);
+  const [localLibraryVersion, setLocalLibraryVersion] = useState(0);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleLocalLibraryUpdated = () => {
+      setLocalLibraryVersion((value) => value + 1);
+    };
+
+    window.addEventListener(
+      LOCAL_LIBRARY_UPDATED_EVENT,
+      handleLocalLibraryUpdated
+    );
+    window.addEventListener("storage", handleLocalLibraryUpdated);
+
+    return () => {
+      window.removeEventListener(
+        LOCAL_LIBRARY_UPDATED_EVENT,
+        handleLocalLibraryUpdated
+      );
+      window.removeEventListener("storage", handleLocalLibraryUpdated);
+    };
+  }, []);
+
+  const localCollection = useMemo(
+    () => (source.toLowerCase() === "local" ? readLocalCollection(id) : null),
+    [id, localLibraryVersion, source]
+  );
 
   const shouldFetchRemote = useMemo(() => {
     const lowerSource = source.toLowerCase();
@@ -461,9 +518,22 @@ export default function CollectionPage() {
   ]);
 
   const entries = useMemo(() => {
+    if (localCollection) {
+      return localCollection.songs.map((song, index) => ({
+        id: song.id || `${id}-${index}`,
+        title: song.title,
+        subtitle: song.artist,
+        thumbnailUrl: song.coverUrl,
+        duration: song.duration,
+        artist: song.artist,
+        url: song.url,
+        album: localCollection.collection.title,
+        addedAt: song.uploaded,
+      }));
+    }
     if (remoteState.entries.length > 0) return remoteState.entries;
     return getCollectionEntries(storedItem);
-  }, [remoteState.entries, storedItem]);
+  }, [id, localCollection, remoteState.entries, storedItem]);
 
   const backParams = new URLSearchParams();
   const searchQuery = searchParams.get("search_query");
@@ -472,26 +542,39 @@ export default function CollectionPage() {
   if (searchQuery) backParams.set("q", searchQuery);
   if (searchSource) backParams.set("source", searchSource);
   if (searchFilter) backParams.set("filter", searchFilter);
-  const backHref = `/search${
-    backParams.toString() ? `?${backParams.toString()}` : ""
-  }`;
+  const backHref =
+    source.toLowerCase() === "local"
+      ? "/library"
+      : `/search${backParams.toString() ? `?${backParams.toString()}` : ""}`;
 
   const displayTitle =
-    remoteState.collection?.title || storedItem?.title || title || "Untitled";
+    localCollection?.collection.title ||
+    remoteState.collection?.title ||
+    storedItem?.title ||
+    title ||
+    "Untitled";
   const displayAuthor =
-    remoteState.collection?.author || storedItem?.author || author;
+    localCollection?.collection.author ||
+    remoteState.collection?.author ||
+    storedItem?.author ||
+    author;
   const displayDescription =
+    localCollection?.collection.description ||
     remoteState.collection?.description ||
     (storedItem as (SearchResult & { description?: string }) | null)
       ?.description ||
     "";
   const displayImage =
+    localCollection?.collection.thumbnailUrl ||
     remoteState.collection?.thumbnailUrl ||
     storedItem?.thumbnailUrl ||
     storedItem?.img ||
     image;
   const collectionSource =
-    remoteState.collection?.source || storedItem?.source || source;
+    localCollection?.collection.source ||
+    remoteState.collection?.source ||
+    storedItem?.source ||
+    source;
 
   const totalRuntime = useMemo(
     () =>
@@ -508,6 +591,8 @@ export default function CollectionPage() {
       ? `${formatCount(entries.length)} ${
           entries.length === 1 ? "song" : "songs"
         }`
+      : localCollection?.collection.count != null
+      ? `${formatCount(localCollection.collection.count)} items`
       : remoteState.collection?.count != null
       ? `${formatCount(remoteState.collection.count)} items`
       : count
@@ -520,7 +605,15 @@ export default function CollectionPage() {
     formatCollectionRuntime(totalRuntime),
   ].filter(Boolean);
 
-  const canPlayEntries = isPlayableSource(collectionSource);
+  const canPlayEntries =
+    collectionSource.toLowerCase() === "local" ||
+    isPlayableSource(collectionSource);
+  const isRemovableLocalPlaylist =
+    source.toLowerCase() === "local" &&
+    kind === "playlist" &&
+    id !== "liked-songs" &&
+    id !== "previously-played" &&
+    Boolean(localCollection);
 
   const handleEntryPress = async (entry: CollectionEntry) => {
     if (!canPlayEntries || loadingSongId === entry.id) return;
@@ -528,35 +621,52 @@ export default function CollectionPage() {
     setLoadingSongId(entry.id);
 
     try {
-      const queue = entries.map((item) => ({
-        id: item.id,
-        title: item.title,
-        artist:
-          item.artist || item.subtitle || displayAuthor || "Unknown Artist",
-        coverUrl: item.thumbnailUrl || displayImage,
-        duration: item.duration,
-        source: collectionSource,
-        url: item.url,
-      }));
+      if (localCollection) {
+        const queue = localCollection.songs.map((song) => ({ ...song }));
+        const currentIndex = queue.findIndex((song) => song.id === entry.id);
+        const selectedSong =
+          queue[currentIndex >= 0 ? currentIndex : 0] || queue[0];
 
-      const currentIndex = queue.findIndex((song) => song.id === entry.id);
-
-      await resolveAndPlaySong(
-        {
-          id: entry.id,
-          title: entry.title,
-          artist:
-            entry.artist || entry.subtitle || displayAuthor || "Unknown Artist",
-          coverUrl: entry.thumbnailUrl || displayImage,
-          duration: entry.duration,
-          source: collectionSource,
-          url: entry.url,
-        },
-        {
-          queue,
-          currentIndex: currentIndex >= 0 ? currentIndex : 0,
+        if (selectedSong) {
+          await resolveAndPlaySong(selectedSong, {
+            queue,
+            currentIndex: currentIndex >= 0 ? currentIndex : 0,
+          });
         }
-      );
+      } else {
+        const queue: Song[] = entries.map((item) => ({
+          id: item.id,
+          title: item.title,
+          artist:
+            item.artist || item.subtitle || displayAuthor || "Unknown Artist",
+          coverUrl: item.thumbnailUrl || displayImage,
+          duration: item.duration,
+          source: collectionSource,
+          url: item.url,
+        }));
+
+        const currentIndex = queue.findIndex((song) => song.id === entry.id);
+
+        await resolveAndPlaySong(
+          {
+            id: entry.id,
+            title: entry.title,
+            artist:
+              entry.artist ||
+              entry.subtitle ||
+              displayAuthor ||
+              "Unknown Artist",
+            coverUrl: entry.thumbnailUrl || displayImage,
+            duration: entry.duration,
+            source: collectionSource,
+            url: entry.url,
+          },
+          {
+            queue,
+            currentIndex: currentIndex >= 0 ? currentIndex : 0,
+          }
+        );
+      }
     } catch (error) {
       console.error("Failed to play collection entry:", error);
     } finally {
@@ -569,8 +679,62 @@ export default function CollectionPage() {
     void handleEntryPress(entries[0]);
   };
 
+  const handleDeletePlaylist = () => {
+    const result = removeStoredPlaylist(id);
+    if (!result.removed) {
+      setIsDeleteModalOpen(false);
+      return;
+    }
+
+    setIsDeleteModalOpen(false);
+    router.replace("/library");
+  };
+
   return (
     <div className="min-h-full overflow-hidden rounded-2xl bg-[#121212] text-white">
+      <div
+        className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm transition ${
+          isDeleteModalOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setIsDeleteModalOpen(false)}
+      >
+        <div
+          className={`w-full max-w-md rounded-[28px] border border-white/10 bg-[#181818] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.45)] transition ${
+            isDeleteModalOpen ? "scale-100" : "scale-95"
+          }`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
+            Remove Playlist
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold text-white">
+            Delete {displayTitle}?
+          </h2>
+          <p className="mt-2 text-sm text-white/60">
+            This removes the playlist from your library. Your liked songs and
+            listening history stay unchanged.
+          </p>
+          <div className="mt-6 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsDeleteModalOpen(false)}
+              className="rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDeletePlaylist}
+              className="rounded-full bg-[#f15e6c] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#ff7280]"
+            >
+              Remove playlist
+            </button>
+          </div>
+        </div>
+      </div>
+
       <section className="relative overflow-hidden bg-[linear-gradient(180deg,#9fadab_0%,#5d6b69_42%,#1e2726_70%,#121212_100%)] px-5 pb-8 pt-5 md:px-8 md:pb-10 md:pt-6">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_32%),linear-gradient(180deg,rgba(0,0,0,0)_0%,rgba(0,0,0,0.22)_55%,rgba(0,0,0,0.6)_100%)]" />
         <div className="relative z-10">
@@ -645,6 +809,17 @@ export default function CollectionPage() {
           >
             <MoreGlyph />
           </button>
+          {isRemovableLocalPlaylist ? (
+            <button
+              type="button"
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full border border-white/12 px-4 py-2.5 text-sm font-semibold text-white/78 transition hover:border-white/18 hover:bg-white/8 hover:text-white"
+              aria-label="Remove playlist"
+            >
+              <TrashGlyph />
+              Remove playlist
+            </button>
+          ) : null}
         </div>
 
         {remoteState.error ? (

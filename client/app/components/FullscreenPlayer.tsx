@@ -4,6 +4,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useAudio } from "../contexts/AudioContext";
 import {
+  addSongToPlaylist,
+  isSongLiked,
+  LOCAL_LIBRARY_UPDATED_EVENT,
+  readStoredPlaylists,
+  toggleLikedSong,
+  type StoredPlaylist,
+} from "../lib/local-library";
+import {
   buildTimedLyrics,
   fetchLyrics,
   findActiveLyricIndex,
@@ -27,6 +35,14 @@ function formatTime(time: number): string {
 
 function rgbToCss([r, g, b]: [number, number, number], alpha = 1): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function shiftColor(
+  [r, g, b]: [number, number, number],
+  amount: number
+): [number, number, number] {
+  const clamp = (value: number) => Math.max(0, Math.min(255, value));
+  return [clamp(r + amount), clamp(g + amount), clamp(b + amount)];
 }
 
 function ChevronDownGlyph() {
@@ -75,6 +91,62 @@ function ExpandGlyph() {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="m4.75 19.25 6.5-6.5"
+      />
+    </svg>
+  );
+}
+
+function PlusGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function HeartGlyph({
+  filled = false,
+  className = "h-4 w-4",
+}: {
+  filled?: boolean;
+  className?: string;
+}) {
+  if (filled) {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+        aria-hidden="true"
+      >
+        <path d="M12 21.35 10.55 20C5.4 15.24 2 12.09 2 8.22 2 5.07 4.42 2.65 7.57 2.65c1.78 0 3.49.82 4.43 2.12.94-1.3 2.65-2.12 4.43-2.12C19.58 2.65 22 5.07 22 8.22c0 3.87-3.4 7.02-8.55 11.78L12 21.35Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 20.25s-7.5-4.35-7.5-10.125A4.125 4.125 0 0 1 8.625 6a4.68 4.68 0 0 1 3.375 1.575A4.68 4.68 0 0 1 15.375 6 4.125 4.125 0 0 1 19.5 10.125C19.5 15.9 12 20.25 12 20.25Z"
       />
     </svg>
   );
@@ -180,6 +252,11 @@ export default function FullscreenPlayer() {
   const isProgrammaticLyricsScrollRef = useRef(false);
   const lyricsScrollReleaseTimerRef = useRef<number | null>(null);
   const lyricsUserScrollIntentUntilRef = useRef(0);
+  const feedbackTimerRef = useRef<number | null>(null);
+  const [ownedPlaylists, setOwnedPlaylists] = useState<StoredPlaylist[]>([]);
+  const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = useState(false);
+  const [isCurrentSongLiked, setIsCurrentSongLiked] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
   const upNextSongs = useMemo(() => {
     if (!currentSong || queueIndex < 0) return [];
@@ -373,8 +450,29 @@ export default function FullscreenPlayer() {
       if (lyricsScrollReleaseTimerRef.current !== null) {
         window.clearTimeout(lyricsScrollReleaseTimerRef.current);
       }
+      if (feedbackTimerRef.current !== null) {
+        window.clearTimeout(feedbackTimerRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncLocalLibrary = () => {
+      setOwnedPlaylists(readStoredPlaylists());
+      setIsCurrentSongLiked(currentSong ? isSongLiked(currentSong.id) : false);
+    };
+
+    syncLocalLibrary();
+    window.addEventListener("storage", syncLocalLibrary);
+    window.addEventListener(LOCAL_LIBRARY_UPDATED_EVENT, syncLocalLibrary);
+
+    return () => {
+      window.removeEventListener("storage", syncLocalLibrary);
+      window.removeEventListener(LOCAL_LIBRARY_UPDATED_EVENT, syncLocalLibrary);
+    };
+  }, [currentSong]);
 
   useEffect(() => {
     if (!lyricsState.isSynced) return;
@@ -431,6 +529,8 @@ export default function FullscreenPlayer() {
   const displayPalette = currentSong.coverUrl
     ? relatedPalette
     : DEFAULT_PALETTE;
+  const sectionPrimary = shiftColor(displayPalette.primary, 12);
+  const sectionSecondary = shiftColor(displayPalette.primary, -42);
 
   const runManualLyricsSearch = async () => {
     if (!currentSong) return;
@@ -496,8 +596,142 @@ export default function FullscreenPlayer() {
     });
   };
 
+  const showFeedback = (message: string) => {
+    setFeedbackMessage(message);
+    if (feedbackTimerRef.current !== null) {
+      window.clearTimeout(feedbackTimerRef.current);
+    }
+    feedbackTimerRef.current = window.setTimeout(() => {
+      setFeedbackMessage(null);
+    }, 2200);
+  };
+
+  const handleToggleLike = () => {
+    if (!currentSong) return;
+    const result = toggleLikedSong(currentSong);
+    setIsCurrentSongLiked(result.liked);
+    showFeedback(
+      result.liked ? "Added to Liked Songs" : "Removed from Liked Songs"
+    );
+  };
+
+  const handleAddCurrentSongToPlaylist = (playlistId: string) => {
+    if (!currentSong) return;
+
+    const result = addSongToPlaylist(playlistId, currentSong);
+    if (!result.playlist) return;
+
+    setOwnedPlaylists(readStoredPlaylists());
+    setIsPlaylistPickerOpen(false);
+    showFeedback(
+      result.alreadyExists
+        ? `${currentSong.title} is already in ${result.playlist.name}`
+        : `Added to ${result.playlist.name}`
+    );
+  };
+
   return (
-    <div className="h-full overflow-hidden rounded-xl">
+    <div className="relative h-full overflow-hidden rounded-xl">
+      <div
+        className={`pointer-events-none absolute left-1/2 top-4 z-40 flex -translate-x-1/2 transition-all duration-200 ${
+          feedbackMessage
+            ? "translate-y-0 opacity-100"
+            : "-translate-y-2 opacity-0"
+        }`}
+      >
+        <div className="rounded-full border border-white/12 bg-black/70 px-4 py-2 text-sm font-medium text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+          {feedbackMessage || "Saved"}
+        </div>
+      </div>
+
+      <div
+        className={`absolute inset-0 z-30 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm transition-all duration-200 ${
+          isPlaylistPickerOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setIsPlaylistPickerOpen(false)}
+      >
+        <div
+          className={`w-full max-w-md rounded-[28px] border border-white/10 bg-[#161616]/95 p-5 shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-2xl transition-all duration-200 ${
+            isPlaylistPickerOpen ? "scale-100" : "scale-95"
+          }`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">
+                Add To Playlist
+              </p>
+              <h3 className="mt-2 text-2xl font-semibold text-white">
+                Choose a playlist
+              </h3>
+              <p className="mt-1 text-sm text-white/55">
+                Save this track to one of your playlists.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsPlaylistPickerOpen(false)}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none text-white/70 transition hover:bg-white/8 hover:text-white"
+              aria-label="Close playlist picker"
+            >
+              ×
+            </button>
+          </div>
+
+          {ownedPlaylists.length > 0 ? (
+            <div className="mt-5 max-h-[320px] space-y-2 overflow-y-auto pr-1 hide-scrollbar">
+              {ownedPlaylists.map((playlist) => (
+                <button
+                  key={playlist.id}
+                  type="button"
+                  onClick={() => handleAddCurrentSongToPlaylist(playlist.id)}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.035] px-3 py-3 text-left transition hover:border-white/14 hover:bg-white/[0.06]"
+                >
+                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white/8">
+                    {playlist.songs[0]?.coverUrl ? (
+                      <Image
+                        src={playlist.songs[0].coverUrl}
+                        alt={playlist.name}
+                        fill
+                        className="object-cover"
+                        sizes="56px"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-white/45">
+                        <PlusGlyph />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-white">
+                      {playlist.name}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-white/55">
+                      {playlist.description || "Your playlist"}
+                    </p>
+                  </div>
+                  <span className="text-xs text-white/45">
+                    {playlist.songs.length} {playlist.songs.length === 1 ? "song" : "songs"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-5 rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-5 py-8 text-center">
+              <p className="text-base font-medium text-white">
+                No playlists yet
+              </p>
+              <p className="mt-2 text-sm text-white/55">
+                Create one from Your Library, then add this song here.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="grid h-full w-full gap-2 bg-[#070707] lg:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)]">
         <section className="relative min-h-[320px] overflow-hidden rounded-xl bg-[#8a1207]">
           {currentSong.coverUrl ? (
@@ -525,10 +759,29 @@ export default function FullscreenPlayer() {
               Minimize
               <ChevronDownGlyph />
             </button>
-            <div className="inline-flex items-center gap-2 rounded-full bg-black/25 px-4 py-2 text-sm font-medium text-white backdrop-blur-md">
-              Full Screen
-              <ExpandGlyph />
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsPlaylistPickerOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full bg-black/25 px-4 py-2 text-sm font-medium text-white backdrop-blur-md transition hover:bg-black/35"
+            >
+              Add to Playlist
+              <PlusGlyph />
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleLike}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium backdrop-blur-md transition ${
+                isCurrentSongLiked
+                  ? "bg-[#1ed760] text-black hover:bg-[#3be477]"
+                  : "bg-black/25 text-white hover:bg-black/35"
+              }`}
+            >
+              {isCurrentSongLiked ? "Liked" : "Like"}
+              <HeartGlyph
+                filled={isCurrentSongLiked}
+                className="h-4 w-4"
+              />
+            </button>
           </div>
 
           <div className="absolute bottom-2 left-2 right-2 rounded-xl bg-black/25 px-6 py-5 backdrop-blur-xl md:px-7">
@@ -672,12 +925,12 @@ export default function FullscreenPlayer() {
             className="flex max-h-[230px] min-h-0 flex-col overflow-hidden rounded-xl px-3 py-3 md:max-h-[250px] md:px-4 md:py-4"
             style={{
               backgroundImage: `linear-gradient(180deg, ${rgbToCss(
-                displayPalette.primary,
-                0.88
+                sectionPrimary,
+                0.96
               )} 0%, ${rgbToCss(
-                displayPalette.secondary,
-                0.76
-              )} 58%, rgba(24, 24, 24, 0.96) 100%)`,
+                sectionSecondary,
+                0.94
+              )} 100%)`,
             }}
           >
             <div className="flex items-center justify-between gap-3">
@@ -693,7 +946,10 @@ export default function FullscreenPlayer() {
                     key={`${sectionTitle}-${song.id}-${index}`}
                     type="button"
                     onClick={() => handleSectionSongPress(song, index)}
-                    className="flex w-full items-center gap-2.5 rounded-xl bg-black/10 px-2.5 py-1.5 text-left transition hover:bg-black/20"
+                    className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left transition hover:translate-x-1"
+                    style={{
+                      backgroundColor: rgbToCss(sectionSecondary, 0.22),
+                    }}
                     title={song.title}
                   >
                     <div className="relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-md">
@@ -735,7 +991,10 @@ export default function FullscreenPlayer() {
                 ))}
               </div>
             ) : (
-              <div className="mt-4 rounded-2xl bg-white/5 px-4 py-6 text-sm text-white/55">
+              <div
+                className="mt-4 rounded-2xl px-4 py-6 text-sm text-white/60"
+                style={{ backgroundColor: rgbToCss(sectionSecondary, 0.22) }}
+              >
                 Play a few more songs and related tracks will show up here.
               </div>
             )}

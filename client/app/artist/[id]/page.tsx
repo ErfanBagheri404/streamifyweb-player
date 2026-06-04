@@ -135,6 +135,29 @@ export default function ArtistPage() {
     )}?${params.toString()}`;
   };
 
+  const buildPlaylistHref = (playlist: ArtistPayload["playlists"][number]) => {
+    const params = new URLSearchParams();
+    params.set("title", playlist.title || "");
+    params.set("author", header.name);
+    params.set("source", pageSource || "youtube");
+    if (playlist.thumbnail) params.set("image", playlist.thumbnail);
+    if (playlist.videoCount != null) {
+      params.set("count", String(playlist.videoCount));
+    }
+    if (searchParams.get("search_query")) {
+      params.set("search_query", searchParams.get("search_query") || "");
+    }
+    if (searchParams.get("search_source")) {
+      params.set("search_source", searchParams.get("search_source") || "");
+    }
+    if (searchParams.get("search_filter")) {
+      params.set("search_filter", searchParams.get("search_filter") || "");
+    }
+    return `/collection/playlist/${encodeURIComponent(
+      playlist.id
+    )}?${params.toString()}`;
+  };
+
   const handleJioSaavnSongPress = async (
     song: ArtistPayload["songs"][number]
   ) => {
@@ -468,13 +491,9 @@ export default function ArtistPage() {
                 contentClassName="flex w-max gap-4"
               >
                 {data.playlists.map((p, idx) => (
-                  <a
+                  <Link
                     key={`${p.id}-${idx}`}
-                    href={`https://www.youtube.com/playlist?list=${encodeURIComponent(
-                      p.id
-                    )}`}
-                    target="_blank"
-                    rel="noreferrer"
+                    href={buildPlaylistHref(p)}
                     className="min-w-[160px] max-w-[160px] p-3 rounded-2xl bg-neutral-900/40 hover:bg-neutral-900/60 transition-colors group relative"
                   >
                     <div className="relative">
@@ -503,7 +522,7 @@ export default function ArtistPage() {
                         {p.videoCount} videos
                       </div>
                     )}
-                  </a>
+                  </Link>
                 ))}
                 {data.playlists.length === 0 && (
                   <div className="text-neutral-400">No playlists found.</div>

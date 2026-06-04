@@ -4,6 +4,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { type Song, useAudio } from "../contexts/AudioContext";
+import {
+  createStoredPlaylist,
+  getLocalCollectionPath,
+  LOCAL_LIBRARY_UPDATED_EVENT,
+  readLikedSongs,
+  readStoredPlaylists,
+  type StoredPlaylist,
+} from "../lib/local-library";
 
 type FilterChip =
   | "Playlists"
@@ -12,18 +20,32 @@ type FilterChip =
   | "Artists"
   | "Downloaded";
 
-interface StoredPlaylist {
-  id: string;
-  name: string;
-  description: string;
-  createdAt: number;
-}
+type SortMode = "recents" | "alphabetical" | "creator";
+type LibraryViewMode = "grid" | "list";
 
 interface ArtistSummary {
   name: string;
   count: number;
   image?: string;
 }
+
+type LibraryGridItem =
+  | {
+      kind: "artist";
+      id: string;
+      artist: ArtistSummary;
+      priority?: boolean;
+    }
+  | {
+      kind: "media";
+      id: string;
+      title: string;
+      subtitle: string;
+      meta: string;
+      artwork: React.ReactNode;
+      onClick?: () => void;
+      priority?: boolean;
+    };
 
 const FILTER_CHIPS: FilterChip[] = [
   "Playlists",
@@ -32,26 +54,6 @@ const FILTER_CHIPS: FilterChip[] = [
   "Artists",
   "Downloaded",
 ];
-const PLAYLISTS_STORAGE_KEY = "libraryUserPlaylists";
-
-function readStoredPlaylists(): StoredPlaylist[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(PLAYLISTS_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-
-    const parsed = JSON.parse(raw) as StoredPlaylist[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Failed to restore playlists:", error);
-    return [];
-  }
-}
 
 function formatSongCount(
   count: number,
@@ -70,42 +72,23 @@ function getInitials(text: string): string {
     .join("");
 }
 
-function createPlaylistId(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return crypto.randomUUID();
-  }
-
-  return `playlist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function formatTrackDuration(seconds?: number): string {
+  if (!seconds || Number.isNaN(seconds)) return "Recently played";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
-function LibraryGlyph() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      className="h-5 w-5"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        d="M5 5.75h.5a2.25 2.25 0 0 1 2.25 2.25v9.5A1.75 1.75 0 0 1 6 19.25H5.75A1.75 1.75 0 0 1 4 17.5V6.75A1 1 0 0 1 5 5.75Z"
-      />
-      <path
-        strokeLinecap="round"
-        d="M10.25 4.75h.5A2.25 2.25 0 0 1 13 7v10.5a1.75 1.75 0 0 1-1.75 1.75H11A1.75 1.75 0 0 1 9.25 17.5V5.75a1 1 0 0 1 1-1Z"
-      />
-      <path
-        strokeLinecap="round"
-        d="M15.5 7.25h.5A2.25 2.25 0 0 1 18.25 9.5v8a1.75 1.75 0 0 1-1.75 1.75h-.25a1.75 1.75 0 0 1-1.75-1.75V8.25a1 1 0 0 1 1-1Z"
-      />
-    </svg>
-  );
+function interleaveItems<T>(left: T[], right: T[]): T[] {
+  const output: T[] = [];
+  const maxLength = Math.max(left.length, right.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    if (left[index]) output.push(left[index]);
+    if (right[index]) output.push(right[index]);
+  }
+
+  return output;
 }
 
 function PlusGlyph() {
@@ -225,6 +208,25 @@ function GridGlyph() {
   );
 }
 
+function ListGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" d="M8 7h11M8 12h11M8 17h11" />
+      <circle cx="4.25" cy="7" r="1.25" fill="currentColor" stroke="none" />
+      <circle cx="4.25" cy="12" r="1.25" fill="currentColor" stroke="none" />
+      <circle cx="4.25" cy="17" r="1.25" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function ChevronDownGlyph({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg
@@ -245,10 +247,12 @@ function SmartPlaylistArtwork({
   variant,
   songs,
   label,
+  priority = false,
 }: {
   variant: "liked" | "history" | "playlist";
   songs: Song[];
   label: string;
+  priority?: boolean;
 }) {
   if (variant === "liked") {
     return (
@@ -275,13 +279,17 @@ function SmartPlaylistArtwork({
       return (
         <div className="grid aspect-square w-full grid-cols-2 overflow-hidden rounded-xl bg-white/6">
           {covers.map((song, index) => (
-            <div key={`history-cover-${song.id}-${index}`} className="relative h-full w-full">
+            <div
+              key={`history-cover-${song.id}-${index}`}
+              className="relative h-full w-full"
+            >
               <Image
                 src={song.coverUrl!}
                 alt={song.title}
                 fill
                 sizes="(max-width: 768px) 40vw, 180px"
                 className="object-cover"
+                priority={priority}
                 unoptimized
               />
             </div>
@@ -306,19 +314,116 @@ function SmartPlaylistArtwork({
     );
   }
 
-  const firstCover = songs.find((song) => song.coverUrl)?.coverUrl;
+  const covers = (() => {
+    const seen = new Set<string>();
+    const out: typeof songs = [];
+    for (const song of songs) {
+      if (!song?.coverUrl || seen.has(song.id)) continue;
+      seen.add(song.id);
+      out.push(song);
+      if (out.length >= 4) break;
+    }
+    return out;
+  })();
 
-  if (firstCover) {
+  if (covers.length === 1) {
     return (
       <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-white/6">
         <Image
-          src={firstCover}
+          src={covers[0].coverUrl!}
           alt={label}
           fill
           sizes="(max-width: 768px) 40vw, 180px"
           className="object-cover"
+          priority={priority}
           unoptimized
         />
+      </div>
+    );
+  }
+
+  if (covers.length === 2) {
+    return (
+      <div className="grid aspect-square w-full grid-cols-2 overflow-hidden rounded-xl bg-white/6">
+        {covers.map((song, index) => (
+          <div
+            key={`playlist-cover-${song.id}-${index}`}
+            className="relative h-full w-full"
+          >
+            <Image
+              src={song.coverUrl!}
+              alt={`${label} cover ${index + 1}`}
+              fill
+              sizes="(max-width: 768px) 20vw, 90px"
+              className="object-cover"
+              priority={priority}
+              unoptimized
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (covers.length === 3) {
+    return (
+      <div className="grid aspect-square w-full grid-cols-2 grid-rows-2 overflow-hidden rounded-xl bg-white/6">
+        <div className="relative row-span-2 h-full w-full">
+          <Image
+            src={covers[0].coverUrl!}
+            alt={`${label} cover 1`}
+            fill
+            sizes="(max-width: 768px) 20vw, 90px"
+            className="object-cover"
+            priority={priority}
+            unoptimized
+          />
+        </div>
+        <div className="relative h-full w-full">
+          <Image
+            src={covers[1].coverUrl!}
+            alt={`${label} cover 2`}
+            fill
+            sizes="(max-width: 768px) 20vw, 90px"
+            className="object-cover"
+            priority={priority}
+            unoptimized
+          />
+        </div>
+        <div className="relative h-full w-full">
+          <Image
+            src={covers[2].coverUrl!}
+            alt={`${label} cover 3`}
+            fill
+            sizes="(max-width: 768px) 20vw, 90px"
+            className="object-cover"
+            priority={priority}
+            unoptimized
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (covers.length >= 4) {
+    return (
+      <div className="grid aspect-square w-full grid-cols-2 grid-rows-2 overflow-hidden rounded-xl bg-white/6">
+        {covers.slice(0, 4).map((song, index) => (
+          <div
+            key={`playlist-cover-${song.id}-${index}`}
+            className="relative h-full w-full"
+          >
+            <Image
+              src={song.coverUrl!}
+              alt={`${label} cover ${index + 1}`}
+              fill
+              sizes="(max-width: 768px) 20vw, 90px"
+              className="object-cover"
+              priority={priority}
+              unoptimized
+            />
+          </div>
+        ))}
       </div>
     );
   }
@@ -368,7 +473,13 @@ function PlaylistCard({
   );
 }
 
-function ArtistCard({ artist }: { artist: ArtistSummary }) {
+function ArtistCard({
+  artist,
+  priority = false,
+}: {
+  artist: ArtistSummary;
+  priority?: boolean;
+}) {
   return (
     <div className="group text-left">
       <div className="relative aspect-square overflow-hidden rounded-full bg-[#181818] transition duration-200 group-hover:bg-[#222222]">
@@ -379,6 +490,7 @@ function ArtistCard({ artist }: { artist: ArtistSummary }) {
             fill
             sizes="(max-width: 768px) 40vw, 180px"
             className="object-cover"
+            priority={priority}
             unoptimized
           />
         ) : (
@@ -394,6 +506,68 @@ function ArtistCard({ artist }: { artist: ArtistSummary }) {
         <p className="mt-1 text-sm text-white/55">Artist</p>
       </div>
     </div>
+  );
+}
+
+function LibraryListRow({ item }: { item: LibraryGridItem }) {
+  const isArtist = item.kind === "artist";
+  const onClick = !isArtist ? item.onClick : undefined;
+  const Component = onClick ? "button" : "div";
+
+  return (
+    <Component
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className="group flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition hover:bg-white/[0.06]"
+    >
+      <div
+        className={`relative h-14 w-14 shrink-0 overflow-hidden bg-[#1a1a1a] ${
+          isArtist ? "rounded-full" : "rounded-xl"
+        }`}
+      >
+        {isArtist ? (
+          item.artist.image ? (
+            <Image
+              src={item.artist.image}
+              alt={item.artist.name}
+              fill
+              sizes="56px"
+              className="object-cover"
+              priority={item.priority}
+              unoptimized
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#3b3b3b] to-[#161616] text-sm font-semibold text-white/80">
+              {getInitials(item.artist.name)}
+            </div>
+          )
+        ) : (
+          item.artwork
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-white">
+          {isArtist ? item.artist.name : item.title}
+        </p>
+        <p className="mt-1 truncate text-sm text-white/55">
+          {isArtist ? "Artist" : item.subtitle}
+        </p>
+      </div>
+
+      <div className="shrink-0 text-right">
+        <p className="text-xs text-white/40">
+          {isArtist
+            ? formatSongCount(item.artist.count, "play")
+            : item.meta || "Open"}
+        </p>
+        {!isArtist && item.onClick ? (
+          <p className="mt-1 text-xs font-medium text-white/60 transition group-hover:text-white">
+            Open
+          </p>
+        ) : null}
+      </div>
+    </Component>
   );
 }
 
@@ -414,20 +588,40 @@ function CreatePlaylistModal({
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  if (!open) return null;
-
   const canSubmit = name.trim().length > 0;
   const previewName = name.trim() || "My Playlist";
   const previewDescription =
     description.trim() || "Add an optional description for your playlist.";
 
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, open]);
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
-      onClick={onClose}
+      className={`fixed inset-0 z-50 flex items-center justify-center px-4 transition-all duration-200 ${
+        open
+          ? "pointer-events-auto bg-black/70 opacity-100 backdrop-blur-sm"
+          : "pointer-events-none bg-black/0 opacity-0"
+      }`}
+      onClick={open ? onClose : undefined}
+      aria-hidden={!open}
     >
       <div
-        className="w-full max-w-2xl rounded-3xl bg-[#282828] p-6 shadow-[0_24px_64px_rgba(0,0,0,0.45)] md:p-7"
+        className={`w-full max-w-2xl rounded-3xl bg-[#282828] p-6 shadow-[0_24px_64px_rgba(0,0,0,0.45)] transition-all duration-200 md:p-7 ${
+          open ? "scale-100 translate-y-0" : "scale-[0.97] translate-y-3"
+        }`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
@@ -525,20 +719,51 @@ function CreatePlaylistModal({
 export default function LibraryPage() {
   const router = useRouter();
   const { recentSongs, playSong } = useAudio();
-  const [selectedChip, setSelectedChip] = useState<FilterChip>("Playlists");
+  const [selectedChip, setSelectedChip] = useState<FilterChip | null>(null);
   const [userPlaylists, setUserPlaylists] =
     useState<StoredPlaylist[]>(readStoredPlaylists);
+  const [likedSongs, setLikedSongs] = useState<Song[]>(readLikedSongs);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
   const [playlistDescription, setPlaylistDescription] = useState("");
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("recents");
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<LibraryViewMode>("grid");
+  const [createdPlaylistToast, setCreatedPlaylistToast] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      PLAYLISTS_STORAGE_KEY,
-      JSON.stringify(userPlaylists)
-    );
-  }, [userPlaylists]);
+
+    const syncLocalLibrary = () => {
+      setUserPlaylists(readStoredPlaylists());
+      setLikedSongs(readLikedSongs());
+    };
+
+    syncLocalLibrary();
+    window.addEventListener("storage", syncLocalLibrary);
+    window.addEventListener(LOCAL_LIBRARY_UPDATED_EVENT, syncLocalLibrary);
+
+    return () => {
+      window.removeEventListener("storage", syncLocalLibrary);
+      window.removeEventListener(LOCAL_LIBRARY_UPDATED_EVENT, syncLocalLibrary);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!createdPlaylistToast) return;
+
+    const timer = window.setTimeout(() => {
+      setCreatedPlaylistToast(null);
+    }, 2600);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [createdPlaylistToast]);
 
   const topArtists = useMemo<ArtistSummary[]>(() => {
     const map = new Map<string, ArtistSummary>();
@@ -553,7 +778,7 @@ export default function LibraryPage() {
       });
     }
 
-    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 12);
   }, [recentSongs]);
 
   const shownArtists = useMemo(
@@ -567,12 +792,10 @@ export default function LibraryPage() {
     [topArtists]
   );
 
-  const likedSongs = useMemo(() => recentSongs.slice(0, 12), [recentSongs]);
   const previouslyPlayed = useMemo(
     () => recentSongs.slice(0, 20),
     [recentSongs]
   );
-  const recentTracks = useMemo(() => recentSongs.slice(0, 4), [recentSongs]);
 
   const visiblePlaylistCards = useMemo(() => {
     const baseCards = [
@@ -589,9 +812,10 @@ export default function LibraryPage() {
             variant="liked"
             songs={likedSongs}
             label="Liked Songs"
+            priority
           />
         ),
-        onClick: likedSongs[0] ? () => playSong(likedSongs[0]) : undefined,
+        onClick: () => router.push(getLocalCollectionPath("liked-songs")),
       },
       {
         id: "previously-played",
@@ -606,35 +830,44 @@ export default function LibraryPage() {
             variant="history"
             songs={previouslyPlayed}
             label="Previously Played"
+            priority
           />
         ),
-        onClick: previouslyPlayed[0]
-          ? () => playSong(previouslyPlayed[0])
-          : undefined,
+        onClick: () => router.push(getLocalCollectionPath("previously-played")),
       },
       ...userPlaylists.map((playlist) => ({
         id: playlist.id,
         title: playlist.name,
-        subtitle: playlist.description || "Custom playlist",
-        meta: "Playlist",
+        subtitle: playlist.description || "Playlist",
+        meta: `${formatSongCount(playlist.songs.length, "song")} saved`,
         artwork: (
           <SmartPlaylistArtwork
             variant="playlist"
-            songs={recentTracks}
+            songs={playlist.songs}
             label={playlist.name}
           />
         ),
-        onClick: undefined as (() => void) | undefined,
+        onClick: () => router.push(getLocalCollectionPath(playlist.id)),
       })),
     ];
 
     return baseCards;
-  }, [likedSongs, playSong, previouslyPlayed, recentTracks, userPlaylists]);
+  }, [likedSongs, previouslyPlayed, router, userPlaylists]);
+
+  const pinnedPlaylistCards = useMemo(
+    () => [
+      visiblePlaylistCards[0],
+      ...visiblePlaylistCards.filter(
+        (card) => card.id !== "liked-songs" && card.id !== "previously-played"
+      ),
+    ],
+    [visiblePlaylistCards]
+  );
 
   const recentAlbums = useMemo(
     () =>
       recentSongs.length > 0
-        ? recentSongs.slice(0, 4)
+        ? recentSongs.slice(0, 10)
         : [
             {
               id: "album-placeholder-1",
@@ -649,6 +882,178 @@ export default function LibraryPage() {
           ],
     [recentSongs]
   );
+
+  const mixedLibraryItems = useMemo<LibraryGridItem[]>(() => {
+    const artistItems = shownArtists.slice(0, 8).map((artist, index) => ({
+      kind: "artist" as const,
+      id: `artist-${artist.name}`,
+      artist,
+      priority: index < 4,
+    }));
+
+    const mediaItems = recentAlbums.slice(0, 10).map((item, index) => ({
+      kind: "media" as const,
+      id: `track-${item.id}`,
+      title: item.title,
+      subtitle: item.artist || "Track",
+      meta: formatTrackDuration(item.duration),
+      artwork: (
+        <SmartPlaylistArtwork
+          variant="playlist"
+          songs={[item]}
+          label={item.title}
+          priority={index < 4}
+        />
+      ),
+      onClick:
+        item.audioUrl || item.coverUrl ? () => playSong(item) : undefined,
+      priority: index < 4,
+    }));
+
+    return interleaveItems<LibraryGridItem>(mediaItems, artistItems);
+  }, [playSong, recentAlbums, shownArtists]);
+
+  const playlistGridItems = useMemo<LibraryGridItem[]>(
+    () =>
+      visiblePlaylistCards.map((card, index) => ({
+        kind: "media",
+        id: card.id,
+        title: card.title,
+        subtitle: card.subtitle,
+        meta: card.meta,
+        artwork: card.artwork,
+        onClick: card.onClick,
+        priority: index < 4,
+      })),
+    [visiblePlaylistCards]
+  );
+
+  const pinnedPlaylistGridItems = useMemo<LibraryGridItem[]>(
+    () =>
+      pinnedPlaylistCards.map((card, index) => ({
+        kind: "media",
+        id: `pinned-${card.id}`,
+        title: card.title,
+        subtitle: card.subtitle,
+        meta: card.meta,
+        artwork: card.artwork,
+        onClick: card.onClick,
+        priority: index < 4,
+      })),
+    [pinnedPlaylistCards]
+  );
+
+  const albumGridItems = useMemo<LibraryGridItem[]>(
+    () =>
+      recentAlbums.map((item, index) => ({
+        kind: "media",
+        id: `album-${item.id}`,
+        title: item.title,
+        subtitle: item.artist || "Album",
+        meta: formatTrackDuration(item.duration),
+        artwork: (
+          <SmartPlaylistArtwork
+            variant="playlist"
+            songs={[item]}
+            label={item.title}
+            priority={index < 4}
+          />
+        ),
+        onClick:
+          item.audioUrl || item.coverUrl ? () => playSong(item) : undefined,
+        priority: index < 4,
+      })),
+    [playSong, recentAlbums]
+  );
+
+  const artistGridItems = useMemo<LibraryGridItem[]>(
+    () =>
+      shownArtists.map((artist, index) => ({
+        kind: "artist",
+        id: `artist-only-${artist.name}`,
+        artist,
+        priority: index < 4,
+      })),
+    [shownArtists]
+  );
+
+  const activeGridItems = useMemo<LibraryGridItem[]>(() => {
+    switch (selectedChip) {
+      case "Playlists":
+        return playlistGridItems;
+      case "Albums":
+        return albumGridItems;
+      case "Artists":
+        return artistGridItems;
+      case "Downloaded":
+      case "Podcasts & Shows":
+        return [];
+      default:
+        return [...pinnedPlaylistGridItems, ...mixedLibraryItems];
+    }
+  }, [
+    albumGridItems,
+    artistGridItems,
+    mixedLibraryItems,
+    pinnedPlaylistGridItems,
+    playlistGridItems,
+    selectedChip,
+  ]);
+
+  const displayedGridItems = useMemo(() => {
+    const query = libraryQuery.trim().toLowerCase();
+    const filtered = query
+      ? activeGridItems.filter((item) => {
+          if (item.kind === "artist") {
+            return item.artist.name.toLowerCase().includes(query);
+          }
+
+          return [item.title, item.subtitle, item.meta]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(query);
+        })
+      : activeGridItems;
+
+    if (sortMode === "recents") return filtered;
+
+    const sorted = [...filtered];
+    sorted.sort((left, right) => {
+      const leftValue =
+        left.kind === "artist"
+          ? sortMode === "creator"
+            ? left.artist.name
+            : left.artist.name
+          : sortMode === "creator"
+          ? left.subtitle || left.title
+          : left.title;
+      const rightValue =
+        right.kind === "artist"
+          ? sortMode === "creator"
+            ? right.artist.name
+            : right.artist.name
+          : sortMode === "creator"
+          ? right.subtitle || right.title
+          : right.title;
+
+      return leftValue.localeCompare(rightValue, undefined, {
+        sensitivity: "base",
+      });
+    });
+
+    return sorted;
+  }, [activeGridItems, libraryQuery, sortMode]);
+
+  const isPlaylistView = selectedChip === "Playlists";
+  const hasSearchQuery = libraryQuery.trim().length > 0;
+  const librarySummary = hasSearchQuery
+    ? `${displayedGridItems.length} ${
+        displayedGridItems.length === 1 ? "result" : "results"
+      }`
+    : `${userPlaylists.length + 2} playlists • ${likedSongs.length} liked ${
+        likedSongs.length === 1 ? "song" : "songs"
+      }`;
 
   const openCreatePlaylist = () => {
     setPlaylistName("");
@@ -667,51 +1072,81 @@ export default function LibraryPage() {
     const description = playlistDescription.trim();
     if (!name) return;
 
-    setUserPlaylists((prev) => [
-      {
-        id: createPlaylistId(),
-        name,
-        description,
-        createdAt: Date.now(),
-      },
-      ...prev,
-    ]);
+    const playlist = createStoredPlaylist(name, description);
+    setUserPlaylists((prev) => [playlist, ...prev]);
     closeCreatePlaylist();
+    setCreatedPlaylistToast({
+      id: playlist.id,
+      name: playlist.name,
+    });
   };
 
   return (
     <>
-      <div className="min-h-full bg-[#181818] rounded-xl text-white pb-15">
-        <div className="flex w-full flex-col gap-8 px-4 py-4 rounded-xl">
-          <section className="rounded-xl ">
+      <div className="relative h-full overflow-hidden rounded-xl bg-[#181818] text-white">
+        <div
+          className={`pointer-events-none absolute left-1/2 top-4 z-40 flex -translate-x-1/2 transition-all duration-200 ${
+            createdPlaylistToast
+              ? "translate-y-0 opacity-100"
+              : "-translate-y-2 opacity-0"
+          }`}
+        >
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-white/10 bg-black/70 px-4 py-2 text-sm font-medium text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+            <span>{`Created ${createdPlaylistToast?.name || "playlist"}`}</span>
+            {createdPlaylistToast ? (
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(getLocalCollectionPath(createdPlaylistToast.id))
+                }
+                className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-black transition hover:scale-[1.02]"
+              >
+                Open
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex h-full min-h-0 w-full flex-col gap-6 rounded-xl px-4 py-4">
+          <section className="rounded-xl">
             <div className="flex flex-col gap-5">
               <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/6 text-white">
-                    <LibraryGlyph />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white/72">
-                      Your Library
-                    </p>
-                  </div>
+                <div>
+                  <p className="text-base font-black tracking-tight text-white">
+                    Your Library
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2 text-white/65">
                   <button
                     type="button"
                     onClick={openCreatePlaylist}
-                    className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/8 hover:text-white"
+                    className="inline-flex items-center gap-2 rounded-full bg-white/8 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/12"
                     aria-label="Create playlist"
                   >
                     <PlusGlyph />
+                    Create
                   </button>
                   <button
                     type="button"
+                    onClick={() =>
+                      setViewMode((current) =>
+                        current === "grid" ? "list" : "grid"
+                      )
+                    }
                     className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/8 hover:text-white"
-                    aria-label="Change library view"
+                    aria-label={
+                      viewMode === "grid"
+                        ? "Switch to list view"
+                        : "Switch to grid view"
+                    }
+                    title={
+                      viewMode === "grid"
+                        ? "Switch to list view"
+                        : "Switch to grid view"
+                    }
                   >
-                    <GridGlyph />
+                    {viewMode === "grid" ? <ListGlyph /> : <GridGlyph />}
                   </button>
                 </div>
               </div>
@@ -722,7 +1157,11 @@ export default function LibraryPage() {
                     <button
                       key={chip}
                       type="button"
-                      onClick={() => setSelectedChip(chip)}
+                      onClick={() =>
+                        setSelectedChip((current) =>
+                          current === chip ? null : chip
+                        )
+                      }
                       className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                         selectedChip === chip
                           ? "bg-white text-black"
@@ -734,122 +1173,175 @@ export default function LibraryPage() {
                   ))}
                 </div>
 
-                <div className="flex items-center gap-3 text-sm text-white/55">
-                  <button
-                    type="button"
-                    onClick={() => router.push("/search")}
-                    className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/8 hover:text-white"
-                    aria-label="Search music"
-                  >
+                <div className="relative flex flex-col gap-3 text-sm text-white/55 sm:flex-row sm:items-center">
+                  <label className="inline-flex items-center gap-2 rounded-xl bg-white/6 px-3 py-2 transition focus-within:bg-white/10 focus-within:text-white">
                     <SearchGlyph />
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 transition hover:bg-white/8 hover:text-white"
+                    <input
+                      value={libraryQuery}
+                      onChange={(event) => setLibraryQuery(event.target.value)}
+                      placeholder="Search in Your Library"
+                      className="w-[220px] bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+                      aria-label="Search in Your Library"
+                    />
+                    {hasSearchQuery ? (
+                      <button
+                        type="button"
+                        onClick={() => setLibraryQuery("")}
+                        className="rounded-full p-1 text-white/45 transition hover:bg-white/8 hover:text-white"
+                        aria-label="Clear library search"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          className="h-3.5 w-3.5"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            d="m7 7 10 10M17 7 7 17"
+                          />
+                        </svg>
+                      </button>
+                    ) : null}
+                  </label>
+                  <div
+                    className="relative"
+                    onMouseLeave={() => setIsSortMenuOpen(false)}
                   >
-                    Recents
-                    <ChevronDownGlyph className="h-3.5 w-3.5" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsSortMenuOpen((value) => !value)}
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 transition hover:bg-white/8 hover:text-white"
+                    >
+                      {sortMode === "recents"
+                        ? "Recents"
+                        : sortMode === "alphabetical"
+                        ? "Alphabetical"
+                        : "Creator"}
+                      <ChevronDownGlyph className="h-3.5 w-3.5" />
+                    </button>
+                    <div
+                      className={`absolute right-0 top-full z-20 mt-2 w-44 rounded-2xl border border-white/10 bg-[#202020] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.35)] transition-all duration-150 ${
+                        isSortMenuOpen
+                          ? "pointer-events-auto translate-y-0 opacity-100"
+                          : "pointer-events-none -translate-y-1 opacity-0"
+                      }`}
+                    >
+                      {[
+                        { id: "recents", label: "Recents" },
+                        { id: "alphabetical", label: "Alphabetical" },
+                        { id: "creator", label: "Creator" },
+                      ].map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => {
+                            setSortMode(option.id as SortMode);
+                            setIsSortMenuOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${
+                            sortMode === option.id
+                              ? "bg-white text-black"
+                              : "text-white/82 hover:bg-white/8"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </section>
 
-          <section>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-7 md:grid-cols-3 xl:grid-cols-4">
-              {visiblePlaylistCards.map((card) => (
-                <PlaylistCard
-                  key={card.id}
-                  title={card.title}
-                  subtitle={card.subtitle}
-                  meta={card.meta}
-                  artwork={card.artwork}
-                  onClick={card.onClick}
-                />
-              ))}
+          <div className="flex items-center justify-between gap-3 px-1 text-xs uppercase tracking-[0.18em] text-white/38">
+            <p>{librarySummary}</p>
+            <p>{viewMode === "grid" ? "Grid view" : "List view"}</p>
+          </div>
 
-              <button
-                type="button"
-                onClick={openCreatePlaylist}
-                className="group text-left"
-              >
-                <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-[#1c1c1c] text-white/55 transition group-hover:bg-[#232323] group-hover:text-white/75">
-                  <PlusGlyph />
-                </div>
-                <div className="px-1 pt-3">
-                  <p className="truncate text-[15px] font-semibold text-white">
-                    Create playlist
-                  </p>
-                  <p className="mt-1 text-sm text-white/55">Playlist</p>
-                  <p className="mt-1 text-xs text-white/38">
-                    Name it and make it yours
-                  </p>
-                </div>
-              </button>
-            </div>
-          </section>
-
-          <section className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
-            <div>
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <h2 className="text-2xl font-bold tracking-tight">Artists</h2>
-                <button
-                  type="button"
-                  onClick={() => router.push("/search")}
-                  className="text-sm font-medium text-white/55 transition hover:text-white"
-                >
-                  Show all
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-5 md:grid-cols-3 xl:grid-cols-5">
-                {shownArtists.map((artist) => (
-                  <ArtistCard key={artist.name} artist={artist} />
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <h2 className="text-2xl font-bold tracking-tight">
-                  Recently played
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => router.push("/search")}
-                  className="text-sm font-medium text-white/55 transition hover:text-white"
-                >
-                  Show all
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-5">
-                {recentAlbums.map((item) => (
-                  <PlaylistCard
-                    key={item.id}
-                    title={item.title}
-                    subtitle={item.artist || "Track"}
-                    meta={
-                      item.duration
-                        ? formatSongCount(Math.max(item.duration, 1), "second")
-                        : "Recently played"
-                    }
-                    artwork={
-                      <SmartPlaylistArtwork
-                        variant="playlist"
-                        songs={[item]}
-                        label={item.title}
+          <section className="min-h-0 flex-1 overflow-y-auto hide-scrollbar pr-1">
+            {displayedGridItems.length > 0 ? (
+              viewMode === "grid" ? (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
+                  {displayedGridItems.map((item) =>
+                    item.kind === "artist" ? (
+                      <ArtistCard
+                        key={item.id}
+                        artist={item.artist}
+                        priority={item.priority}
                       />
-                    }
-                    onClick={
-                      item.audioUrl || item.coverUrl
-                        ? () => playSong(item)
-                        : undefined
-                    }
-                  />
-                ))}
+                    ) : (
+                      <PlaylistCard
+                        key={item.id}
+                        title={item.title}
+                        subtitle={item.subtitle}
+                        meta={item.meta}
+                        artwork={item.artwork}
+                        onClick={item.onClick}
+                      />
+                    )
+                  )}
+
+                  {isPlaylistView && (
+                    <button
+                      type="button"
+                      onClick={openCreatePlaylist}
+                      className="group text-left"
+                    >
+                      <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-[#1c1c1c] text-white/55 transition group-hover:bg-[#232323] group-hover:text-white/75">
+                        <PlusGlyph />
+                      </div>
+                      <div className="px-1 pt-3">
+                        <p className="truncate text-[15px] font-semibold text-white">
+                          Create playlist
+                        </p>
+                        <p className="mt-1 text-sm text-white/55">Playlist</p>
+                        <p className="mt-1 text-xs text-white/38">
+                          Name it and make it yours
+                        </p>
+                      </div>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {displayedGridItems.map((item) => (
+                    <LibraryListRow key={item.id} item={item} />
+                  ))}
+                  {isPlaylistView ? (
+                    <button
+                      type="button"
+                      onClick={openCreatePlaylist}
+                      className="flex w-full items-center gap-4 rounded-2xl border border-dashed border-white/10 px-3 py-3 text-left text-white/72 transition hover:border-white/18 hover:bg-white/[0.04] hover:text-white"
+                    >
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/[0.04]">
+                        <PlusGlyph />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">
+                          Create playlist
+                        </p>
+                        <p className="mt-1 text-sm text-white/55">
+                          Name it and make it yours
+                        </p>
+                      </div>
+                    </button>
+                  ) : null}
+                </div>
+              )
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/55">
+                {libraryQuery.trim()
+                  ? "No library items match your search."
+                  : selectedChip === "Downloaded"
+                  ? "Downloaded items will appear here."
+                  : "Podcasts and shows will appear here."}
               </div>
-            </div>
+            )}
           </section>
         </div>
       </div>

@@ -266,6 +266,13 @@ function SearchPageInner() {
   const searchQueryRef = useRef(searchQuery);
   const abortControllerRef = useRef<AbortController | null>(null);
   const didRestoreInitialStateRef = useRef(false);
+  const handleSearchRef = useRef<
+    (
+      manualQuery?: string,
+      loadMore?: boolean,
+      overrideFilter?: string
+    ) => Promise<void>
+  >(async () => {});
 
   // Update URL parameters when state changes
   const updateUrlParams = useCallback(
@@ -330,26 +337,27 @@ function SearchPageInner() {
   // Handle browser back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
-      const savedSearch = localStorage.getItem("lastSearch");
-      if (savedSearch) {
-        try {
-          const searchState = JSON.parse(savedSearch) as SavedSearchState;
-          const timestamp = searchState.timestamp || 0;
-          const maxAgePopstate = 2 * 60 * 60 * 1000; // 2 hours
+      const urlQuery = new URLSearchParams(window.location.search).get("q");
+      const urlSource =
+        (new URLSearchParams(window.location.search).get(
+          "source"
+        ) as SourceType) || "youtube";
+      const urlFilter =
+        new URLSearchParams(window.location.search).get("filter") || "all";
 
-          if (Date.now() - timestamp < maxAgePopstate && searchState.query) {
-            setSearchQuery(searchState.query || "");
-            searchQueryRef.current = searchState.query || "";
-            setSelectedSource(searchState.source || "youtube");
-            selectedSourceRef.current = searchState.source || "youtube";
-            setSelectedFilter(searchState.filter || "all");
-            selectedFilterRef.current = searchState.filter || "all";
-            setHasSearched(Boolean(searchState.query));
-            setSearchResults(searchState.results || []);
-          }
-        } catch (error) {
-          console.error("Error restoring search state on popstate:", error);
-        }
+      if (urlQuery) {
+        setSearchQuery(urlQuery);
+        searchQueryRef.current = urlQuery;
+        setSelectedSource(urlSource);
+        selectedSourceRef.current = urlSource;
+        setSelectedFilter(urlFilter);
+        selectedFilterRef.current = urlFilter;
+        setHasSearched(true);
+        // Always re-run the search on back/forward to avoid stale state.
+        void handleSearchRef.current(urlQuery, false, urlFilter);
+      } else {
+        setSearchResults([]);
+        setHasSearched(false);
       }
     };
 
@@ -366,8 +374,8 @@ function SearchPageInner() {
       typeof raw.title === "string" && raw.title.trim()
         ? raw.title
         : typeof raw.name === "string"
-          ? raw.name
-          : "";
+        ? raw.name
+        : "";
     let id =
       raw.videoId ||
       raw.playlistId ||
@@ -470,17 +478,6 @@ function SearchPageInner() {
           : selectedFilterRef.current;
       const sourceToUse = selectedSourceRef.current;
 
-      const last = lastSearchRef.current;
-      if (
-        !loadMore &&
-        searchResults.length > 0 &&
-        last &&
-        last.query === queryToUse &&
-        last.source === sourceToUse &&
-        last.filter === filterToUse
-      )
-        return;
-
       setHasSearched(true);
 
       if (loadMore) {
@@ -569,6 +566,11 @@ function SearchPageInner() {
     [searchResults.length, currentPage, saveSearchState]
   );
 
+  // Keep the ref pointed at the latest handleSearch so popstate/mount can call it.
+  useEffect(() => {
+    handleSearchRef.current = handleSearch;
+  }, [handleSearch]);
+
   const loadMoreResults = useCallback(async () => {
     if (isLoadingMore || !hasMoreResults || !searchQueryRef.current.trim())
       return;
@@ -580,18 +582,7 @@ function SearchPageInner() {
     paginationRef.current.isLoadingMore = false;
   }, [isLoadingMore, hasMoreResults, handleSearch]);
 
-  function restoreSavedSearchState(searchState: SavedSearchState) {
-    setSearchQuery(searchState.query || "");
-    searchQueryRef.current = searchState.query || "";
-    setSelectedSource(searchState.source || "youtube");
-    selectedSourceRef.current = searchState.source || "youtube";
-    setSelectedFilter(searchState.filter || "all");
-    selectedFilterRef.current = searchState.filter || "all";
-    setHasSearched(Boolean(searchState.query));
-    setSearchResults(searchState.results || []);
-  }
-
-  // Restore search state from URL/localStorage on mount
+  // Restore search state from URL on mount
   useEffect(() => {
     if (didRestoreInitialStateRef.current) return;
     didRestoreInitialStateRef.current = true;
@@ -600,58 +591,20 @@ function SearchPageInner() {
     const sourceFromUrl =
       (searchParams.get("source") as SourceType) || "youtube";
     const filterFromUrl = searchParams.get("filter") || "all";
-    const savedSearch = localStorage.getItem("lastSearch");
-    let parsedSavedSearch: SavedSearchState | null = null;
-
-    if (savedSearch) {
-      try {
-        parsedSavedSearch = JSON.parse(savedSearch) as SavedSearchState;
-        const timestamp = parsedSavedSearch.timestamp || 0;
-        const maxAge = 2 * 60 * 60 * 1000;
-
-        if (Date.now() - timestamp >= maxAge) {
-          parsedSavedSearch = null;
-          localStorage.removeItem("lastSearch");
-        }
-      } catch (error) {
-        console.error("Error restoring search state:", error);
-        localStorage.removeItem("lastSearch");
-      }
-    }
 
     if (queryFromUrl) {
-      const hasMatchingSavedResults =
-        parsedSavedSearch?.query === queryFromUrl &&
-        (parsedSavedSearch?.source || "youtube") === sourceFromUrl &&
-        (parsedSavedSearch?.filter || "all") === filterFromUrl &&
-        Array.isArray(parsedSavedSearch?.results) &&
-        parsedSavedSearch.results.length > 0;
-
-      if (hasMatchingSavedResults && parsedSavedSearch) {
-        setTimeout(() => {
-          restoreSavedSearchState(parsedSavedSearch!);
-        }, 0);
-      } else {
-        setTimeout(() => {
-          setSearchQuery(queryFromUrl);
-          searchQueryRef.current = queryFromUrl;
-          setSelectedSource(sourceFromUrl);
-          selectedSourceRef.current = sourceFromUrl;
-          setSelectedFilter(filterFromUrl);
-          selectedFilterRef.current = filterFromUrl;
-          setHasSearched(true);
-          handleSearch(queryFromUrl, false, filterFromUrl);
-        }, 0);
-      }
-      return;
-    }
-
-    if (parsedSavedSearch?.query) {
       setTimeout(() => {
-        restoreSavedSearchState(parsedSavedSearch!);
+        setSearchQuery(queryFromUrl);
+        searchQueryRef.current = queryFromUrl;
+        setSelectedSource(sourceFromUrl);
+        selectedSourceRef.current = sourceFromUrl;
+        setSelectedFilter(filterFromUrl);
+        selectedFilterRef.current = filterFromUrl;
+        setHasSearched(true);
+        void handleSearchRef.current(queryFromUrl, false, filterFromUrl);
       }, 0);
     }
-  }, [handleSearch, searchParams]);
+  }, [searchParams]);
 
   // ─── Input change with debounce & suggestions ────────────
   const handleTextChange = useCallback((text: string) => {
@@ -882,7 +835,9 @@ function SearchPageInner() {
     );
     // #endregion
     router.push(
-      `/collection/${kind}/${encodeURIComponent(collectionId)}?${params.toString()}`
+      `/collection/${kind}/${encodeURIComponent(
+        collectionId
+      )}?${params.toString()}`
     );
   };
   const handleSongPress = async (item: SearchResult) => {
@@ -893,8 +848,11 @@ function SearchPageInner() {
     setLoadingSongId(item.id);
 
     try {
-      const artistId = normalizeArtistRouteId(item.authorId || item.uploaderUrl);
-      const artistImage = item.uploaderAvatar || item.authorThumbnails?.[0]?.url;
+      const artistId = normalizeArtistRouteId(
+        item.authorId || item.uploaderUrl
+      );
+      const artistImage =
+        item.uploaderAvatar || item.authorThumbnails?.[0]?.url;
       const songResults = searchResults.filter(
         (result) =>
           result.type === "song" ||
@@ -908,8 +866,7 @@ function SearchPageInner() {
         title: result.title,
         artist: result.author || "Unknown Artist",
         artistId: normalizeArtistRouteId(result.authorId || result.uploaderUrl),
-        artistImage:
-          result.uploaderAvatar || result.authorThumbnails?.[0]?.url,
+        artistImage: result.uploaderAvatar || result.authorThumbnails?.[0]?.url,
         artistSource: result.source,
         coverUrl: result.thumbnailUrl || result.img || result.thumbnail,
         uploaded: result.uploaded,
