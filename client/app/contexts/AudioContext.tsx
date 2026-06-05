@@ -9,10 +9,11 @@ import React, {
   useCallback,
   ReactNode,
 } from "react";
+import { useSettings } from "./SettingsContext";
 
 type AudioType = "file" | "hls" | "soundcloud-drm";
 type PlaybackStrategy = "audio" | "widget";
-type AutoRetryPreference = "unknown" | "enabled" | "disabled";
+export type AutoRetryPreference = "unknown" | "enabled" | "disabled";
 const DEFAULT_PLAYBACK_ERROR =
   "Couldn't play this track. Try again or choose another one.";
 const AUTO_RETRY_STORAGE_KEY = "streamifyAutoRetryPlayback";
@@ -39,6 +40,7 @@ export interface Song {
   source?: string;
   url?: string;
   playbackStrategy?: PlaybackStrategy;
+  relatedSongs?: Song[];
 }
 
 interface PlaybackOptions {
@@ -81,6 +83,7 @@ interface AudioContextType {
   autoRetryStatusMessage: string | null;
   enableAutoRetry: () => void;
   disableAutoRetry: () => void;
+  resetAutoRetryPreference: () => void;
   dismissAutoRetryPrompt: () => void;
 }
 
@@ -467,6 +470,72 @@ function normalizeSong(song: Song): Song {
   };
 }
 
+function normalizeRelatedSongsPayload(
+  value: unknown,
+  fallbackSource?: string
+): Song[] {
+  if (!Array.isArray(value)) return [];
+
+  const deduped: Song[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const id =
+      typeof record.id === "string" && record.id.trim() ? record.id.trim() : "";
+    const title =
+      typeof record.title === "string" && record.title.trim()
+        ? record.title.trim()
+        : "";
+    if (!id || !title || seen.has(id)) continue;
+
+    seen.add(id);
+    deduped.push(
+      normalizeSong({
+        id,
+        title,
+        artist:
+          typeof record.artist === "string" && record.artist.trim()
+            ? record.artist.trim()
+            : "Unknown Artist",
+        artistId:
+          typeof record.artistId === "string" && record.artistId.trim()
+            ? record.artistId.trim()
+            : undefined,
+        artistImage:
+          typeof record.artistImage === "string" && record.artistImage.trim()
+            ? record.artistImage
+            : undefined,
+        coverUrl:
+          typeof record.coverUrl === "string" && record.coverUrl.trim()
+            ? record.coverUrl
+            : undefined,
+        uploaded:
+          typeof record.uploaded === "string" && record.uploaded.trim()
+            ? record.uploaded
+            : undefined,
+        duration:
+          typeof record.duration === "number"
+            ? record.duration
+            : typeof record.duration === "string"
+            ? Number.parseInt(record.duration, 10) || undefined
+            : undefined,
+        source:
+          typeof record.source === "string" && record.source.trim()
+            ? record.source
+            : fallbackSource,
+        url:
+          typeof record.url === "string" && record.url.trim()
+            ? record.url
+            : undefined,
+      })
+    );
+  }
+
+  return deduped;
+}
+
 function buildSongArtwork(song: Song): MediaImage[] {
   if (!song.coverUrl) return [];
 
@@ -503,6 +572,7 @@ function shouldRefreshResolvedAudio(song: Song): boolean {
 }
 
 export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
+  const { settings } = useSettings();
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [recentSongs, setRecentSongs] = useState<Song[]>([]);
   const [playbackQueue, setPlaybackQueue] = useState<Song[]>([]);
@@ -531,6 +601,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const autoRetryInFlightRef = useRef(false);
   const autoRetryAttemptCountRef = useRef<Record<string, number>>({});
   const currentSongRef = useRef<Song | null>(null);
+  const recentSongsRef = useRef<Song[]>([]);
   const autoRetryPreferenceRef = useRef<AutoRetryPreference>("unknown");
   const playbackRunIdRef = useRef("post-fix");
   const isRepeatRef = useRef(false);
@@ -551,6 +622,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     songId: string;
     audioUrl: string;
   } | null>(null);
+  const resolveSongForPlaybackRef = useRef<(song: Song) => Promise<Song>>(
+    async (song) => normalizeSong(song)
+  );
+  const playRecommendedSongRef = useRef<(seedSong: Song) => Promise<boolean>>(
+    async () => false
+  );
 
   const setTransientAutoRetryStatus = useCallback((message: string | null) => {
     if (autoRetryStatusTimerRef.current !== null) {
@@ -587,6 +664,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setAutoRetryPreference("disabled");
     setShowAutoRetryPrompt(false);
   }, []);
+
+  const resetAutoRetryPreference = useCallback(() => {
+    autoRetryPreferenceRef.current = "unknown";
+    setAutoRetryPreference("unknown");
+    setShowAutoRetryPrompt(false);
+    setTransientAutoRetryStatus(null);
+  }, [setTransientAutoRetryStatus]);
 
   const dismissAutoRetryPrompt = useCallback(() => {
     setShowAutoRetryPrompt(false);
@@ -905,6 +989,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   }, [currentSong]);
 
   useEffect(() => {
+    recentSongsRef.current = recentSongs;
+  }, [recentSongs]);
+
+  useEffect(() => {
     autoRetryPreferenceRef.current = autoRetryPreference;
     localStorage.setItem(AUTO_RETRY_STORAGE_KEY, autoRetryPreference);
   }, [autoRetryPreference]);
@@ -1042,8 +1130,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         return;
       }
 
-      setIsPlaying(false);
-      setCurrentTime(0);
+      void playRecommendedSongRef
+        .current(currentSong)
+        .then((didPlayRecommendation) => {
+          if (!didPlayRecommendation) {
+            setIsPlaying(false);
+            setCurrentTime(0);
+          }
+        });
     };
 
     const configureSoundCloudWidgetPlayback = async () => {
@@ -2093,7 +2187,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !currentSong) return;
     if (shouldUseSoundCloudWidget(currentSong)) return;
 
     const syncPlaybackState = () => {
@@ -2456,8 +2550,84 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         typeof payload.lengthSeconds === "number"
           ? payload.lengthSeconds
           : song.duration,
+      relatedSongs: normalizeRelatedSongsPayload(
+        payload.relatedSongs,
+        song.source
+      ),
     });
   };
+
+  resolveSongForPlaybackRef.current = resolveSongForPlayback;
+
+  const playRecommendedSong = useCallback(
+    async (seedSong: Song): Promise<boolean> => {
+      if (!settings.autoplayRecommendations) return false;
+
+      const seen = new Set<string>([seedSong.id]);
+      const candidatePool = [
+        ...(seedSong.relatedSongs || []),
+        ...recentSongsRef.current,
+      ];
+
+      let nextSong: Song | null = null;
+      for (const candidate of candidatePool) {
+        if (!candidate?.id || seen.has(candidate.id)) continue;
+        seen.add(candidate.id);
+        nextSong = normalizeSong(candidate);
+        break;
+      }
+
+      if (!nextSong) return false;
+
+      const baseQueue = playbackQueueRef.current.map((entry) =>
+        normalizeSong(entry)
+      );
+      const dedupedQueue = baseQueue.filter(
+        (entry) => entry.id !== nextSong.id
+      );
+      const nextQueue = [...dedupedQueue, nextSong];
+      const nextIndex = nextQueue.length - 1;
+
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setIsSongLoading(true);
+
+      try {
+        const resolvedSong = await resolveSongForPlaybackRef.current(nextSong);
+        if (
+          currentSongRef.current &&
+          currentSongRef.current.id !== seedSong.id &&
+          currentSongRef.current.id !== resolvedSong.id
+        ) {
+          return false;
+        }
+
+        setPlaybackQueue(
+          nextQueue.map((entry, index) =>
+            index === nextIndex ? { ...entry, ...resolvedSong } : entry
+          )
+        );
+        setQueueIndex(nextIndex);
+        setCurrentSong(resolvedSong);
+        setDuration(resolvedSong.duration || 0);
+        setPlaybackError(null);
+        setIsSongLoading(false);
+        setIsPlaying(true);
+        return true;
+      } catch (error) {
+        console.error("Error autoplaying recommended audio:", error);
+        setPlaybackError(
+          error instanceof Error ? error.message : DEFAULT_PLAYBACK_ERROR
+        );
+        setIsSongLoading(false);
+        setIsPlaying(false);
+        setCurrentTime(0);
+        return false;
+      }
+    },
+    [settings.autoplayRecommendations]
+  );
+  playRecommendedSongRef.current = playRecommendedSong;
 
   // Handle audio ended
   useEffect(() => {
@@ -2516,8 +2686,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             setCurrentTime(0);
           });
       } else {
-        setIsPlaying(false);
-        setCurrentTime(0);
+        void playRecommendedSongRef
+          .current(currentSong)
+          .then((didPlayRecommendation) => {
+            if (!didPlayRecommendation) {
+              setIsPlaying(false);
+              setCurrentTime(0);
+            }
+          });
       }
     };
 
@@ -2560,6 +2736,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setPlaybackError(null);
     setIsSongLoading(false);
     setIsPlaying(true);
+    if (settings.openFullscreenOnPlay) {
+      setIsFullscreenOpen(true);
+    }
   };
 
   const beginSongLoad = (song: Song, options?: PlaybackOptions) => {
@@ -2599,6 +2778,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setPlaybackError(null);
     setIsPlaying(false);
     setIsSongLoading(true);
+    if (settings.openFullscreenOnPlay) {
+      setIsFullscreenOpen(true);
+    }
     playbackRunIdRef.current = "pre-fix";
     // #region debug-point H5:begin-song-load
     reportDebugEvent(
@@ -2785,6 +2967,99 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   };
 
   useEffect(() => {
+    if (!settings.keyboardShortcuts) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName || "";
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        tagName === "INPUT" ||
+        tagName === "TEXTAREA" ||
+        tagName === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (event.code === "Space" && currentSong) {
+        event.preventDefault();
+        if (isPlaying) {
+          pauseSong();
+        } else {
+          resumeSong();
+        }
+        return;
+      }
+
+      if (!currentSong) return;
+
+      if (event.code === "ArrowLeft") {
+        event.preventDefault();
+        seekTo(Math.max(0, currentTime - settings.seekStepSeconds));
+        return;
+      }
+
+      if (event.code === "ArrowRight") {
+        event.preventDefault();
+        seekTo(
+          Math.min(
+            duration ||
+              currentSong.duration ||
+              currentTime + settings.seekStepSeconds,
+            currentTime + settings.seekStepSeconds
+          )
+        );
+        return;
+      }
+
+      if (event.code === "ArrowUp") {
+        event.preventDefault();
+        setVolume(Math.min(1, volume + 0.05));
+        return;
+      }
+
+      if (event.code === "ArrowDown") {
+        event.preventDefault();
+        setVolume(Math.max(0, volume - 0.05));
+        return;
+      }
+
+      if (event.code === "KeyF") {
+        event.preventDefault();
+        if (isFullscreenOpen) {
+          closeFullscreen();
+        } else {
+          openFullscreen();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    closeFullscreen,
+    currentSong,
+    currentTime,
+    duration,
+    isFullscreenOpen,
+    isPlaying,
+    openFullscreen,
+    pauseSong,
+    resumeSong,
+    seekTo,
+    setVolume,
+    settings.keyboardShortcuts,
+    settings.seekStepSeconds,
+    volume,
+  ]);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentSong || shouldUseSoundCloudWidget(currentSong))
       return;
@@ -2852,13 +3127,20 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setHandler("previoustrack", () => playPrevious());
     setHandler("nexttrack", () => playNext());
     setHandler("seekbackward", (details) =>
-      seekTo(Math.max(0, currentTime - (details.seekOffset || 10)))
+      seekTo(
+        Math.max(
+          0,
+          currentTime - (details.seekOffset || settings.seekStepSeconds)
+        )
+      )
     );
     setHandler("seekforward", (details) =>
       seekTo(
         Math.min(
-          duration || currentSong.duration || currentTime + 10,
-          currentTime + (details.seekOffset || 10)
+          duration ||
+            currentSong.duration ||
+            currentTime + settings.seekStepSeconds,
+          currentTime + (details.seekOffset || settings.seekStepSeconds)
         )
       )
     );
@@ -2891,6 +3173,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     queueIndex,
     resumeSong,
     seekTo,
+    settings.seekStepSeconds,
   ]);
 
   const value: AudioContextType = {
@@ -2928,6 +3211,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     autoRetryStatusMessage,
     enableAutoRetry,
     disableAutoRetry,
+    resetAutoRetryPreference,
     dismissAutoRetryPrompt,
   };
 

@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { HorizontalScrollRow } from "./components/HorizontalScrollRow";
 import { type Song, useAudio } from "./contexts/AudioContext";
+import { readSessionCache, writeSessionCache } from "./lib/session-cache";
 
 const HOME_ARTIST_BANNER_CACHE_KEY = "homeArtistBannerCache";
+const HOME_MADE_FOR_YOU_CACHE_KEY = "homeMadeForYouCache";
 
 type ArtistHistorySummary = {
   key: string;
@@ -26,6 +28,75 @@ type RemoteArtistPayload = {
     source?: string;
   };
 };
+
+type HomeMadeForYouCache = {
+  seedSong: Song | null;
+  songs: Song[];
+};
+
+function normalizeMadeForYouSongs(
+  value: unknown,
+  fallbackSource?: string
+): Song[] {
+  if (!Array.isArray(value)) return [];
+
+  const deduped: Song[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const id =
+      typeof record.id === "string" && record.id.trim() ? record.id.trim() : "";
+    const title =
+      typeof record.title === "string" && record.title.trim()
+        ? record.title.trim()
+        : "";
+    if (!id || !title || seen.has(id)) continue;
+
+    seen.add(id);
+    deduped.push({
+      id,
+      title,
+      artist:
+        typeof record.artist === "string" && record.artist.trim()
+          ? record.artist.trim()
+          : "Unknown Artist",
+      artistId:
+        typeof record.artistId === "string" && record.artistId.trim()
+          ? record.artistId.trim()
+          : undefined,
+      artistImage:
+        typeof record.artistImage === "string" && record.artistImage.trim()
+          ? record.artistImage
+          : undefined,
+      coverUrl:
+        typeof record.coverUrl === "string" && record.coverUrl.trim()
+          ? record.coverUrl
+          : undefined,
+      duration:
+        typeof record.duration === "number"
+          ? record.duration
+          : typeof record.duration === "string"
+          ? Number.parseInt(record.duration, 10) || undefined
+          : undefined,
+      uploaded:
+        typeof record.uploaded === "string" && record.uploaded.trim()
+          ? record.uploaded
+          : undefined,
+      source:
+        typeof record.source === "string" && record.source.trim()
+          ? record.source
+          : fallbackSource,
+      url:
+        typeof record.url === "string" && record.url.trim()
+          ? record.url
+          : undefined,
+    });
+  }
+
+  return deduped;
+}
 
 type HomeArtistBannerCache = Record<
   string,
@@ -234,13 +305,39 @@ function ArtistCard({ artist }: { artist: ArtistHistorySummary }) {
 
 export default function Home() {
   const { recentSongs, resolveAndPlaySong } = useAudio();
+  const initialMadeForYouCache =
+    typeof window === "undefined"
+      ? null
+      : readSessionCache<HomeMadeForYouCache>(HOME_MADE_FOR_YOU_CACHE_KEY);
   const [heroBanner, setHeroBanner] = useState("");
+  const [madeForYouSeedSong, setMadeForYouSeedSong] = useState<Song | null>(
+    initialMadeForYouCache?.seedSong || null
+  );
+  const [madeForYouSongs, setMadeForYouSongs] = useState<Song[]>(
+    initialMadeForYouCache?.songs || []
+  );
+  const [isLoadingMadeForYou, setIsLoadingMadeForYou] = useState(false);
+  const [authNotice, setAuthNotice] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!authNotice) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setAuthNotice(null);
+    }, 2600);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [authNotice]);
 
   const uniqueRecentSongs = useMemo(
     () => dedupeSongsById(recentSongs).slice(0, 12),
     [recentSongs]
   );
-
   const recentArtists = useMemo<ArtistHistorySummary[]>(() => {
     const artistMap = new Map<string, ArtistHistorySummary>();
 
@@ -371,6 +468,90 @@ export default function Home() {
     };
   }, [mostPlayedYouTubeArtist?.artistId]);
 
+  useEffect(() => {
+    if (madeForYouSeedSong || uniqueRecentSongs.length === 0) {
+      return;
+    }
+
+    const firstYouTubeSong =
+      uniqueRecentSongs.find((song) => isYouTubeSong(song)) || null;
+    if (firstYouTubeSong) {
+      setMadeForYouSeedSong(firstYouTubeSong);
+    }
+  }, [madeForYouSeedSong, uniqueRecentSongs]);
+
+  useEffect(() => {
+    writeSessionCache<HomeMadeForYouCache>(HOME_MADE_FOR_YOU_CACHE_KEY, {
+      seedSong: madeForYouSeedSong,
+      songs: madeForYouSongs,
+    });
+  }, [madeForYouSeedSong, madeForYouSongs]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMadeForYou = async () => {
+      if (!madeForYouSeedSong) {
+        setMadeForYouSongs([]);
+        setIsLoadingMadeForYou(false);
+        return;
+      }
+
+      if (madeForYouSongs.length > 0) {
+        setIsLoadingMadeForYou(false);
+        return;
+      }
+
+      setIsLoadingMadeForYou(true);
+
+      try {
+        const params = new URLSearchParams({
+          id: madeForYouSeedSong.id,
+          title: madeForYouSeedSong.title,
+          artist: madeForYouSeedSong.artist,
+        });
+        if (madeForYouSeedSong.source) {
+          params.set("source", madeForYouSeedSong.source);
+        }
+        if (madeForYouSeedSong.url) {
+          params.set("url", madeForYouSeedSong.url);
+        }
+
+        const response = await fetch(`/api/video?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as Record<string, unknown>;
+        if (!response.ok || cancelled) return;
+
+        const nextSongs = normalizeMadeForYouSongs(
+          payload.relatedSongs,
+          madeForYouSeedSong.source
+        )
+          .filter((song) => song.id !== madeForYouSeedSong.id)
+          .slice(0, 12);
+
+        if (!cancelled) {
+          setMadeForYouSongs(nextSongs);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load Made For You songs:", error);
+          setMadeForYouSongs([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingMadeForYou(false);
+        }
+      }
+    };
+
+    void loadMadeForYou();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [madeForYouSeedSong, madeForYouSongs.length]);
+
   const heroSongs = useMemo(
     () => dedupeSongsById(mostPlayedYouTubeArtist?.songs || []),
     [mostPlayedYouTubeArtist]
@@ -392,8 +573,28 @@ export default function Home() {
     }
   };
 
+  const showAuthDisabledNotice = (mode: "signup" | "signin") => {
+    setAuthNotice({
+      title: mode === "signup" ? "Sign up is disabled" : "Sign in is disabled",
+      body: "Auth is not live yet. Music playback and the rest of the app still work normally for now.",
+    });
+  };
+
   return (
     <div className="min-h-full text-white">
+      <div
+        className={`pointer-events-none fixed left-1/2 top-6 z-40 flex -translate-x-1/2 transition-all duration-200 ${
+          authNotice ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"
+        }`}
+      >
+        {authNotice ? (
+          <div className="theme-overlay pointer-events-auto w-[min(92vw,420px)] rounded-2xl border px-4 py-3 text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+            <p className="text-sm font-semibold">{authNotice.title}</p>
+            <p className="mt-1 text-sm text-white/62">{authNotice.body}</p>
+          </div>
+        ) : null}
+      </div>
+
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <p className="text-2xl font-bold tracking-tight text-white">
@@ -402,13 +603,15 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+              onClick={() => showAuthDisabledNotice("signup")}
+              className="theme-button-soft rounded-full border px-4 py-2 text-sm font-semibold transition"
             >
               Sign Up
             </button>
             <button
               type="button"
-              className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90"
+              onClick={() => showAuthDisabledNotice("signin")}
+              className="theme-button-solid rounded-full px-4 py-2 text-sm font-semibold transition"
             >
               Sign In
             </button>
@@ -416,7 +619,11 @@ export default function Home() {
         </div>
 
         {mostPlayedYouTubeArtist && heroSongs[0] ? (
-          <section className="relative overflow-hidden rounded-2xl  bg-[#181818]">
+          <section
+            className={`theme-surface relative overflow-hidden rounded-2xl ${
+              heroBanner ? "" : "border"
+            }`}
+          >
             {heroBanner ? (
               <div
                 className="absolute inset-0 bg-cover bg-center"
@@ -448,7 +655,7 @@ export default function Home() {
             </div>
           </section>
         ) : (
-          <section className="rounded-[30px] border border-white/10 bg-[linear-gradient(135deg,#1a1a1a_0%,#151515_48%,#101010_100%)] p-6 md:p-8">
+          <section className="theme-surface rounded-2xl border p-6 md:p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/55">
               Home
             </p>
@@ -483,8 +690,49 @@ export default function Home() {
               ))}
             </HorizontalScrollRow>
           ) : (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/55">
+            <div className="theme-surface-soft rounded-2xl border p-5 text-white/55">
               No recently played songs yet.
+            </div>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight">
+                Made For You
+              </h2>
+              {madeForYouSeedSong ? (
+                <p className="mt-1 text-sm text-white/50">
+                  Based on {madeForYouSeedSong.title}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          {madeForYouSongs.length > 0 ? (
+            <HorizontalScrollRow
+              containerClassName="pb-2"
+              contentClassName="flex w-max gap-4"
+            >
+              {madeForYouSongs.map((song) => (
+                <SongCard
+                  key={song.id}
+                  song={song}
+                  onPlay={() => void playQueue(madeForYouSongs, song)}
+                />
+              ))}
+            </HorizontalScrollRow>
+          ) : (
+            <div className="theme-surface-soft rounded-2xl border p-5 text-white/55">
+              {isLoadingMadeForYou ? (
+                <div className="flex items-center gap-3">
+                  <span className="theme-spinner h-5 w-5" />
+                  <span className="loading-dots">Loading recommendations</span>
+                </div>
+              ) : (
+                "Play a YouTube song to build your Made For You mix."
+              )}
             </div>
           )}
         </section>
@@ -506,7 +754,7 @@ export default function Home() {
               ))}
             </HorizontalScrollRow>
           ) : (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/55">
+            <div className="theme-surface-soft rounded-2xl border p-5 text-white/55">
               No recently played artists yet.
             </div>
           )}

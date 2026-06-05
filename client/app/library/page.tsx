@@ -1083,7 +1083,7 @@ export default function LibraryPage() {
 
   return (
     <>
-      <div className="relative h-full overflow-hidden rounded-xl bg-[#181818] text-white">
+      <div className="theme-surface relative h-full overflow-hidden rounded-xl border text-white">
         <div
           className={`pointer-events-none absolute left-1/2 top-4 z-40 flex -translate-x-1/2 transition-all duration-200 ${
             createdPlaylistToast
@@ -1091,7 +1091,7 @@ export default function LibraryPage() {
               : "-translate-y-2 opacity-0"
           }`}
         >
-          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-white/10 bg-black/70 px-4 py-2 text-sm font-medium text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+          <div className="theme-overlay pointer-events-auto flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-medium text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
             <span>{`Created ${createdPlaylistToast?.name || "playlist"}`}</span>
             {createdPlaylistToast ? (
               <button

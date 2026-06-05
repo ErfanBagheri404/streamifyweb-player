@@ -11,6 +11,10 @@ import {
   readLocalCollection,
   removeStoredPlaylist,
 } from "../../../lib/local-library";
+import {
+  readSessionCache,
+  writeSessionCache,
+} from "../../../lib/session-cache";
 
 const DEBUG_SERVER_URL = "";
 const DEBUG_SESSION_ID = "soundcloud-collection-bug";
@@ -63,6 +67,21 @@ type CollectionPayload = {
   };
   entries: CollectionEntry[];
 };
+
+type CachedRemoteCollectionState = {
+  collection: CollectionPayload["collection"] | null;
+  entries: CollectionEntry[];
+};
+
+const COLLECTION_PAGE_CACHE_TTL_MS = 15 * 60 * 1000;
+
+function getCollectionPageCacheKey(
+  id: string,
+  kind: string,
+  source: string
+): string {
+  return `collection-page:${source || "default"}:${kind}:${id}`;
+}
 
 function readStoredCollectionItem(
   id: string,
@@ -316,6 +335,22 @@ export default function CollectionPage() {
     () => readStoredCollectionItem(id, kind, source),
     [id, kind, source]
   );
+  const collectionCacheKey = useMemo(
+    () => getCollectionPageCacheKey(id, kind, source),
+    [id, kind, source]
+  );
+  const cachedRemoteCollection = useMemo(
+    () =>
+      readSessionCache<CachedRemoteCollectionState>(
+        collectionCacheKey,
+        COLLECTION_PAGE_CACHE_TTL_MS
+      ),
+    [collectionCacheKey]
+  );
+  const storedEntries = useMemo(
+    () => getCollectionEntries(storedItem),
+    [storedItem]
+  );
 
   const [remoteState, setRemoteState] = useState<{
     collection: CollectionPayload["collection"] | null;
@@ -323,10 +358,10 @@ export default function CollectionPage() {
     error: string | null;
     isLoading: boolean;
   }>({
-    collection: null,
-    entries: [],
+    collection: cachedRemoteCollection?.collection || null,
+    entries: cachedRemoteCollection?.entries || [],
     error: null,
-    isLoading: false,
+    isLoading: !cachedRemoteCollection,
   });
   const [loadingSongId, setLoadingSongId] = useState<string | null>(null);
   const [localLibraryVersion, setLocalLibraryVersion] = useState(0);
@@ -359,6 +394,15 @@ export default function CollectionPage() {
     [id, localLibraryVersion, source]
   );
 
+  useEffect(() => {
+    setRemoteState({
+      collection: cachedRemoteCollection?.collection || null,
+      entries: cachedRemoteCollection?.entries || [],
+      error: null,
+      isLoading: !cachedRemoteCollection,
+    });
+  }, [cachedRemoteCollection, collectionCacheKey]);
+
   const shouldFetchRemote = useMemo(() => {
     const lowerSource = source.toLowerCase();
     return Boolean(
@@ -390,7 +434,10 @@ export default function CollectionPage() {
       setRemoteState((previous) => ({
         ...previous,
         error: null,
-        isLoading: true,
+        isLoading:
+          previous.entries.length === 0 &&
+          previous.collection == null &&
+          storedEntries.length === 0,
       }));
 
       try {
@@ -460,12 +507,16 @@ export default function CollectionPage() {
         }
 
         if (!cancelled) {
-          setRemoteState({
+          const nextState = {
             collection:
               (json.collection as CollectionPayload["collection"]) || null,
             entries: Array.isArray(json.entries)
               ? (json.entries as CollectionEntry[])
               : [],
+          };
+          writeSessionCache(collectionCacheKey, nextState);
+          setRemoteState({
+            ...nextState,
             error: null,
             isLoading: false,
           });
@@ -508,6 +559,7 @@ export default function CollectionPage() {
       cancelled = true;
     };
   }, [
+    collectionCacheKey,
     href,
     id,
     kind,
@@ -515,6 +567,7 @@ export default function CollectionPage() {
     source,
     storedItem?.href,
     storedItem?.url,
+    storedEntries.length,
   ]);
 
   const entries = useMemo(() => {
@@ -532,8 +585,8 @@ export default function CollectionPage() {
       }));
     }
     if (remoteState.entries.length > 0) return remoteState.entries;
-    return getCollectionEntries(storedItem);
-  }, [id, localCollection, remoteState.entries, storedItem]);
+    return storedEntries;
+  }, [id, localCollection, remoteState.entries, storedEntries]);
 
   const backParams = new URLSearchParams();
   const searchQuery = searchParams.get("search_query");
@@ -822,13 +875,9 @@ export default function CollectionPage() {
           ) : null}
         </div>
 
-        {remoteState.error ? (
+        {remoteState.error && entries.length === 0 ? (
           <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-red-200">
             {remoteState.error}
-          </div>
-        ) : remoteState.isLoading ? (
-          <div className="mt-8 flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
           </div>
         ) : entries.length > 0 ? (
           <div className="mt-8">
@@ -936,6 +985,10 @@ export default function CollectionPage() {
                 );
               })}
             </div>
+          </div>
+        ) : remoteState.isLoading ? (
+          <div className="mt-8 flex justify-center py-12">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
           </div>
         ) : (
           <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/55">

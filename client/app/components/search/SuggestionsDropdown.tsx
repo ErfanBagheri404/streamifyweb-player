@@ -16,7 +16,7 @@ export const SuggestionsDropdown: React.FC<SuggestionsDropdownProps> = ({
   if (suggestions.length === 0 && !isLoading) return null;
 
   return (
-    <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-2xl border border-white/8 bg-[#181818] shadow-[0_18px_48px_rgba(0,0,0,0.32)]">
+    <div className="theme-surface absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-2xl border shadow-[0_18px_48px_rgba(0,0,0,0.32)]">
       <div className="flex items-center justify-end border-b border-white/6 px-3 py-2">
         <button
           type="button"
@@ -28,8 +28,8 @@ export const SuggestionsDropdown: React.FC<SuggestionsDropdownProps> = ({
       </div>
 
       {isLoading && suggestions.length === 0 && (
-        <div className="px-4 py-6 text-center text-neutral-400">
-          <span className="inline-block h-5 w-5 rounded-full border-2 border-neutral-500 border-t-transparent animate-spin" />
+        <div className="px-4 py-6 text-center text-white/55">
+          <span className="theme-spinner inline-block h-5 w-5" />
         </div>
       )}
 

@@ -59,6 +59,13 @@ export function getFilterOptions(source: SourceType): FilterOption[] {
         { label: "Playlists", value: "playlists" },
         { label: "Albums", value: "albums" },
       ];
+    case "jiosaavn":
+      return [
+        { label: "All", value: "all" },
+        { label: "Songs", value: "songs" },
+        { label: "Albums", value: "albums" },
+        { label: "Artists", value: "artists" },
+      ];
     default:
       return [];
   }

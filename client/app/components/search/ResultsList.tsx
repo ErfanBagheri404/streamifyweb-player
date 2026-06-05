@@ -104,7 +104,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
 
   if (searchQuery.trim() && hasSearched && searchResults.length === 0) {
     return (
-      <p className="text-neutral-400 text-center mt-8">No results found</p>
+      <p className="mt-8 text-center text-white/48">No results found</p>
     );
   }
 
@@ -143,18 +143,21 @@ export const ResultsList: React.FC<ResultsListProps> = ({
 
       {!hasMoreResults ? (
         <div className="py-5 text-center">
-          <span className="text-neutral-400 text-sm">
+          <span className="text-sm text-white/45">
             End of search results
           </span>
         </div>
       ) : (
         <div className="py-5 text-center">
           {isLoadingMore ? (
-            <div className="inline-block w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <div className="inline-flex items-center gap-3 rounded-full px-4 py-2 text-sm text-white/65">
+              <span className="theme-spinner h-5 w-5" />
+              <span className="loading-dots">Loading more</span>
+            </div>
           ) : (
             <button
               onClick={onLoadMore}
-              className="bg-neutral-800 hover:bg-neutral-700 px-6 py-2.5 rounded-full text-white text-sm"
+              className="theme-button-soft rounded-full border px-6 py-2.5 text-sm font-semibold transition"
             >
               Load More
             </button>

@@ -8,6 +8,12 @@ interface ResultItemProps {
   onPress: () => void;
 }
 
+type SearchResultWithExtras = SearchResult & {
+  videos?: number;
+  playlistType?: string;
+  subCount?: number | string;
+};
+
 function formatSubscribers(
   count: number | string | undefined,
   source: string | undefined
@@ -37,6 +43,7 @@ function formatMetric(
 }
 
 export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
+  const itemWithExtras = item as SearchResultWithExtras;
   const isArtist = item.type === "artist" || item.type === "channel";
   const isYouTubeSource =
     item.source === "youtube" || item.source === "youtubemusic";
@@ -48,8 +55,8 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
   const isYouTubeMixPlaylist =
     item.type === "playlist" &&
     isYouTubeSource &&
-    ((item as any).videos === -2 ||
-      (item as any).playlistType === "MIX_STREAM");
+    (itemWithExtras.videos === -2 ||
+      itemWithExtras.playlistType === "MIX_STREAM");
 
   // ---------- FIX: For channels/artists, use name/author as fallback ----------
   const channelName = item.title || item.name || item.author || "";
@@ -81,7 +88,7 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
       : undefined;
 
   const subCountLabel = isArtist
-    ? formatSubscribers((item as any).subCount, item.source)
+    ? formatSubscribers(itemWithExtras.subCount, item.source)
     : "";
   // Thumbnail styling
   const thumbnailClasses = isArtist
@@ -100,26 +107,38 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
   const imgHeight = isArtist ? 48 : isYouTubeSource ? 144 : 64;
 
   return (
-    <button
-      onClick={onPress}
-      className="w-full text-left flex py-2.5 rounded-lg transition-colors"
-    >
-      {thumbnail ? (
-        <Image
-          src={thumbnail}
-          alt=""
-          width={imgWidth}
-          height={imgHeight}
-          className={thumbnailClasses}
-          unoptimized
-        />
-      ) : (
-        <div className={placeholderClasses} />
-      )}
+    <div className="flex py-2.5 rounded-lg">
+      <button
+        type="button"
+        onClick={onPress}
+        className="mr-3 shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        aria-label={`Open ${displayTitle}`}
+      >
+        {thumbnail ? (
+          <Image
+            src={thumbnail}
+            alt=""
+            width={imgWidth}
+            height={imgHeight}
+            className={thumbnailClasses.replace(" mr-3", "")}
+            unoptimized
+          />
+        ) : (
+          <div className={placeholderClasses.replace(" mr-3", "")} />
+        )}
+      </button>
 
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         {/* Channel / Artist name */}
-        <h3 className="text-white font-medium truncate">{displayTitle}</h3>
+        <h3 className="truncate text-white font-medium">
+          <button
+            type="button"
+            onClick={onPress}
+            className="truncate text-left transition hover:underline focus:outline-none focus-visible:underline"
+          >
+            {displayTitle}
+          </button>
+        </h3>
 
         {/* Subscriber / listener count – now properly below the name */}
         {isArtist && subCountLabel && (
@@ -149,7 +168,7 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
           </div>
         )}
       </div>
-    </button>
+    </div>
   );
 });
 

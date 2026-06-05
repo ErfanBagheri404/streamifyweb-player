@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { useAudio } from "../contexts/AudioContext";
+import { useAudio, type Song } from "../contexts/AudioContext";
+import { useSettings } from "../contexts/SettingsContext";
 import {
   addSongToPlaylist,
   isSongLiked,
@@ -43,6 +44,77 @@ function shiftColor(
 ): [number, number, number] {
   const clamp = (value: number) => Math.max(0, Math.min(255, value));
   return [clamp(r + amount), clamp(g + amount), clamp(b + amount)];
+}
+
+function isYouTubeBackedSource(source?: string): boolean {
+  const normalized = (source || "").trim().toLowerCase();
+  return (
+    !normalized || normalized === "youtube" || normalized === "youtubemusic"
+  );
+}
+
+function normalizeRemoteRelatedSongs(
+  value: unknown,
+  fallbackSource?: string
+): Song[] {
+  if (!Array.isArray(value)) return [];
+
+  const deduped: Song[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const id =
+      typeof record.id === "string" && record.id.trim() ? record.id.trim() : "";
+    const title =
+      typeof record.title === "string" && record.title.trim()
+        ? record.title.trim()
+        : "";
+    if (!id || !title || seen.has(id)) continue;
+
+    seen.add(id);
+    deduped.push({
+      id,
+      title,
+      artist:
+        typeof record.artist === "string" && record.artist.trim()
+          ? record.artist.trim()
+          : "Unknown Artist",
+      artistId:
+        typeof record.artistId === "string" && record.artistId.trim()
+          ? record.artistId.trim()
+          : undefined,
+      artistImage:
+        typeof record.artistImage === "string" && record.artistImage.trim()
+          ? record.artistImage
+          : undefined,
+      coverUrl:
+        typeof record.coverUrl === "string" && record.coverUrl.trim()
+          ? record.coverUrl
+          : undefined,
+      duration:
+        typeof record.duration === "number"
+          ? record.duration
+          : typeof record.duration === "string"
+          ? Number.parseInt(record.duration, 10) || undefined
+          : undefined,
+      uploaded:
+        typeof record.uploaded === "string" && record.uploaded.trim()
+          ? record.uploaded
+          : undefined,
+      source:
+        typeof record.source === "string" && record.source.trim()
+          ? record.source
+          : fallbackSource,
+      url:
+        typeof record.url === "string" && record.url.trim()
+          ? record.url
+          : undefined,
+    });
+  }
+
+  return deduped;
 }
 
 function ChevronDownGlyph() {
@@ -221,6 +293,7 @@ function extractPaletteFromImage(image: HTMLImageElement): {
 }
 
 export default function FullscreenPlayer() {
+  const { settings } = useSettings();
   const {
     currentSong,
     recentSongs,
@@ -257,6 +330,8 @@ export default function FullscreenPlayer() {
   const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = useState(false);
   const [isCurrentSongLiked, setIsCurrentSongLiked] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [fetchedRelatedSongs, setFetchedRelatedSongs] = useState<Song[]>([]);
+  const [isLoadingRelatedSongs, setIsLoadingRelatedSongs] = useState(false);
 
   const upNextSongs = useMemo(() => {
     if (!currentSong || queueIndex < 0) return [];
@@ -340,6 +415,16 @@ export default function FullscreenPlayer() {
         return;
       }
 
+      if (!settings.lyricsEnabled) {
+        setLyricsText("");
+        setLyricsState({
+          loading: false,
+          error: "Lyrics are turned off in Settings.",
+          isSynced: false,
+        });
+        return;
+      }
+
       setLyricsState((previous) => ({
         loading: true,
         error: null,
@@ -394,6 +479,7 @@ export default function FullscreenPlayer() {
     currentSong?.title,
     currentSong?.artist,
     currentSong?.duration,
+    settings.lyricsEnabled,
   ]);
 
   useEffect(() => {
@@ -407,6 +493,83 @@ export default function FullscreenPlayer() {
     setManualLyricsTitle(currentSong.title || "");
   }, [currentSong]);
 
+  const embeddedRelatedSongs = useMemo(
+    () =>
+      (currentSong?.relatedSongs || [])
+        .filter((song) => song.id !== currentSong?.id)
+        .slice(0, 4),
+    [currentSong?.id, currentSong?.relatedSongs]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRelatedSongs = async () => {
+      if (embeddedRelatedSongs.length > 0) {
+        setFetchedRelatedSongs([]);
+        setIsLoadingRelatedSongs(false);
+        return;
+      }
+
+      if (!currentSong || !isYouTubeBackedSource(currentSong.source)) {
+        setFetchedRelatedSongs([]);
+        setIsLoadingRelatedSongs(false);
+        return;
+      }
+
+      setIsLoadingRelatedSongs(true);
+
+      try {
+        const params = new URLSearchParams({
+          id: currentSong.id,
+          title: currentSong.title,
+          artist: currentSong.artist,
+        });
+        if (currentSong.source) params.set("source", currentSong.source);
+        if (currentSong.url) params.set("url", currentSong.url);
+
+        const response = await fetch(`/api/video?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as Record<string, unknown>;
+        if (!response.ok || cancelled) return;
+
+        const nextSongs = normalizeRemoteRelatedSongs(
+          payload.relatedSongs,
+          currentSong.source
+        )
+          .filter((song) => song.id !== currentSong.id)
+          .slice(0, 4);
+
+        if (!cancelled) {
+          setFetchedRelatedSongs(nextSongs);
+        }
+      } catch {
+        if (!cancelled) {
+          setFetchedRelatedSongs([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingRelatedSongs(false);
+        }
+      }
+    };
+
+    void loadRelatedSongs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentSong,
+    currentSong?.artist,
+    currentSong?.id,
+    currentSong?.source,
+    currentSong?.title,
+    currentSong?.url,
+    embeddedRelatedSongs,
+  ]);
+
   const lyricLines = useMemo<TimedLyricLine[]>(
     () => (lyricsState.isSynced ? buildTimedLyrics(lyricsText) : []),
     [lyricsText, lyricsState.isSynced]
@@ -414,7 +577,13 @@ export default function FullscreenPlayer() {
 
   const plainLyricsText = useMemo(() => lyricsText.trim(), [lyricsText]);
   const sectionSongs =
-    upNextSongs.length > 0 ? upNextSongs : fallbackRelatedSongs;
+    upNextSongs.length > 0
+      ? upNextSongs
+      : embeddedRelatedSongs.length > 0
+      ? embeddedRelatedSongs
+      : fetchedRelatedSongs.length > 0
+      ? fetchedRelatedSongs
+      : fallbackRelatedSongs;
   const sectionTitle = upNextSongs.length > 0 ? "Up Next" : "Related";
 
   const activeLyricIndex = useMemo(
@@ -475,6 +644,7 @@ export default function FullscreenPlayer() {
   }, [currentSong]);
 
   useEffect(() => {
+    if (!settings.autoScrollLyrics) return;
     if (!lyricsState.isSynced) return;
     if (activeLyricIndex < 0) return;
     if (isLyricsManualMode) return;
@@ -502,7 +672,12 @@ export default function FullscreenPlayer() {
     lyricsScrollReleaseTimerRef.current = window.setTimeout(() => {
       isProgrammaticLyricsScrollRef.current = false;
     }, 500);
-  }, [activeLyricIndex, isLyricsManualMode, lyricsState.isSynced]);
+  }, [
+    activeLyricIndex,
+    isLyricsManualMode,
+    lyricsState.isSynced,
+    settings.autoScrollLyrics,
+  ]);
 
   const markLyricsUserScrollIntent = () => {
     lyricsUserScrollIntentUntilRef.current =
@@ -587,7 +762,7 @@ export default function FullscreenPlayer() {
       return;
     }
 
-    const relatedQueue = [currentSong, ...fallbackRelatedSongs];
+    const relatedQueue = [currentSong, ...sectionSongs];
     void resolveAndPlaySong(song, {
       queue: relatedQueue,
       currentIndex: index + 1,
@@ -714,7 +889,8 @@ export default function FullscreenPlayer() {
                     </p>
                   </div>
                   <span className="text-xs text-white/45">
-                    {playlist.songs.length} {playlist.songs.length === 1 ? "song" : "songs"}
+                    {playlist.songs.length}{" "}
+                    {playlist.songs.length === 1 ? "song" : "songs"}
                   </span>
                 </button>
               ))}
@@ -777,10 +953,7 @@ export default function FullscreenPlayer() {
               }`}
             >
               {isCurrentSongLiked ? "Liked" : "Like"}
-              <HeartGlyph
-                filled={isCurrentSongLiked}
-                className="h-4 w-4"
-              />
+              <HeartGlyph filled={isCurrentSongLiked} className="h-4 w-4" />
             </button>
           </div>
 
@@ -798,14 +971,20 @@ export default function FullscreenPlayer() {
         </section>
 
         <aside className="flex min-h-0 flex-col gap-2">
-          <section className="flex min-h-0 flex-1 flex-col rounded-xl bg-[#181818] px-3 py-3 md:px-4 md:py-4">
+          <section className="theme-surface flex min-h-0 flex-1 flex-col rounded-xl border px-3 py-3 md:px-4 md:py-4">
             <div className="flex min-h-0 flex-1 flex-col rounded-[24px]">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="mt-1 truncate text-lg font-semibold text-white">
                     {currentSong.title}
                   </p>
-                  <p className="text-sm text-white/55">Lyrics</p>
+                  <p className="text-sm text-white/55">
+                    {settings.lyricsEnabled
+                      ? settings.autoScrollLyrics
+                        ? "Lyrics"
+                        : "Lyrics • Auto-scroll off"
+                      : "Lyrics disabled"}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -826,7 +1005,20 @@ export default function FullscreenPlayer() {
                 <div className="space-y-2 text-lg leading-9 md:text-[22px] md:leading-[1.5]">
                   {lyricsState.loading ? (
                     <div className="space-y-3 py-2">
-                      <p className="text-white/45">Loading lyrics...</p>
+                      <div className="inline-flex items-center gap-3 rounded-full px-3 py-2 text-white/60">
+                        <span className="theme-spinner h-5 w-5" />
+                        <span className="loading-dots">Loading lyrics</span>
+                      </div>
+                    </div>
+                  ) : !settings.lyricsEnabled ? (
+                    <div className="theme-surface-soft rounded-xl border p-4">
+                      <p className="font-medium text-white/70">
+                        Lyrics are disabled right now.
+                      </p>
+                      <p className="mt-2 text-sm text-white/50">
+                        Turn lyrics back on from Settings whenever you want the
+                        Now Playing screen to fetch them again.
+                      </p>
                     </div>
                   ) : lyricLines.length > 0 ? (
                     <>
@@ -875,7 +1067,7 @@ export default function FullscreenPlayer() {
                         {lyricsState.error ||
                           "Lyrics are not available for this track yet."}
                       </p>
-                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="theme-surface-soft rounded-xl border p-4">
                         <p className="text-sm text-white/70">
                           Search manually for lyrics
                         </p>
@@ -927,10 +1119,7 @@ export default function FullscreenPlayer() {
               backgroundImage: `linear-gradient(180deg, ${rgbToCss(
                 sectionPrimary,
                 0.96
-              )} 0%, ${rgbToCss(
-                sectionSecondary,
-                0.94
-              )} 100%)`,
+              )} 0%, ${rgbToCss(sectionSecondary, 0.94)} 100%)`,
             }}
           >
             <div className="flex items-center justify-between gap-3">
@@ -995,7 +1184,14 @@ export default function FullscreenPlayer() {
                 className="mt-4 rounded-2xl px-4 py-6 text-sm text-white/60"
                 style={{ backgroundColor: rgbToCss(sectionSecondary, 0.22) }}
               >
-                Play a few more songs and related tracks will show up here.
+                {isLoadingRelatedSongs ? (
+                  <div className="inline-flex items-center gap-3">
+                    <span className="theme-spinner h-5 w-5" />
+                    <span className="loading-dots">Loading related tracks</span>
+                  </div>
+                ) : (
+                  "Play a few more songs and related tracks will show up here."
+                )}
               </div>
             )}
           </section>

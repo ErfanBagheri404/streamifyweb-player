@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useAudio } from "../contexts/AudioContext";
+import { useSettings } from "../contexts/SettingsContext";
 import FullscreenPlayer from "./FullscreenPlayer";
 
 interface DynamicMainContentProps {
@@ -15,6 +16,7 @@ export default function DynamicMainContent({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { isFullscreenOpen, closeFullscreen } = useAudio();
+  const { settings } = useSettings();
   const [shouldRenderFullscreen, setShouldRenderFullscreen] =
     useState(isFullscreenOpen);
   const [isFullscreenVisible, setIsFullscreenVisible] =
@@ -34,6 +36,12 @@ export default function DynamicMainContent({
   }, [navigationKey, isFullscreenOpen, closeFullscreen]);
 
   useEffect(() => {
+    if (settings.disableAnimations) {
+      setShouldRenderFullscreen(isFullscreenOpen);
+      setIsFullscreenVisible(isFullscreenOpen);
+      return;
+    }
+
     let enterFrameId: number | undefined;
     let visibleFrameId: number | undefined;
     let timeoutId: number | undefined;
@@ -65,7 +73,7 @@ export default function DynamicMainContent({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [isFullscreenOpen, shouldRenderFullscreen]);
+  }, [isFullscreenOpen, settings.disableAnimations, shouldRenderFullscreen]);
 
   return (
     <main

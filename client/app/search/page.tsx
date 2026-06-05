@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAudio } from "../contexts/AudioContext";
+import { useSettings } from "../contexts/SettingsContext";
 import {
   SearchInput,
   FilterBar,
@@ -23,6 +24,7 @@ import {
 
 const DEBUG_SERVER_URL = process.env.NEXT_PUBLIC_DEBUG_SERVER_URL || "";
 const DEBUG_SESSION_ID = "playback-source-500";
+const SEARCH_STATE_UPDATED_EVENT = "streamify-search-state-updated";
 
 function reportDebugEvent(
   runId: string,
@@ -230,6 +232,7 @@ export default function SearchPage() {
 function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { hasHydratedSettings, settings } = useSettings();
   const { resolveAndPlaySong } = useAudio();
 
   // State
@@ -447,6 +450,8 @@ function SearchPageInner() {
 
   const saveSearchState = useCallback(
     (override?: Partial<SavedSearchState> & { results?: SearchResult[] }) => {
+      if (!settings.rememberLastSearch) return;
+
       const query = override?.query ?? searchQuery;
       const source = override?.source ?? selectedSource;
       const filter = override?.filter ?? selectedFilter;
@@ -461,9 +466,17 @@ function SearchPageInner() {
           timestamp: Date.now(),
         };
         localStorage.setItem("lastSearch", JSON.stringify(searchState));
+        window.dispatchEvent(new CustomEvent(SEARCH_STATE_UPDATED_EVENT));
       }
     },
-    [hasSearched, searchQuery, searchResults, selectedFilter, selectedSource]
+    [
+      hasSearched,
+      searchQuery,
+      searchResults,
+      selectedFilter,
+      selectedSource,
+      settings.rememberLastSearch,
+    ]
   );
 
   // ─── API call ────────────────────────────────────────────
@@ -583,6 +596,41 @@ function SearchPageInner() {
   }, [isLoadingMore, hasMoreResults, handleSearch]);
 
   // Restore search state from URL on mount
+  useEffect(() => {
+    if (!hasHydratedSettings) return;
+    if (searchParams.get("q")) return;
+    if (searchParams.get("source")) return;
+    if (hasSearched || searchQueryRef.current.trim()) return;
+
+    const preferredSource = settings.preferredSearchSource;
+    let nextFilter = "all";
+    if (preferredSource === "soundcloud") nextFilter = "tracks";
+    if (preferredSource === "youtubemusic") nextFilter = "songs";
+    if (preferredSource === "jiosaavn") nextFilter = "all";
+
+    setSelectedSource(preferredSource);
+    selectedSourceRef.current = preferredSource;
+    setSelectedFilter(nextFilter);
+    selectedFilterRef.current = nextFilter;
+    setSourceFilters((prev) => {
+      const selected = prev.find((entry) => entry.id === preferredSource);
+      if (!selected) return prev;
+      return [selected, ...prev.filter((entry) => entry.id !== preferredSource)];
+    });
+  }, [
+    hasHydratedSettings,
+    hasSearched,
+    searchParams,
+    settings.preferredSearchSource,
+  ]);
+
+  useEffect(() => {
+    if (settings.rememberLastSearch) return;
+
+    localStorage.removeItem("lastSearch");
+    window.dispatchEvent(new CustomEvent(SEARCH_STATE_UPDATED_EVENT));
+  }, [settings.rememberLastSearch]);
+
   useEffect(() => {
     if (didRestoreInitialStateRef.current) return;
     didRestoreInitialStateRef.current = true;
@@ -711,6 +759,9 @@ function SearchPageInner() {
         case "youtubemusic":
           newFilter = "songs";
           break;
+        case "jiosaavn":
+          newFilter = "all";
+          break;
         default:
           newFilter = "all";
           break;
@@ -747,6 +798,7 @@ function SearchPageInner() {
     router.push("/search");
     // Clear saved search state
     localStorage.removeItem("lastSearch");
+    window.dispatchEvent(new CustomEvent(SEARCH_STATE_UPDATED_EVENT));
   };
 
   // ─── Navigation handlers ─────────────────────────────────
@@ -778,22 +830,18 @@ function SearchPageInner() {
   };
 
   const handleTopResultPress = (item: SearchResult) => {
-    // Save search state before navigation
-    saveSearchState();
     if (item.source === "youtube_channel" || item.type === "artist") {
+      saveSearchState();
       router.push(buildArtistUrl(item));
     } else {
       console.log("Play:", item.title);
     }
   };
   const handleArtistPress = (item: SearchResult) => {
-    // Save search state before navigation
     saveSearchState();
     router.push(buildArtistUrl(item));
   };
   const handleAlbumPress = (item: SearchResult) => {
-    // Save search state before navigation
-    saveSearchState();
     const kind = item.type === "album" ? "album" : "playlist";
     const collectionId =
       item.playlistId ||
@@ -839,6 +887,7 @@ function SearchPageInner() {
         collectionId
       )}?${params.toString()}`
     );
+    saveSearchState();
   };
   const handleSongPress = async (item: SearchResult) => {
     if (loadingSongId === item.id) return;

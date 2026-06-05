@@ -39,10 +39,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             key={source.id}
             onClick={() => source.id !== "spotify" && onSourceSelect(source.id)}
             disabled={source.id === "spotify"}
-            className={`px-5 h-9 rounded-full font-bold text-sm uppercase transition-colors ${
+            className={`h-9 rounded-full border px-5 text-sm font-bold uppercase transition-colors ${
               selectedSource === source.id
                 ? "text-black"
-                : "bg-neutral-800 text-neutral-400"
+                : "theme-button-soft text-white/70"
             } ${source.id === "spotify" ? "opacity-50 cursor-not-allowed" : ""}`}
             style={{
               backgroundColor:
@@ -64,10 +64,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             <button
               key={filter.value}
               onClick={() => onFilterSelect(filter.value)}
-              className={`px-4 h-8 rounded-full text-sm font-bold uppercase transition-colors ${
+              className={`h-8 rounded-full border px-4 text-sm font-bold uppercase transition-colors ${
                 selectedFilter === filter.value
-                  ? "bg-white text-black"
-                  : "bg-neutral-800 text-white"
+                  ? "theme-button-accent border-transparent"
+                  : "theme-button-soft"
               }`}
             >
               {filter.label}

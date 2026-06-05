@@ -23,13 +23,13 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   children,
 }) => {
   return (
-    <div className="flex items-center pb-4 gap-3">
+    <div className="flex items-center gap-3 pb-4">
       <div className="relative flex-1">
-        <div className="flex items-center bg-[#181818] rounded-xl">
+        <div className="theme-surface flex items-center rounded-xl border shadow-[0_12px_30px_rgba(0,0,0,0.18)]">
           <input
             type="text"
             placeholder={placeholder}
-            className="flex-1 py-4 px-4 bg-transparent text-white text-base placeholder-neutral-400 outline-none"
+            className="theme-input flex-1 rounded-xl border-0 bg-transparent px-4 py-4 text-base outline-none"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onFocus={onFocus}
@@ -38,7 +38,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
           {value.length > 0 && (
             <button
               onClick={onClear}
-              className="p-2 mr-1 text-neutral-400 hover:text-white"
+              className="mr-1 rounded-full p-2 text-white/40 transition hover:bg-white/6 hover:text-white"
               aria-label="Clear search"
             >
               <svg
@@ -60,10 +60,10 @@ export const SearchInput: React.FC<SearchInputProps> = ({
       </div>
       <button
         onClick={onFilterToggle} // <-- now toggles filters
-        className="cursor-pointer focus:outline-none"
+        className="theme-button-soft flex h-11 w-11 items-center justify-center rounded-xl border transition focus:outline-none"
         aria-label="Toggle filters"
       >
-        <Image src="/Filter.svg" alt="Filter" width={25} height={25} />
+        <Image src="/Filter.svg" alt="Filter" width={22} height={22} />
       </button>
     </div>
   );

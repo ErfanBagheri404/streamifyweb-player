@@ -1151,9 +1151,176 @@ function summarizeAudioCandidates(
     }));
 }
 
+function extractVideoIdFromUrl(value: string): string {
+  const rawValue = value.trim();
+  if (!rawValue) return "";
+
+  const watchMatch = rawValue.match(/[?&]v=([^&]+)/);
+  if (watchMatch?.[1]) return watchMatch[1];
+
+  const shortMatch = rawValue.match(/youtu\.be\/([^?]+)/);
+  if (shortMatch?.[1]) return shortMatch[1];
+
+  const pathMatch = rawValue.match(/\/watch\/([^/?#]+)/);
+  if (pathMatch?.[1]) return pathMatch[1];
+
+  return "";
+}
+
+function extractChannelIdFromUrl(value: string): string {
+  const rawValue = value.trim().replace(/^\/+/, "");
+  if (!rawValue) return "";
+
+  const channelMatch = rawValue.match(/^channel\/([^/?#]+)/i);
+  if (channelMatch?.[1]) return channelMatch[1];
+
+  if (/^https?:\/\//i.test(rawValue)) {
+    try {
+      const parsed = new URL(rawValue);
+      return extractChannelIdFromUrl(parsed.pathname);
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+}
+
+function pickThumbnailUrl(
+  record: Record<string, unknown>,
+  base: string
+): string {
+  const directThumbnail =
+    typeof record.thumbnailUrl === "string"
+      ? record.thumbnailUrl
+      : typeof record.thumbnail === "string"
+      ? record.thumbnail
+      : null;
+
+  if (directThumbnail) {
+    return absolutizeUrl(directThumbnail, base);
+  }
+
+  const thumbs = toArray(record.videoThumbnails)
+    .map((entry) => toRecord(entry))
+    .sort((left, right) => {
+      const leftScore =
+        (toNumber(left.width) ?? 0) * (toNumber(left.height) ?? 0);
+      const rightScore =
+        (toNumber(right.width) ?? 0) * (toNumber(right.height) ?? 0);
+      return rightScore - leftScore;
+    });
+
+  return absolutizeUrl(String(thumbs[0]?.url || ""), base);
+}
+
+function pickArtistImageUrl(
+  record: Record<string, unknown>,
+  base: string
+): string | undefined {
+  const directImage =
+    typeof record.uploaderAvatar === "string"
+      ? record.uploaderAvatar
+      : typeof record.authorImage === "string"
+      ? record.authorImage
+      : null;
+
+  if (directImage) {
+    return absolutizeUrl(directImage, base);
+  }
+
+  const thumbs = toArray(record.authorThumbnails)
+    .map((entry) => toRecord(entry))
+    .sort((left, right) => {
+      const leftScore =
+        (toNumber(left.width) ?? 0) * (toNumber(left.height) ?? 0);
+      const rightScore =
+        (toNumber(right.width) ?? 0) * (toNumber(right.height) ?? 0);
+      return rightScore - leftScore;
+    });
+
+  const image = String(thumbs[0]?.url || "");
+  return image ? absolutizeUrl(image, base) : undefined;
+}
+
+function normalizeRelatedSongs(
+  value: unknown,
+  base: string,
+  source: string
+): Array<Record<string, unknown>> {
+  const items = toArray(value);
+  const seen = new Set<string>();
+
+  return items
+    .map((entry) => toRecord(entry))
+    .map((record) => {
+      const rawUrl =
+        typeof record.url === "string"
+          ? record.url
+          : typeof record.videoUrl === "string"
+          ? record.videoUrl
+          : "";
+      const id =
+        typeof record.videoId === "string"
+          ? record.videoId
+          : typeof record.id === "string"
+          ? record.id
+          : extractVideoIdFromUrl(rawUrl);
+      const title =
+        typeof record.title === "string"
+          ? record.title
+          : typeof record.name === "string"
+          ? record.name
+          : "";
+
+      if (!id || !title || seen.has(id)) {
+        return null;
+      }
+
+      seen.add(id);
+
+      return {
+        id,
+        title,
+        artist:
+          typeof record.author === "string"
+            ? record.author
+            : typeof record.uploaderName === "string"
+            ? record.uploaderName
+            : typeof record.uploader === "string"
+            ? record.uploader
+            : "Unknown Artist",
+        artistId:
+          typeof record.authorId === "string"
+            ? record.authorId
+            : extractChannelIdFromUrl(
+                typeof record.uploaderUrl === "string" ? record.uploaderUrl : ""
+              ) || undefined,
+        artistImage: pickArtistImageUrl(record, base),
+        coverUrl: pickThumbnailUrl(record, base),
+        duration:
+          toNumber(record.lengthSeconds) ??
+          toNumber(record.duration) ??
+          toNumber(record.durationSeconds),
+        uploaded:
+          typeof record.uploadedDate === "string"
+            ? record.uploadedDate
+            : typeof record.publishedText === "string"
+            ? record.publishedText
+            : typeof record.uploaded === "string"
+            ? record.uploaded
+            : undefined,
+        source,
+        url: rawUrl ? absolutizeUrl(rawUrl, base) : `/watch?v=${id}`,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+}
+
 function normalizeVideoPayload(
   data: unknown,
-  base: string
+  base: string,
+  source = "youtube"
 ): Record<string, unknown> | null {
   const record = toRecord(data);
   const adaptiveFormats = toArray(record.adaptiveFormats);
@@ -1206,12 +1373,18 @@ function normalizeVideoPayload(
         : undefined,
     audioUrl,
     thumbnailUrl: absolutizeUrl(String(maxThumb || anyThumb || ""), base),
+    relatedSongs: normalizeRelatedSongs(
+      record.recommendedVideos || record.relatedStreams,
+      base,
+      source
+    ),
   };
 }
 
 async function fetchVideoFromInvidious(
   instance: string,
   videoId: string,
+  source?: string,
   signal?: AbortSignal
 ) {
   const base = instance.replace(/\/+$/, "");
@@ -1220,7 +1393,7 @@ async function fetchVideoFromInvidious(
     signal,
     INVIDIOUS_TIMEOUT_MS
   );
-  const normalized = normalizeVideoPayload(data, base);
+  const normalized = normalizeVideoPayload(data, base, source);
   if (!normalized?.audioUrl) {
     throw new Error(
       "Invidious response did not include a playable audio stream"
@@ -1232,6 +1405,7 @@ async function fetchVideoFromInvidious(
 async function fetchVideoFromPiped(
   instance: string,
   videoId: string,
+  source?: string,
   signal?: AbortSignal
 ) {
   const base = instance.replace(/\/+$/, "");
@@ -1240,7 +1414,7 @@ async function fetchVideoFromPiped(
     signal,
     PIPED_TIMEOUT_MS
   );
-  const normalized = normalizeVideoPayload(data, base);
+  const normalized = normalizeVideoPayload(data, base, source);
   if (!normalized?.audioUrl) {
     throw new Error("Piped response did not include a playable audio stream");
   }
@@ -1259,12 +1433,12 @@ async function fetchVideoDetails(
       ...INVIDIOUS_INSTANCES.map((instance) => ({
         label: `invidious:${instance}`,
         run: (signal?: AbortSignal) =>
-          fetchVideoFromInvidious(instance, videoId, signal),
+          fetchVideoFromInvidious(instance, videoId, source, signal),
       })),
       ...PIPED_INSTANCES.map((instance) => ({
         label: `piped:${instance}`,
         run: (signal?: AbortSignal) =>
-          fetchVideoFromPiped(instance, videoId, signal),
+          fetchVideoFromPiped(instance, videoId, source, signal),
       })),
     ];
 
