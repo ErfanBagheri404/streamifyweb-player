@@ -2565,9 +2565,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
 
     const resolvedId =
-      typeof payload.id === "string" && payload.id.trim()
-        ? payload.id
-        : song.id;
+      typeof payload.id === "string" && payload.id.trim() ? payload.id : song.id;
     const resolvedTitle =
       typeof payload.title === "string" && payload.title.trim()
         ? payload.title

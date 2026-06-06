@@ -190,6 +190,42 @@ function dedupeSongsById(songs: Song[]): Song[] {
   return output;
 }
 
+function rankMadeForYouCandidates(songs: Song[]): Song[] {
+  if (songs.length === 0) return [];
+
+  const artistPlayCount = new Map<string, number>();
+  for (const song of songs) {
+    const artistKey = song.artist?.trim().toLowerCase();
+    if (!artistKey) continue;
+    artistPlayCount.set(artistKey, (artistPlayCount.get(artistKey) || 0) + 1);
+  }
+
+  const deduped = dedupeSongsById(songs);
+
+  return [...deduped].sort((left, right) => {
+    const scoreSong = (song: Song, index: number) => {
+      const source = (song.source || "").toLowerCase();
+      const artistKey = song.artist?.trim().toLowerCase() || "";
+      const artistScore = artistKey ? artistPlayCount.get(artistKey) || 0 : 0;
+
+      let score = Math.max(24 - index, 0);
+      score += Math.min(song.relatedSongs?.length || 0, 10) * 20;
+      score += Math.min(artistScore, 5) * 12;
+
+      if (source === "youtube" || source === "youtubemusic") score += 40;
+      else if (source === "jiosaavn") score += 18;
+      else if (source === "soundcloud") score += 10;
+
+      if (song.coverUrl) score += 6;
+      if (song.duration) score += 4;
+
+      return score;
+    };
+
+    return scoreSong(right, deduped.indexOf(right)) - scoreSong(left, deduped.indexOf(left));
+  });
+}
+
 function buildArtistHref(artist: {
   artistId?: string;
   name: string;
@@ -341,6 +377,10 @@ export default function Home() {
     () => dedupeSongsById(recentSongs).slice(0, 12),
     [recentSongs]
   );
+  const madeForYouSeedCandidates = useMemo(
+    () => rankMadeForYouCandidates(recentSongs).slice(0, 6),
+    [recentSongs]
+  );
   const recentArtists = useMemo<ArtistHistorySummary[]>(() => {
     const artistMap = new Map<string, ArtistHistorySummary>();
 
@@ -472,18 +512,6 @@ export default function Home() {
   }, [mostPlayedYouTubeArtist?.artistId]);
 
   useEffect(() => {
-    if (madeForYouSeedSong || uniqueRecentSongs.length === 0) {
-      return;
-    }
-
-    const firstYouTubeSong =
-      uniqueRecentSongs.find((song) => isYouTubeSong(song)) || null;
-    if (firstYouTubeSong) {
-      setMadeForYouSeedSong(firstYouTubeSong);
-    }
-  }, [madeForYouSeedSong, uniqueRecentSongs]);
-
-  useEffect(() => {
     writeSessionCache<HomeMadeForYouCache>(HOME_MADE_FOR_YOU_CACHE_KEY, {
       seedSong: madeForYouSeedSong,
       songs: madeForYouSongs,
@@ -494,13 +522,18 @@ export default function Home() {
     let cancelled = false;
 
     const loadMadeForYou = async () => {
-      if (!madeForYouSeedSong) {
+      if (madeForYouSeedCandidates.length === 0) {
+        setMadeForYouSeedSong(null);
         setMadeForYouSongs([]);
         setIsLoadingMadeForYou(false);
         return;
       }
 
-      if (madeForYouSongs.length > 0) {
+      if (
+        madeForYouSeedSong &&
+        madeForYouSongs.length > 0 &&
+        madeForYouSeedCandidates.some((song) => song.id === madeForYouSeedSong.id)
+      ) {
         setIsLoadingMadeForYou(false);
         return;
       }
@@ -508,33 +541,58 @@ export default function Home() {
       setIsLoadingMadeForYou(true);
 
       try {
-        const params = new URLSearchParams({
-          id: madeForYouSeedSong.id,
-          title: madeForYouSeedSong.title,
-          artist: madeForYouSeedSong.artist,
-        });
-        if (madeForYouSeedSong.source) {
-          params.set("source", madeForYouSeedSong.source);
-        }
-        if (madeForYouSeedSong.url) {
-          params.set("url", madeForYouSeedSong.url);
-        }
+        for (const candidate of madeForYouSeedCandidates) {
+          const seededSongs = dedupeSongsById(candidate.relatedSongs || []).filter(
+            (song) => song.id !== candidate.id
+          );
 
-        const response = await fetch(`/api/video?${params.toString()}`, {
-          cache: "no-store",
-        });
-        const payload = (await response.json()) as Record<string, unknown>;
-        if (!response.ok || cancelled) return;
+          if (seededSongs.length > 0) {
+            if (!cancelled) {
+              setMadeForYouSeedSong(candidate);
+              setMadeForYouSongs(seededSongs.slice(0, 12));
+            }
+            return;
+          }
 
-        const nextSongs = normalizeMadeForYouSongs(
-          payload.relatedSongs,
-          madeForYouSeedSong.source
-        )
-          .filter((song) => song.id !== madeForYouSeedSong.id)
-          .slice(0, 12);
+          const params = new URLSearchParams({
+            id: candidate.id,
+            title: candidate.title,
+            artist: candidate.artist,
+          });
+          if (candidate.source) {
+            params.set("source", candidate.source);
+          }
+          if (candidate.url) {
+            params.set("url", candidate.url);
+          }
+
+          const response = await fetch(`/api/video?${params.toString()}`, {
+            cache: "no-store",
+          });
+          const payload = (await response.json()) as Record<string, unknown>;
+          if (!response.ok || cancelled) {
+            continue;
+          }
+
+          const nextSongs = normalizeMadeForYouSongs(
+            payload.relatedSongs,
+            candidate.source
+          )
+            .filter((song) => song.id !== candidate.id)
+            .slice(0, 12);
+
+          if (nextSongs.length > 0) {
+            if (!cancelled) {
+              setMadeForYouSeedSong(candidate);
+              setMadeForYouSongs(nextSongs);
+            }
+            return;
+          }
+        }
 
         if (!cancelled) {
-          setMadeForYouSongs(nextSongs);
+          setMadeForYouSeedSong(madeForYouSeedCandidates[0] || null);
+          setMadeForYouSongs([]);
         }
       } catch (error) {
         if (!cancelled) {
@@ -553,7 +611,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [madeForYouSeedSong, madeForYouSongs.length]);
+  }, [madeForYouSeedCandidates, madeForYouSeedSong, madeForYouSongs.length]);
 
   const heroSongs = useMemo(
     () => dedupeSongsById(mostPlayedYouTubeArtist?.songs || []),

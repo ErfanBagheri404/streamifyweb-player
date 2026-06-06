@@ -50,7 +50,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
     return (
       <div className="space-y-2">
         {[...Array(6)].map((_, i) => (
-          <SkeletonItem key={i} />
+          <SkeletonItem key={i} selectedSource={selectedSource} />
         ))}
       </div>
     );

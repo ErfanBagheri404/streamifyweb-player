@@ -237,7 +237,7 @@ export default function LeftPanel() {
         ].join(" ")}
       >
         <div
-          className="flex w-full flex-1 flex-col items-center gap-3 overflow-y-auto hide-scrollbar px-1 pb-6"
+          className="flex w-full flex-1 flex-col items-center gap-3 overflow-y-auto hide-scrollbar px-1 pb-20"
           style={{ paddingInlineEnd: "0.25rem" }}
         >
           {recentCovers.length > 0

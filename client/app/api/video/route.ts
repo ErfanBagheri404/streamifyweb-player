@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
+import { requireStreamifyRequest } from "../_lib/request-guard";
 
 const PIPED_INSTANCES = ["https://api.piped.private.coffee"];
 const INVIDIOUS_INSTANCES = [
@@ -1508,6 +1509,9 @@ async function fetchVideoDetails(
 }
 
 export async function GET(request: NextRequest) {
+  const blockedResponse = requireStreamifyRequest(request);
+  if (blockedResponse) return blockedResponse;
+
   const { searchParams } = new URL(request.url);
   const videoId = searchParams.get("id");
   const source = searchParams.get("source") || undefined;

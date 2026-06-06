@@ -5,6 +5,7 @@ import {
   LyricsCacheEntry,
   LyricsTrack,
 } from "../../lib/lyrics-shared";
+import { requireStreamifyRequest } from "../_lib/request-guard";
 
 type LrcLibResponse = {
   syncedLyrics?: unknown;
@@ -93,6 +94,9 @@ async function fetchLyricsOvhLyrics(
 }
 
 export async function GET(request: NextRequest) {
+  const blockedResponse = requireStreamifyRequest(request);
+  if (blockedResponse) return blockedResponse;
+
   const searchParams = request.nextUrl.searchParams;
   const id = searchParams.get("id") || "";
   const title = searchParams.get("title") || "";

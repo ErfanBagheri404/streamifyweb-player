@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
+import { requireStreamifyRequest } from "../_lib/request-guard";
 
 const LICENSE_PROXY_TIMEOUT_MS = 15000;
 const DEBUG_ENV_PATH = ".dbg/soundcloud-drm-playback.env";
@@ -107,6 +108,9 @@ async function readBodyToArrayBuffer(
 }
 
 export async function POST(request: NextRequest) {
+  const blockedResponse = requireStreamifyRequest(request);
+  if (blockedResponse) return blockedResponse;
+
   const { searchParams } = new URL(request.url);
   const licenseUrl = searchParams.get("url");
   const runId = `license-${Date.now()}-${Math.random()
@@ -294,6 +298,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const blockedResponse = requireStreamifyRequest(request);
+  if (blockedResponse) return blockedResponse;
+
   // Diagnostic endpoint — call this from the browser console to verify the
   // proxy route is reachable, CORS works, and the upstream SoundCloud
   // license server is reachable from this Next.js server. No CDM involved.

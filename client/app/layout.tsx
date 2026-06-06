@@ -5,6 +5,7 @@ import "./globals.css";
 import LeftPanel from "./components/LeftPanel";
 import MiniPlayer from "./components/MiniPlayer";
 import DynamicMainContent from "./components/DynamicMainContent";
+import MobileAppGate from "./components/MobileAppGate";
 import { AudioProvider } from "./contexts/AudioContext";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { dmSans, spaceMono, yekanBakh } from "./fonts";
@@ -151,6 +152,7 @@ export default function RootLayout({
       >
         <SettingsProvider>
           <AudioProvider>
+            <MobileAppGate />
             <LeftPanel />
             <Suspense fallback={null}>
               <DynamicMainContent>{children}</DynamicMainContent>

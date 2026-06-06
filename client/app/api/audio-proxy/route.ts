@@ -4,6 +4,7 @@ import http from "node:http";
 import https from "node:https";
 import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
+import { requireStreamifyRequest } from "../_lib/request-guard";
 
 const DEBUG_ENV_FILE = ".dbg/soundcloud-geekin-fail.env";
 const DEBUG_SERVER_URL_FALLBACK = "";
@@ -414,6 +415,9 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
+  const blockedResponse = requireStreamifyRequest(request);
+  if (blockedResponse) return blockedResponse;
+
   const { searchParams } = new URL(request.url);
   const audioUrl = searchParams.get("url");
   const runId = `pre-audio-${Date.now()}`;
