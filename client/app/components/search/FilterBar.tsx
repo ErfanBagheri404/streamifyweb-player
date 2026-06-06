@@ -31,7 +31,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     >
       {/* Source filters */}
       <HorizontalScrollRow
-        containerClassName="whitespace-nowrap pb-2 pr-12"
+        containerClassName="whitespace-nowrap pb-2"
+        containerStyle={{ paddingInlineEnd: "3rem" }}
         contentClassName="flex w-max gap-2"
       >
         {sourceFilters.map((source) => (
@@ -57,7 +58,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       {/* Sub-filters */}
       {showSubFilters && (
         <HorizontalScrollRow
-          containerClassName="whitespace-nowrap pb-3 pr-12"
+          containerClassName="whitespace-nowrap pb-3"
+          containerStyle={{ paddingInlineEnd: "3rem" }}
           contentClassName="flex w-max gap-2"
         >
           {filterOptions.map((filter) => (

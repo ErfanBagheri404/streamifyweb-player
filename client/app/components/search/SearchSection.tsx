@@ -18,9 +18,15 @@ export const SearchSection = memo<SearchSectionProps>(
     if (isArtistsSection) {
       return (
         <div className="mb-6">
-          <h2 className="text-white text-lg font-bold mb-3 ml-1">{title}</h2>
+          <h2
+            className="mb-3 text-lg font-bold text-white"
+            style={{ marginInlineStart: "0.25rem" }}
+          >
+            {title}
+          </h2>
           <HorizontalScrollRow
-            containerClassName="pb-2 pr-12"
+            containerClassName="pb-2"
+            containerStyle={{ paddingInlineEnd: "3rem" }}
             contentClassName="flex w-max gap-2"
           >
             {items.map((item) => (
@@ -37,7 +43,12 @@ export const SearchSection = memo<SearchSectionProps>(
 
     return (
       <div className="mb-4">
-        <h2 className="text-white text-lg font-bold mb-2 ml-1">{title}</h2>
+        <h2
+          className="mb-2 text-lg font-bold text-white"
+          style={{ marginInlineStart: "0.25rem" }}
+        >
+          {title}
+        </h2>
         <div className="space-y-1">
           {items.map((item) => (
             <ResultItem

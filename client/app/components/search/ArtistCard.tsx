@@ -2,6 +2,7 @@ import React, { memo } from "react";
 import Image from "next/image";
 import { SearchResult } from "./types";
 import { shortCount } from "./helpers";
+import { useAppLanguage } from "../../hooks/useAppLanguage";
 
 interface ArtistCardProps {
   item: SearchResult;
@@ -12,7 +13,7 @@ function formatSubscribers(count: number | string | undefined): string {
   if (count == null || count === 0) return "";
   const num = typeof count === "string" ? parseInt(count, 10) : count;
   if (isNaN(num)) return "";
-  return shortCount(num) + " subscribers";
+  return shortCount(num);
 }
 
 // Find the best quality thumbnail (prefer 512x512 or highest available)
@@ -32,6 +33,7 @@ function findBestThumbnail(item: SearchResult): string | undefined {
 }
 
 export const ArtistCard = memo<ArtistCardProps>(({ item, onPress }) => {
+  const { t } = useAppLanguage();
   const thumbnail = findBestThumbnail(item);
 
   // For channels/artists, the name can be in title, author, or name fields
@@ -39,6 +41,7 @@ export const ArtistCard = memo<ArtistCardProps>(({ item, onPress }) => {
     item.title || item.author || (item as any).name || "Unknown";
 
   const subCount = formatSubscribers((item as any).subCount);
+  const subCountLabel = subCount ? t("search.subscribers", { count: subCount }) : "";
 
   return (
     <button
@@ -64,9 +67,9 @@ export const ArtistCard = memo<ArtistCardProps>(({ item, onPress }) => {
         <h3 className="text-white text-sm font-medium truncate px-1">
           {displayName}
         </h3>
-        {subCount && (
+        {subCountLabel && (
           <p className="text-neutral-400 text-xs mt-0.5 truncate px-1">
-            {subCount}
+            {subCountLabel}
           </p>
         )}
       </div>

@@ -7,7 +7,7 @@ import MiniPlayer from "./components/MiniPlayer";
 import DynamicMainContent from "./components/DynamicMainContent";
 import { AudioProvider } from "./contexts/AudioContext";
 import { SettingsProvider } from "./contexts/SettingsContext";
-import { dmSans, spaceMono } from "./fonts";
+import { dmSans, spaceMono, yekanBakh } from "./fonts";
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -143,7 +143,8 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`h-full antialiased ${dmSans.variable} ${spaceMono.variable}`}
+      suppressHydrationWarning
+        className={`h-full antialiased ${dmSans.variable} ${spaceMono.variable} ${yekanBakh.variable}`}
     >
       <body
         className={`${dmSans.className} theme-shell flex h-full flex-row p-3`}

@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAudio } from "../../contexts/AudioContext";
+import { useAppLanguage } from "../../hooks/useAppLanguage";
 import { HorizontalScrollRow } from "../../components/HorizontalScrollRow";
+import { findSavedArtistRouteContext } from "../../lib/navigation-state";
 import { readSessionCache, writeSessionCache } from "../../lib/session-cache";
 
 type ArtistPayload = {
@@ -70,12 +72,18 @@ export default function ArtistPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const { beginSongLoad, playSong, clearSongLoading } = useAudio();
+  const { t } = useAppLanguage();
 
   const id = params.id;
-  const initialName = searchParams.get("name") || "";
-  const initialImage = searchParams.get("image") || "";
+  const savedRouteContext = useMemo(
+    () => findSavedArtistRouteContext(id),
+    [id]
+  );
+  const initialName = savedRouteContext?.name || "";
+  const initialImage = savedRouteContext?.image || "";
   const sourceParam =
     searchParams.get("source") ||
+    savedRouteContext?.source ||
     (searchParams.get("search_source") === "jiosaavn" ? "jiosaavn" : "");
   const artistCacheKey = useMemo(
     () => getArtistPageCacheKey(id, sourceParam),
@@ -169,12 +177,7 @@ export default function ArtistPage() {
 
   const buildAlbumHref = (album: ArtistPayload["albums"][number]) => {
     const params = new URLSearchParams();
-    params.set("title", album.title || "");
-    params.set("author", header.name);
     params.set("source", "jiosaavn");
-    if (album.thumbnail) params.set("image", album.thumbnail);
-    if (album.url) params.set("href", album.url);
-    if (album.songCount != null) params.set("count", String(album.songCount));
     if (searchParams.get("search_query"))
       params.set("search_query", searchParams.get("search_query") || "");
     if (searchParams.get("search_source"))
@@ -188,13 +191,7 @@ export default function ArtistPage() {
 
   const buildPlaylistHref = (playlist: ArtistPayload["playlists"][number]) => {
     const params = new URLSearchParams();
-    params.set("title", playlist.title || "");
-    params.set("author", header.name);
     params.set("source", pageSource || "youtube");
-    if (playlist.thumbnail) params.set("image", playlist.thumbnail);
-    if (playlist.videoCount != null) {
-      params.set("count", String(playlist.videoCount));
-    }
     if (searchParams.get("search_query")) {
       params.set("search_query", searchParams.get("search_query") || "");
     }
@@ -286,7 +283,7 @@ export default function ArtistPage() {
           }}
           className="theme-overlay absolute left-4 top-4 z-10 rounded-full border px-3 py-2 text-sm text-white/78 transition-colors hover:text-white"
         >
-          ← Back
+          {`← ${t("common.back")}`}
         </button>
         <div
           className="relative h-44 bg-neutral-800 sm:h-56"
@@ -318,13 +315,15 @@ export default function ArtistPage() {
                   </h1>
                   {header.verified && (
                     <span className="text-xs px-2 py-1 rounded-full bg-blue-600/30 border border-blue-500/40 text-blue-200">
-                      Verified
+                      {t("artist.verified")}
                     </span>
                   )}
                 </div>
                 {header.subscribers != null && header.subscribers > 0 && (
                   <p className="mt-1 text-white/70">
-                    {formatCount(header.subscribers)} subscribers
+                    {t("artist.subscribers", {
+                      count: formatCount(header.subscribers),
+                    })}
                   </p>
                 )}
               </div>
@@ -349,7 +348,7 @@ export default function ArtistPage() {
         <div className="mt-6">
           {featuredSong && (
             <div className="mb-10">
-              <h2 className="mb-3 text-xl font-bold">Popular</h2>
+              <h2 className="mb-3 text-xl font-bold">{t("artist.popular")}</h2>
               <button
                 type="button"
                 onClick={() => openFeaturedSong(featuredSong)}
@@ -366,12 +365,12 @@ export default function ArtistPage() {
                     <div className="theme-surface-soft aspect-square w-full rounded-2xl border" />
                   )}
                   <div className="theme-overlay absolute bottom-3 left-3 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
-                    Top Song
+                    {t("artist.topSong")}
                   </div>
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/42">
-                    Most played
+                    {t("artist.mostPlayed")}
                   </p>
                   <h3 className="mt-2 truncate text-2xl font-black tracking-tight text-white md:text-3xl">
                     {featuredSong.title}
@@ -382,7 +381,9 @@ export default function ArtistPage() {
                   <div className="mt-4 flex flex-wrap gap-2 text-sm text-white/65">
                     {featuredSong.views != null && featuredSong.views > 0 ? (
                       <span className="theme-surface-soft rounded-full border px-3 py-1.5">
-                        {formatCount(featuredSong.views)} views
+                        {t("artist.views", {
+                          count: formatCount(featuredSong.views),
+                        })}
                       </span>
                     ) : null}
                     {featuredSong.duration ? (
@@ -391,7 +392,9 @@ export default function ArtistPage() {
                       </span>
                     ) : null}
                     <span className="theme-button-accent rounded-full px-4 py-1.5 text-sm font-semibold">
-                      {isJioSaavnArtist ? "Play now" : "Open track"}
+                      {isJioSaavnArtist
+                        ? t("common.playNow")
+                        : t("artist.openTrack")}
                     </span>
                   </div>
                 </div>
@@ -401,7 +404,9 @@ export default function ArtistPage() {
 
           {data.songs.length > 0 && (
             <div className="mb-10">
-              <h2 className="mb-3 text-xl font-bold">Popular Tracks</h2>
+              <h2 className="mb-3 text-xl font-bold">
+                {t("artist.popularTracks")}
+              </h2>
               <div className="overflow-hidden">
                 {data.songs.slice(0, 20).map((song, idx) =>
                   isJioSaavnArtist ? (
@@ -441,7 +446,11 @@ export default function ArtistPage() {
                       </div>
                       <div className="mx-4 text-right text-sm tabular-nums text-white/45">
                         {song.views != null && song.views > 0 && (
-                          <span>{formatCount(song.views)} views</span>
+                          <span>
+                            {t("artist.views", {
+                              count: formatCount(song.views),
+                            })}
+                          </span>
                         )}
                       </div>
                       <div className="w-16 flex-shrink-0 text-right text-sm tabular-nums text-white/45">
@@ -487,7 +496,11 @@ export default function ArtistPage() {
                       </div>
                       <div className="mx-4 text-right text-sm tabular-nums text-white/45">
                         {song.views != null && song.views > 0 && (
-                          <span>{formatCount(song.views)} views</span>
+                          <span>
+                            {t("artist.views", {
+                              count: formatCount(song.views),
+                            })}
+                          </span>
                         )}
                       </div>
                       <div className="w-16 flex-shrink-0 text-right text-sm tabular-nums text-white/45">
@@ -497,7 +510,7 @@ export default function ArtistPage() {
                   )
                 )}
                 {data.songs.length === 0 && (
-                  <div className="p-4 text-white/45">No songs found.</div>
+                  <div className="p-4 text-white/45">{t("artist.noSongs")}</div>
                 )}
               </div>
             </div>
@@ -505,7 +518,7 @@ export default function ArtistPage() {
 
           {data.albums.length > 0 && (
             <div className="mb-10">
-              <h2 className="mb-3 text-xl font-bold">Albums</h2>
+              <h2 className="mb-3 text-xl font-bold">{t("artist.albums")}</h2>
               <HorizontalScrollRow
                 containerClassName="pb-2 px-12"
                 contentClassName="flex w-max gap-4"
@@ -543,9 +556,11 @@ export default function ArtistPage() {
                       <div className="text-sm text-white/45">
                         {album.year ||
                           (album.songCount
-                            ? `${album.songCount} songs`
+                            ? t("artist.songCount", { count: album.songCount })
                             : album.videoCount
-                            ? `${album.videoCount} videos`
+                            ? t("artist.videoCount", {
+                                count: album.videoCount,
+                              })
                             : "")}
                       </div>
                     </Link>
@@ -583,16 +598,18 @@ export default function ArtistPage() {
                       <div className="text-sm text-white/45">
                         {album.year ||
                           (album.songCount
-                            ? `${album.songCount} songs`
+                            ? t("artist.songCount", { count: album.songCount })
                             : album.videoCount
-                            ? `${album.videoCount} videos`
+                            ? t("artist.videoCount", {
+                                count: album.videoCount,
+                              })
                             : "")}
                       </div>
                     </a>
                   )
                 )}
                 {data.albums.length === 0 && (
-                  <div className="text-white/45">No albums found.</div>
+                  <div className="text-white/45">{t("artist.noAlbums")}</div>
                 )}
               </HorizontalScrollRow>
             </div>
@@ -600,9 +617,12 @@ export default function ArtistPage() {
 
           {data.playlists.length > 0 && (
             <div className="mb-10">
-              <h2 className="mb-3 text-xl font-bold">Playlists</h2>
+              <h2 className="mb-3 text-xl font-bold">
+                {t("artist.playlists")}
+              </h2>
               <HorizontalScrollRow
-                containerClassName="pb-2 pr-12"
+                containerClassName="pb-2"
+                containerStyle={{ paddingInlineEnd: "3rem" }}
                 contentClassName="flex w-max gap-4"
               >
                 {data.playlists.map((p, idx) => (
@@ -634,13 +654,13 @@ export default function ArtistPage() {
                     <div className="mt-2 font-medium truncate">{p.title}</div>
                     {p.videoCount != null && p.videoCount > 0 && (
                       <div className="text-sm text-white/45">
-                        {p.videoCount} videos
+                        {t("artist.videoCount", { count: p.videoCount })}
                       </div>
                     )}
                   </Link>
                 ))}
                 {data.playlists.length === 0 && (
-                  <div className="text-white/45">No playlists found.</div>
+                  <div className="text-white/45">{t("artist.noPlaylists")}</div>
                 )}
               </HorizontalScrollRow>
             </div>

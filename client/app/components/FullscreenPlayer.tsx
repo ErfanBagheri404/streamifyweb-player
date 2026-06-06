@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useAudio, type Song } from "../contexts/AudioContext";
 import { useSettings } from "../contexts/SettingsContext";
+import { useAppLanguage } from "../hooks/useAppLanguage";
 import {
   addSongToPlaylist,
   isSongLiked,
@@ -293,6 +294,7 @@ function extractPaletteFromImage(image: HTMLImageElement): {
 }
 
 export default function FullscreenPlayer() {
+  const { t } = useAppLanguage();
   const { settings } = useSettings();
   const {
     currentSong,
@@ -585,6 +587,8 @@ export default function FullscreenPlayer() {
       ? fetchedRelatedSongs
       : fallbackRelatedSongs;
   const sectionTitle = upNextSongs.length > 0 ? "Up Next" : "Related";
+  const localizedSectionTitle =
+    upNextSongs.length > 0 ? t("fullscreen.upNext") : t("fullscreen.related");
 
   const activeLyricIndex = useMemo(
     () => findActiveLyricIndex(lyricLines, currentTime),
@@ -815,7 +819,7 @@ export default function FullscreenPlayer() {
         }`}
       >
         <div className="rounded-full border border-white/12 bg-black/70 px-4 py-2 text-sm font-medium text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-          {feedbackMessage || "Saved"}
+          {feedbackMessage || t("common.saved")}
         </div>
       </div>
 
@@ -836,27 +840,30 @@ export default function FullscreenPlayer() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">
-                Add To Playlist
+                {t("fullscreen.addToPlaylist")}
               </p>
               <h3 className="mt-2 text-2xl font-semibold text-white">
-                Choose a playlist
+                {t("fullscreen.choosePlaylist")}
               </h3>
               <p className="mt-1 text-sm text-white/55">
-                Save this track to one of your playlists.
+                {t("fullscreen.saveTrackToPlaylist")}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setIsPlaylistPickerOpen(false)}
               className="flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none text-white/70 transition hover:bg-white/8 hover:text-white"
-              aria-label="Close playlist picker"
+              aria-label={t("fullscreen.closePlaylistPicker")}
             >
               ×
             </button>
           </div>
 
           {ownedPlaylists.length > 0 ? (
-            <div className="mt-5 max-h-[320px] space-y-2 overflow-y-auto pr-1 hide-scrollbar">
+            <div
+              className="mt-5 max-h-[320px] space-y-2 overflow-y-auto hide-scrollbar"
+              style={{ paddingInlineEnd: "0.25rem" }}
+            >
               {ownedPlaylists.map((playlist) => (
                 <button
                   key={playlist.id}
@@ -885,12 +892,13 @@ export default function FullscreenPlayer() {
                       {playlist.name}
                     </p>
                     <p className="mt-1 truncate text-xs text-white/55">
-                      {playlist.description || "Your playlist"}
+                      {playlist.description || t("fullscreen.yourPlaylist")}
                     </p>
                   </div>
                   <span className="text-xs text-white/45">
-                    {playlist.songs.length}{" "}
-                    {playlist.songs.length === 1 ? "song" : "songs"}
+                    {t("fullscreen.songCount", {
+                      count: playlist.songs.length,
+                    })}
                   </span>
                 </button>
               ))}
@@ -898,10 +906,10 @@ export default function FullscreenPlayer() {
           ) : (
             <div className="mt-5 rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-5 py-8 text-center">
               <p className="text-base font-medium text-white">
-                No playlists yet
+                {t("fullscreen.noPlaylistsYet")}
               </p>
               <p className="mt-2 text-sm text-white/55">
-                Create one from Your Library, then add this song here.
+                {t("fullscreen.createOneFromLibrary")}
               </p>
             </div>
           )}
@@ -932,7 +940,7 @@ export default function FullscreenPlayer() {
               onClick={closeFullscreen}
               className="inline-flex items-center gap-2 rounded-full bg-black/25 px-4 py-2 text-sm font-medium text-white backdrop-blur-md transition hover:bg-black/35"
             >
-              Minimize
+              {t("fullscreen.minimize")}
               <ChevronDownGlyph />
             </button>
             <button
@@ -940,7 +948,7 @@ export default function FullscreenPlayer() {
               onClick={() => setIsPlaylistPickerOpen(true)}
               className="inline-flex items-center gap-2 rounded-full bg-black/25 px-4 py-2 text-sm font-medium text-white backdrop-blur-md transition hover:bg-black/35"
             >
-              Add to Playlist
+              {t("fullscreen.addToPlaylist")}
               <PlusGlyph />
             </button>
             <button
@@ -952,13 +960,15 @@ export default function FullscreenPlayer() {
                   : "bg-black/25 text-white hover:bg-black/35"
               }`}
             >
-              {isCurrentSongLiked ? "Liked" : "Like"}
+              {isCurrentSongLiked
+                ? t("fullscreen.liked")
+                : t("fullscreen.like")}
               <HeartGlyph filled={isCurrentSongLiked} className="h-4 w-4" />
             </button>
           </div>
 
           <div className="absolute bottom-2 left-2 right-2 rounded-xl bg-black/25 px-6 py-5 backdrop-blur-xl md:px-7">
-            <p className="text-sm text-white/70">Song</p>
+            <p className="text-sm text-white/70">{t("common.song")}</p>
             <h2 className="mt-1 text-2xl font-semibold text-white md:text-3xl">
               {currentSong.title}
             </h2>
@@ -981,16 +991,16 @@ export default function FullscreenPlayer() {
                   <p className="text-sm text-white/55">
                     {settings.lyricsEnabled
                       ? settings.autoScrollLyrics
-                        ? "Lyrics"
-                        : "Lyrics • Auto-scroll off"
-                      : "Lyrics disabled"}
+                        ? t("fullscreen.lyrics")
+                        : t("fullscreen.lyricsAutoScrollOff")
+                      : t("fullscreen.lyricsDisabled")}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={closeFullscreen}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl leading-none text-white/70 transition hover:bg-white/8 hover:text-white"
-                  aria-label="Close fullscreen player"
+                  aria-label={t("fullscreen.close")}
                 >
                   ×
                 </button>
@@ -1000,24 +1010,26 @@ export default function FullscreenPlayer() {
                 onWheel={markLyricsUserScrollIntent}
                 onTouchStart={markLyricsUserScrollIntent}
                 onScroll={handleLyricsContainerScroll}
-                className="mt-5 flex-1 overflow-y-auto hide-scrollbar pr-1 text-white/90"
+                className="mt-5 flex-1 overflow-y-auto hide-scrollbar text-white/90"
+                style={{ paddingInlineEnd: "0.25rem" }}
               >
                 <div className="space-y-2 text-lg leading-9 md:text-[22px] md:leading-[1.5]">
                   {lyricsState.loading ? (
                     <div className="space-y-3 py-2">
                       <div className="inline-flex items-center gap-3 rounded-full px-3 py-2 text-white/60">
                         <span className="theme-spinner h-5 w-5" />
-                        <span className="loading-dots">Loading lyrics</span>
+                        <span className="loading-dots">
+                          {t("common.loadingLyrics")}
+                        </span>
                       </div>
                     </div>
                   ) : !settings.lyricsEnabled ? (
                     <div className="theme-surface-soft rounded-xl border p-4">
                       <p className="font-medium text-white/70">
-                        Lyrics are disabled right now.
+                        {t("fullscreen.lyricsDisabledNow")}
                       </p>
                       <p className="mt-2 text-sm text-white/50">
-                        Turn lyrics back on from Settings whenever you want the
-                        Now Playing screen to fetch them again.
+                        {t("fullscreen.turnLyricsBackOn")}
                       </p>
                     </div>
                   ) : lyricLines.length > 0 ? (
@@ -1055,7 +1067,7 @@ export default function FullscreenPlayer() {
                   ) : plainLyricsText ? (
                     <>
                       <p className="pb-3 text-sm text-white/40">
-                        Synced lyrics were not available for this track.
+                        {t("fullscreen.syncedUnavailable")}
                       </p>
                       <pre className="whitespace-pre-wrap font-sans text-lg leading-9 text-white md:text-[22px] md:leading-[1.5]">
                         {plainLyricsText}
@@ -1069,7 +1081,7 @@ export default function FullscreenPlayer() {
                       </p>
                       <div className="theme-surface-soft rounded-xl border p-4">
                         <p className="text-sm text-white/70">
-                          Search manually for lyrics
+                          {t("fullscreen.searchLyricsManually")}
                         </p>
                         <div className="mt-3 grid gap-3">
                           <input
@@ -1078,7 +1090,7 @@ export default function FullscreenPlayer() {
                             onChange={(event) =>
                               setManualLyricsArtist(event.target.value)
                             }
-                            placeholder="Artist name"
+                            placeholder={t("fullscreen.artistName")}
                             className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-white/25"
                           />
                           <input
@@ -1087,7 +1099,7 @@ export default function FullscreenPlayer() {
                             onChange={(event) =>
                               setManualLyricsTitle(event.target.value)
                             }
-                            placeholder="Song title"
+                            placeholder={t("fullscreen.songTitle")}
                             className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-white/25"
                           />
                           <button
@@ -1102,7 +1114,7 @@ export default function FullscreenPlayer() {
                             }
                             className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
                           >
-                            Try Lyrics Search
+                            {t("common.tryLyricsSearch")}
                           </button>
                         </div>
                       </div>
@@ -1124,15 +1136,18 @@ export default function FullscreenPlayer() {
           >
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-white/55">{sectionTitle}</p>
+                <p className="text-sm text-white/55">{localizedSectionTitle}</p>
               </div>
             </div>
 
             {sectionSongs.length > 0 ? (
-              <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto hide-scrollbar pr-1">
+              <div
+                className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto hide-scrollbar"
+                style={{ paddingInlineEnd: "0.25rem" }}
+              >
                 {sectionSongs.map((song, index) => (
                   <button
-                    key={`${sectionTitle}-${song.id}-${index}`}
+                    key={`${localizedSectionTitle}-${song.id}-${index}`}
                     type="button"
                     onClick={() => handleSectionSongPress(song, index)}
                     className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left transition hover:translate-x-1"
@@ -1187,10 +1202,12 @@ export default function FullscreenPlayer() {
                 {isLoadingRelatedSongs ? (
                   <div className="inline-flex items-center gap-3">
                     <span className="theme-spinner h-5 w-5" />
-                    <span className="loading-dots">Loading related tracks</span>
+                    <span className="loading-dots">
+                      {t("common.loadingRelatedTracks")}
+                    </span>
                   </div>
                 ) : (
-                  "Play a few more songs and related tracks will show up here."
+                  t("fullscreen.playMoreToSeeRelated")
                 )}
               </div>
             )}

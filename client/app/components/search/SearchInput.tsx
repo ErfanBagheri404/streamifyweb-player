@@ -1,5 +1,6 @@
 import React from "react";
 import Image from "next/image";
+import { useAppLanguage } from "../../hooks/useAppLanguage";
 
 interface SearchInputProps {
   value: string;
@@ -22,6 +23,8 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   placeholder,
   children,
 }) => {
+  const { t } = useAppLanguage();
+
   return (
     <div className="flex items-center gap-3 pb-4">
       <div className="relative flex-1">
@@ -39,7 +42,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
             <button
               onClick={onClear}
               className="mr-1 rounded-full p-2 text-white/40 transition hover:bg-white/6 hover:text-white"
-              aria-label="Clear search"
+              aria-label={t("search.clear")}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -61,7 +64,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
       <button
         onClick={onFilterToggle} // <-- now toggles filters
         className="theme-button-soft flex h-11 w-11 items-center justify-center rounded-xl border transition focus:outline-none"
-        aria-label="Toggle filters"
+        aria-label={t("search.toggleFilters")}
       >
         <Image src="/Filter.svg" alt="Filter" width={22} height={22} />
       </button>

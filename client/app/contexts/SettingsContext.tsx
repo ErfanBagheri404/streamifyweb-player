@@ -14,6 +14,7 @@ import {
   type AppSettings,
   sanitizeAppSettings,
 } from "../lib/app-settings";
+import { getLanguageDirection } from "../lib/i18n";
 
 const SEARCH_STATE_UPDATED_EVENT = "streamify-search-state-updated";
 
@@ -57,13 +58,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = settings.theme;
+    root.dataset.language = settings.language;
+    root.lang = settings.language === "fa" ? "fa" : "en";
+    root.dir = getLanguageDirection(settings.language);
     root.classList.toggle("reduce-motion", settings.disableAnimations);
 
     return () => {
       root.classList.remove("reduce-motion");
       delete root.dataset.theme;
+      delete root.dataset.language;
+      root.lang = "en";
+      root.dir = "ltr";
     };
-  }, [settings.disableAnimations, settings.theme]);
+  }, [settings.disableAnimations, settings.language, settings.theme]);
 
   useEffect(() => {
     if (settings.rememberLastSearch) return;

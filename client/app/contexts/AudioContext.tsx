@@ -10,6 +10,7 @@ import React, {
   ReactNode,
 } from "react";
 import { useSettings } from "./SettingsContext";
+import { formatNumberByLanguage } from "../lib/i18n";
 
 type AudioType = "file" | "hls" | "soundcloud-drm";
 type PlaybackStrategy = "audio" | "widget";
@@ -600,6 +601,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const autoRetryStatusTimerRef = useRef<number | null>(null);
   const autoRetryInFlightRef = useRef(false);
   const autoRetryAttemptCountRef = useRef<Record<string, number>>({});
+  const playbackRequestIdRef = useRef(0);
+  const suppressNextPauseEventRef = useRef(false);
   const currentSongRef = useRef<Song | null>(null);
   const recentSongsRef = useRef<Song[]>([]);
   const autoRetryPreferenceRef = useRef<AutoRetryPreference>("unknown");
@@ -629,6 +632,19 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     async () => false
   );
 
+  const pauseManagedAudio = useCallback((suppressPauseEvent = false) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (suppressPauseEvent && !audio.paused) {
+      suppressNextPauseEventRef.current = true;
+    }
+
+    try {
+      audio.pause();
+    } catch {}
+  }, []);
+
   const setTransientAutoRetryStatus = useCallback((message: string | null) => {
     if (autoRetryStatusTimerRef.current !== null) {
       window.clearTimeout(autoRetryStatusTimerRef.current);
@@ -649,6 +665,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     autoRetryInFlightRef.current = false;
     setIsAutoRetrying(false);
   }, []);
+
+  const createPlaybackRequest = () => {
+    playbackRequestIdRef.current += 1;
+    return playbackRequestIdRef.current;
+  };
+
+  const isPlaybackRequestCurrent = (requestId: number) =>
+    playbackRequestIdRef.current === requestId;
 
   const enableAutoRetry = useCallback(() => {
     autoRetryPreferenceRef.current = "enabled";
@@ -853,12 +877,22 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     destroyShakaPlayback();
   };
 
-  const attemptAudioPlay = (audio: HTMLAudioElement, song: Song) => {
+  const attemptAudioPlay = (
+    audio: HTMLAudioElement,
+    song: Song,
+    requestId = playbackRequestIdRef.current
+  ) => {
     const playPromise = audio.play();
     if (playPromise === undefined) return;
 
     playPromise.catch((error: Error & { name?: string }) => {
       if (error.name === "AbortError") return;
+      if (
+        !isPlaybackRequestCurrent(requestId) ||
+        currentSongRef.current?.id !== song.id
+      ) {
+        return;
+      }
       if (
         tryNextAudioCandidate(
           song,
@@ -1060,6 +1094,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       currentSong.audioType
     );
     let cancelled = false;
+    const requestId = playbackRequestIdRef.current;
 
     const handleWidgetFinish = () => {
       if (isRepeatRef.current) {
@@ -1372,9 +1407,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       }
 
       destroyManagedPlayback();
-      try {
-        audio.pause();
-      } catch {}
+      pauseManagedAudio(true);
       try {
         audio.removeAttribute("src");
         audio.load();
@@ -1946,7 +1979,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       setDuration(audio.duration || currentSong.duration || 0);
       setIsSongLoading(false);
       if (!cancelled && isPlaying) {
-        attemptAudioPlay(audio, currentSong);
+        attemptAudioPlay(audio, currentSong, requestId);
       }
     };
 
@@ -1991,9 +2024,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           }
         );
         // #endregion
-        try {
-          audio.pause();
-        } catch {}
+        pauseManagedAudio(true);
         try {
           audio.removeAttribute("src");
         } catch {}
@@ -2006,6 +2037,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         };
         void configureSoundCloudDrmPlayback()
           .catch((error) => {
+            if (!isPlaybackRequestCurrent(requestId)) {
+              return;
+            }
             const errorMessage = describePlaybackError(error);
             const errorPayload = describeShakaErrorPayload(error);
             // #region debug-point H1:soundcloud-drm-catch
@@ -2083,13 +2117,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             }
           });
       } else if (isPlaying) {
-        attemptAudioPlay(audio, currentSong);
+        attemptAudioPlay(audio, currentSong, requestId);
       } else {
-        audio.pause();
+        pauseManagedAudio(true);
       }
     } else if (nextAudioType === "hls") {
       if (hlsSourceRef.current !== nextAudioUrl) {
-        audio.pause();
+        pauseManagedAudio(true);
         audio.currentTime = 0;
         audio.removeAttribute("src");
         audio.load();
@@ -2097,6 +2131,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         setDuration(currentSong.duration || 0);
         setIsSongLoading(true);
         void configureHlsPlayback().catch((error) => {
+          if (!isPlaybackRequestCurrent(requestId)) {
+            return;
+          }
           console.error("Error initializing HLS playback:", error);
           setPlaybackError(
             error instanceof Error ? error.message : DEFAULT_PLAYBACK_ERROR
@@ -2105,9 +2142,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           setIsPlaying(false);
         });
       } else if (isPlaying) {
-        attemptAudioPlay(audio, currentSong);
+        attemptAudioPlay(audio, currentSong, requestId);
       } else {
-        audio.pause();
+        pauseManagedAudio(true);
       }
     } else {
       if (hlsControllerRef.current || shakaPlayerRef.current) {
@@ -2128,7 +2165,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           }
         );
         // #endregion
-        audio.pause();
+        pauseManagedAudio(true);
         audio.currentTime = 0;
         audio.src = nextAudioUrl;
         audio.load();
@@ -2137,16 +2174,22 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       }
 
       if (isPlaying) {
-        attemptAudioPlay(audio, currentSong);
+        attemptAudioPlay(audio, currentSong, requestId);
       } else {
-        audio.pause();
+        pauseManagedAudio(true);
       }
     }
 
     return () => {
       cancelled = true;
     };
-  }, [currentSong, isPlaying, isSongLoading, syncSoundCloudWidgetProgress]);
+  }, [
+    currentSong,
+    isPlaying,
+    isSongLoading,
+    pauseManagedAudio,
+    syncSoundCloudWidgetProgress,
+  ]);
 
   useEffect(() => {
     if (soundCloudWidgetProgressIntervalRef.current !== null) {
@@ -2236,6 +2279,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     };
 
     const handlePause = () => {
+      if (suppressNextPauseEventRef.current) {
+        suppressNextPauseEventRef.current = false;
+        return;
+      }
+      if (isSongLoading && !audio.ended) {
+        return;
+      }
       setIsPlaying(false);
     };
 
@@ -2514,8 +2564,39 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       throw new Error(responseError);
     }
 
+    const resolvedId =
+      typeof payload.id === "string" && payload.id.trim()
+        ? payload.id
+        : song.id;
+    const resolvedTitle =
+      typeof payload.title === "string" && payload.title.trim()
+        ? payload.title
+        : song.title;
+    const resolvedArtist =
+      typeof payload.author === "string" && payload.author.trim()
+        ? payload.author
+        : song.artist;
+    const resolvedCoverUrl =
+      typeof payload.thumbnailUrl === "string" && payload.thumbnailUrl.trim()
+        ? payload.thumbnailUrl
+        : song.coverUrl;
+    const resolvedUrl =
+      typeof payload.url === "string" && payload.url.trim()
+        ? payload.url
+        : song.url;
+    const resolvedSource =
+      typeof payload.source === "string" && payload.source.trim()
+        ? payload.source
+        : song.source;
+
     return normalizeSong({
       ...song,
+      id: resolvedId,
+      title: resolvedTitle,
+      artist: resolvedArtist,
+      coverUrl: resolvedCoverUrl,
+      source: resolvedSource,
+      url: resolvedUrl,
       audioUrl: resolvedAudioUrl,
       audioType: inferAudioType(resolvedAudioUrl, resolvedAudioType),
       playbackStrategy:
@@ -2552,7 +2633,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           : song.duration,
       relatedSongs: normalizeRelatedSongsPayload(
         payload.relatedSongs,
-        song.source
+        resolvedSource
       ),
     });
   };
@@ -2701,15 +2782,25 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     return () => audio.removeEventListener("ended", handleEnded);
   }, [currentSong, isRepeat, playbackQueue, queueIndex]);
 
-  const playSong = (song: Song, options?: PlaybackOptions) => {
+  const playSong = (
+    song: Song,
+    options?: PlaybackOptions,
+    requestId?: number
+  ) => {
     const audio = audioRef.current;
     const normalizedSong = normalizeSong(song);
+    const activeRequestId =
+      typeof requestId === "number" ? requestId : createPlaybackRequest();
+
+    if (!isPlaybackRequestCurrent(activeRequestId)) {
+      return;
+    }
 
     destroyManagedPlayback();
     destroySoundCloudWidgetPlayback();
 
     if (audio) {
-      audio.pause();
+      pauseManagedAudio(true);
       audio.currentTime = 0;
     }
 
@@ -2736,20 +2827,31 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setPlaybackError(null);
     setIsSongLoading(false);
     setIsPlaying(true);
+    playbackRunIdRef.current = `request-${activeRequestId}`;
     if (settings.openFullscreenOnPlay) {
       setIsFullscreenOpen(true);
     }
   };
 
-  const beginSongLoad = (song: Song, options?: PlaybackOptions) => {
+  const beginSongLoad = (
+    song: Song,
+    options?: PlaybackOptions,
+    requestId?: number
+  ) => {
     const audio = audioRef.current;
     const normalizedSong = normalizeSong(song);
+    const activeRequestId =
+      typeof requestId === "number" ? requestId : createPlaybackRequest();
+
+    if (!isPlaybackRequestCurrent(activeRequestId)) {
+      return;
+    }
 
     destroyManagedPlayback();
     destroySoundCloudWidgetPlayback();
 
     if (audio) {
-      audio.pause();
+      pauseManagedAudio(true);
       audio.currentTime = 0;
       audio.removeAttribute("src");
       audio.load();
@@ -2781,7 +2883,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     if (settings.openFullscreenOnPlay) {
       setIsFullscreenOpen(true);
     }
-    playbackRunIdRef.current = "pre-fix";
+    playbackRunIdRef.current = `request-${activeRequestId}`;
     // #region debug-point H5:begin-song-load
     reportDebugEvent(
       playbackRunIdRef.current,
@@ -2800,10 +2902,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   };
 
   const resolveAndPlaySong = async (song: Song, options?: PlaybackOptions) => {
-    beginSongLoad(song, options);
+    const requestId = createPlaybackRequest();
+    beginSongLoad(song, options, requestId);
 
     try {
       const resolvedSong = await resolveSongForPlayback(song);
+      if (!isPlaybackRequestCurrent(requestId)) {
+        return;
+      }
       // #region debug-point H5:resolve-and-play-success
       reportDebugEvent(
         playbackRunIdRef.current,
@@ -2817,8 +2923,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         }
       );
       // #endregion
-      playSong(resolvedSong, options);
+      playSong(resolvedSong, options, requestId);
     } catch (error) {
+      if (!isPlaybackRequestCurrent(requestId)) {
+        return;
+      }
       // #region debug-point H1:resolve-and-play-failure
       reportDebugEvent(
         playbackRunIdRef.current,
@@ -2855,7 +2964,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       return;
     }
     if (audioRef.current) {
-      audioRef.current.pause();
+      pauseManagedAudio(false);
     }
   };
 
@@ -3098,7 +3207,21 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       artist: currentSong.artist || "Unknown Artist",
       album:
         playbackQueue.length > 1 && queueIndex >= 0
-          ? `Queue ${queueIndex + 1} of ${playbackQueue.length}`
+          ? settings.language === "fa"
+            ? `صف ${formatNumberByLanguage(
+                settings.language,
+                queueIndex + 1
+              )} از ${formatNumberByLanguage(
+                settings.language,
+                playbackQueue.length
+              )}`
+            : `Queue ${formatNumberByLanguage(
+                settings.language,
+                queueIndex + 1
+              )} of ${formatNumberByLanguage(
+                settings.language,
+                playbackQueue.length
+              )}`
           : currentSong.source || "Streamify",
       artwork: buildSongArtwork(currentSong),
     });

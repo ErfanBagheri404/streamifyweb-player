@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import Image from "next/image";
 import { useAudio } from "../contexts/AudioContext";
+import { useAppLanguage } from "../hooks/useAppLanguage";
 import { spaceMono } from "../fonts";
 
 const STATIC_WAVEFORM_BAR_COUNT = 56;
@@ -35,6 +36,7 @@ function createStaticWaveform(seedInput: string, count: number): number[] {
 }
 
 const MiniPlayer: React.FC = () => {
+  const { t, isRtl, formatNumber } = useAppLanguage();
   const {
     currentSong,
     recentSongs,
@@ -112,18 +114,21 @@ const MiniPlayer: React.FC = () => {
   const volumePercent = Math.round(volume * 100);
   const isMuted = volumePercent === 0;
   const volumeLabel = isMuted
-    ? "Muted"
+    ? t("miniPlayer.volumeMuted")
     : volumePercent < 35
-    ? "Low"
+    ? t("miniPlayer.volumeLow")
     : volumePercent < 70
-    ? "Medium"
-    : "High";
+    ? t("miniPlayer.volumeMedium")
+    : t("miniPlayer.volumeHigh");
   const canGoPrevious =
     currentTime > 3 || queueIndex > 0 || recentSongs.length > 1;
   const canGoNext = queueIndex >= 0 && queueIndex < playbackQueue.length - 1;
   const queuePositionLabel =
     playbackQueue.length > 1 && queueIndex >= 0
-      ? `${queueIndex + 1} of ${playbackQueue.length}`
+      ? t("miniPlayer.queuePosition", {
+          current: formatNumber(queueIndex + 1),
+          total: formatNumber(playbackQueue.length),
+        })
       : null;
   const toggleMute = () => {
     if (isMuted) {
@@ -221,13 +226,13 @@ const MiniPlayer: React.FC = () => {
   }
 
   const statusText = isSongLoading
-    ? "Loading track..."
+    ? t("common.loadingTrack")
     : playbackError
     ? playbackError
     : null;
 
   return (
-    <div className="fixed bottom-3 left-3 right-3 z-50">
+    <div dir="ltr" className="fixed bottom-3 left-3 right-3 z-50">
       <div
         className={`pointer-events-none absolute bottom-full left-1/2 mb-3 flex -translate-x-1/2 transition-all duration-200 ${
           showAutoRetryPrompt || autoRetryStatusMessage
@@ -238,14 +243,13 @@ const MiniPlayer: React.FC = () => {
         {showAutoRetryPrompt ? (
           <div className="theme-surface pointer-events-auto w-[min(92vw,420px)] rounded-[28px] border p-4 text-white shadow-[0_22px_55px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-              Playback Help
+              {t("miniPlayer.playbackHelp")}
             </p>
             <p className="mt-2 text-sm font-medium text-white">
-              Enable auto retry if playback fails?
+              {t("miniPlayer.enableAutoRetryQuestion")}
             </p>
             <p className="mt-1 text-sm text-white/60">
-              Streamify retries once automatically and lets you know when it is
-              retrying.
+              {t("miniPlayer.enableAutoRetryDescription")}
             </p>
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
@@ -253,14 +257,14 @@ const MiniPlayer: React.FC = () => {
                 onClick={disableAutoRetry}
                 className="rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:text-white"
               >
-                No thanks
+                {t("miniPlayer.noThanks")}
               </button>
               <button
                 type="button"
                 onClick={enableAutoRetry}
                 className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:scale-[1.02]"
               >
-                Enable auto retry
+                {t("miniPlayer.enableAutoRetry")}
               </button>
             </div>
           </div>
@@ -288,7 +292,7 @@ const MiniPlayer: React.FC = () => {
                 <div className="flex h-full w-full items-center justify-center bg-gray-600">
                   <Image
                     src="/StreamifyLogo.svg"
-                    alt="Default cover"
+                    alt={t("common.defaultCover")}
                     width={24}
                     height={24}
                     className="opacity-50"
@@ -323,7 +327,7 @@ const MiniPlayer: React.FC = () => {
               onPointerUp={handleCompactWaveformPointerEnd}
               onPointerCancel={handleCompactWaveformPointerEnd}
               className="relative h-8 flex-1 min-w-[180px] max-w-[240px] cursor-ew-resize overflow-hidden touch-none"
-              aria-label="Seek playback"
+              aria-label={t("miniPlayer.seekPlayback")}
             >
               <div className="absolute inset-0 flex items-center gap-[2px]">
                 {waveformBars.map((height, index) => (
@@ -363,8 +367,14 @@ const MiniPlayer: React.FC = () => {
 
           <div className="flex flex-1 items-center justify-end space-x-2">
             {queuePositionLabel ? (
-              <span className="theme-surface-soft hidden rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/55 xl:inline-flex">
-                Queue {queuePositionLabel}
+              <span
+                dir={isRtl ? "rtl" : "ltr"}
+                className={`theme-surface-soft hidden rounded-full border px-3 py-1 text-[11px] font-medium text-white/55 xl:inline-flex ${
+                  isRtl ? "" : "uppercase tracking-[0.18em]"
+                }`}
+                style={{ unicodeBidi: "plaintext" }}
+              >
+                {t("miniPlayer.queue", { position: queuePositionLabel || "" })}
               </span>
             ) : null}
             <button
@@ -372,11 +382,11 @@ const MiniPlayer: React.FC = () => {
               onClick={playPrevious}
               disabled={!canGoPrevious}
               className="rounded-full transition duration-150 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100"
-              aria-label="Previous track"
+              aria-label={t("miniPlayer.previousTrack")}
             >
               <Image
                 src="/Previous.svg"
-                alt="Previous"
+                alt={t("miniPlayer.previousTrack")}
                 width={42}
                 height={42}
               />
@@ -402,9 +412,14 @@ const MiniPlayer: React.FC = () => {
               onClick={playNext}
               disabled={!canGoNext}
               className="rounded-full transition duration-150 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100"
-              aria-label="Next track"
+              aria-label={t("miniPlayer.nextTrack")}
             >
-              <Image src="/Next.svg" alt="Next" width={42} height={42} />
+              <Image
+                src="/Next.svg"
+                alt={t("miniPlayer.nextTrack")}
+                width={42}
+                height={42}
+              />
             </button>
 
             <button
@@ -426,7 +441,7 @@ const MiniPlayer: React.FC = () => {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
-                        Volume
+                        {t("miniPlayer.volume")}
                       </p>
                       <p className="mt-1 text-sm font-medium text-white">
                         {volumeLabel} · {volumePercent}%
@@ -437,7 +452,7 @@ const MiniPlayer: React.FC = () => {
                       onClick={toggleMute}
                       className="theme-button-soft rounded-full border px-3 py-1.5 text-xs font-semibold transition"
                     >
-                      {isMuted ? "Unmute" : "Mute"}
+                      {isMuted ? t("miniPlayer.unmute") : t("miniPlayer.mute")}
                     </button>
                   </div>
                   <div className="mt-4 flex items-center gap-3">
@@ -456,7 +471,7 @@ const MiniPlayer: React.FC = () => {
                           "--volume-progress": `${volumePercent}%`,
                         } as React.CSSProperties
                       }
-                      aria-label="Adjust volume"
+                      aria-label={t("miniPlayer.adjustVolume")}
                     />
                     <span className="text-xs text-white/40">100</span>
                   </div>
@@ -482,10 +497,15 @@ const MiniPlayer: React.FC = () => {
                 type="button"
                 onClick={() => setIsVolumeOpen((prev) => !prev)}
                 className="theme-button-soft flex h-10 w-10 items-center justify-center rounded-full border transition duration-150 hover:scale-[1.03]"
-                aria-label="Toggle volume slider"
+                aria-label={t("miniPlayer.toggleVolume")}
                 aria-expanded={isVolumeOpen}
               >
-                <Image src="/Volume.svg" alt="Volume" width={42} height={42} />
+                <Image
+                  src="/Volume.svg"
+                  alt={t("miniPlayer.volume")}
+                  width={42}
+                  height={42}
+                />
               </button>
             </div>
 
@@ -495,13 +515,17 @@ const MiniPlayer: React.FC = () => {
               className="rounded-full pr-2 transition duration-150 hover:scale-[1.03]"
               aria-label={
                 isFullscreenOpen
-                  ? "Close fullscreen player"
-                  : "Open fullscreen player"
+                  ? t("miniPlayer.closeFullscreen")
+                  : t("miniPlayer.openFullscreen")
               }
             >
               <Image
                 src="/Fullscreen.svg"
-                alt="Fullscreen"
+                alt={
+                  isFullscreenOpen
+                    ? t("miniPlayer.closeFullscreen")
+                    : t("miniPlayer.openFullscreen")
+                }
                 width={16}
                 height={16}
               />

@@ -11,6 +11,8 @@ import React, {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAudio } from "../contexts/AudioContext";
 import { useSettings } from "../contexts/SettingsContext";
+import { useAppLanguage } from "../hooks/useAppLanguage";
+import type { PreferredSearchSource } from "../lib/app-settings";
 import {
   SearchInput,
   FilterBar,
@@ -233,6 +235,7 @@ function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { hasHydratedSettings, settings } = useSettings();
+  const { t, getSourceLabel } = useAppLanguage();
   const { resolveAndPlaySong } = useAudio();
 
   // State
@@ -615,7 +618,10 @@ function SearchPageInner() {
     setSourceFilters((prev) => {
       const selected = prev.find((entry) => entry.id === preferredSource);
       if (!selected) return prev;
-      return [selected, ...prev.filter((entry) => entry.id !== preferredSource)];
+      return [
+        selected,
+        ...prev.filter((entry) => entry.id !== preferredSource),
+      ];
     });
   }, [
     hasHydratedSettings,
@@ -803,21 +809,12 @@ function SearchPageInner() {
 
   // ─── Navigation handlers ─────────────────────────────────
   const buildArtistUrl = (item: SearchResult) => {
-    const name = item.title || item.author || item.name || "";
-    const image =
-      item.thumbnailUrl ||
-      item.img ||
-      item.authorThumbnails?.[0]?.url ||
-      item.thumbnail ||
-      "";
     const artistId = normalizeArtistRouteId(item.id);
 
     const params = new URLSearchParams();
-    if (name) params.set("name", name);
-    if (image) params.set("image", image);
-    if (item.source) params.set("source", item.source);
-
-    // Preserve search state
+    if (item.source && item.source !== "youtube") {
+      params.set("source", item.source);
+    }
     if (searchQuery) params.set("search_query", searchQuery);
     if (selectedSource !== "youtube")
       params.set("search_source", selectedSource);
@@ -848,17 +845,7 @@ function SearchPageInner() {
       extractYouTubePlaylistId(item.href || item.url || "") ||
       item.id;
     const params = new URLSearchParams();
-    params.set("title", item.title || "");
-    if (item.author) params.set("author", item.author);
     if (item.source) params.set("source", item.source);
-    if (item.thumbnailUrl || item.img || item.thumbnail) {
-      params.set(
-        "image",
-        item.thumbnailUrl || item.img || item.thumbnail || ""
-      );
-    }
-    if (item.href || item.url) params.set("href", item.href || item.url || "");
-    if (item.videoCount != null) params.set("count", String(item.videoCount));
     if (searchQuery) params.set("search_query", searchQuery);
     if (selectedSource !== "youtube")
       params.set("search_source", selectedSource);
@@ -882,12 +869,12 @@ function SearchPageInner() {
       }
     );
     // #endregion
+    saveSearchState();
     router.push(
       `/collection/${kind}/${encodeURIComponent(
         collectionId
       )}?${params.toString()}`
     );
-    saveSearchState();
   };
   const handleSongPress = async (item: SearchResult) => {
     if (loadingSongId === item.id) return;
@@ -913,7 +900,7 @@ function SearchPageInner() {
       const queue = songResults.map((result) => ({
         id: result.id,
         title: result.title,
-        artist: result.author || "Unknown Artist",
+        artist: result.author || t("home.unknownArtist"),
         artistId: normalizeArtistRouteId(result.authorId || result.uploaderUrl),
         artistImage: result.uploaderAvatar || result.authorThumbnails?.[0]?.url,
         artistSource: result.source,
@@ -930,7 +917,7 @@ function SearchPageInner() {
         {
           id: item.id,
           title: item.title,
-          artist: item.author || "Unknown Artist",
+          artist: item.author || t("home.unknownArtist"),
           artistId: artistId || undefined,
           artistImage,
           artistSource: item.source,
@@ -983,6 +970,40 @@ function SearchPageInner() {
   }, [searchResults]);
 
   const currentFilterOptions = getFilterOptions(selectedSource);
+  const localizedSourceFilters = useMemo(
+    () =>
+      sourceFilters.map((source) => ({
+        ...source,
+        label:
+          source.id === "spotify"
+            ? t("source.spotify")
+            : getSourceLabel(source.id as PreferredSearchSource),
+      })),
+    [getSourceLabel, sourceFilters, t]
+  );
+  const localizedFilterOptions = useMemo(
+    () =>
+      currentFilterOptions.map((filter) => ({
+        ...filter,
+        label:
+          filter.value === "all"
+            ? t("search.all")
+            : filter.value === "videos"
+            ? t("search.videos")
+            : filter.value === "channels" || filter.value === "artists"
+            ? t("search.artists")
+            : filter.value === "playlists"
+            ? t("search.playlists")
+            : filter.value === "albums"
+            ? t("search.albums")
+            : filter.value === "songs"
+            ? t("search.songs")
+            : filter.value === "tracks"
+            ? t("search.tracks")
+            : filter.label,
+      })),
+    [currentFilterOptions, t]
+  );
 
   return (
     <div className="h-full text-white flex flex-col overflow-hidden">
@@ -993,9 +1014,11 @@ function SearchPageInner() {
         onClear={clearSearch}
         onFocus={() => {}}
         onFilterToggle={() => setShowFilters((prev) => !prev)}
-        placeholder={`Search ${
-          sourceFilters.find((s) => s.id === selectedSource)?.label
-        }...`}
+        placeholder={t("search.placeholder", {
+          source:
+            localizedSourceFilters.find((s) => s.id === selectedSource)
+              ?.label || getSourceLabel("youtube"),
+        })}
       >
         <SuggestionsDropdown
           suggestions={suggestions}
@@ -1011,10 +1034,10 @@ function SearchPageInner() {
 
       <FilterBar
         showFilters={showFilters}
-        sourceFilters={sourceFilters}
+        sourceFilters={localizedSourceFilters}
         selectedSource={selectedSource}
         onSourceSelect={handleSourceSelect}
-        filterOptions={currentFilterOptions}
+        filterOptions={localizedFilterOptions}
         selectedFilter={selectedFilter}
         onFilterSelect={handleFilterSelect}
       />

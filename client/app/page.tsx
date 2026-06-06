@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { HorizontalScrollRow } from "./components/HorizontalScrollRow";
 import { type Song, useAudio } from "./contexts/AudioContext";
+import { useAppLanguage } from "./hooks/useAppLanguage";
 import { readSessionCache, writeSessionCache } from "./lib/session-cache";
 
 const HOME_ARTIST_BANNER_CACHE_KEY = "homeArtistBannerCache";
@@ -197,25 +198,19 @@ function buildArtistHref(artist: {
 }): string | null {
   if (!artist.artistId) return null;
 
-  const params = new URLSearchParams();
-  if (artist.name) params.set("name", artist.name);
-  if (artist.image) params.set("image", artist.image);
-  if (artist.source) params.set("source", artist.source);
+  if (artist.source && artist.source !== "youtube") {
+    const params = new URLSearchParams();
+    params.set("source", artist.source);
+    return `/artist/${encodeURIComponent(
+      artist.artistId
+    )}?${params.toString()}`;
+  }
 
-  const query = params.toString();
-  return `/artist/${encodeURIComponent(artist.artistId)}${
-    query ? `?${query}` : ""
-  }`;
-}
-
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good Morning!";
-  if (hour < 18) return "Good Afternoon!";
-  return "Good Evening!";
+  return `/artist/${encodeURIComponent(artist.artistId)}`;
 }
 
 function SongCard({ song, onPlay }: { song: Song; onPlay: () => void }) {
+  const { t } = useAppLanguage();
   return (
     <button
       type="button"
@@ -248,7 +243,7 @@ function SongCard({ song, onPlay }: { song: Song; onPlay: () => void }) {
           {song.title}
         </p>
         <p className="mt-1 truncate text-sm text-white/55">
-          {song.artist || "Unknown Artist"}
+          {song.artist || t("home.unknownArtist")}
         </p>
         <p className="mt-1 truncate text-xs text-white/38">
           {formatDuration(song.duration)}
@@ -259,6 +254,7 @@ function SongCard({ song, onPlay }: { song: Song; onPlay: () => void }) {
 }
 
 function ArtistCard({ artist }: { artist: ArtistHistorySummary }) {
+  const { t } = useAppLanguage();
   const href = buildArtistHref(artist);
   const content = (
     <>
@@ -283,7 +279,7 @@ function ArtistCard({ artist }: { artist: ArtistHistorySummary }) {
           {artist.name}
         </p>
         <p className="mt-1 truncate text-sm text-white/55">
-          {artist.count} {artist.count === 1 ? "play" : "plays"}
+          {t("home.play", { count: artist.count })}
         </p>
       </div>
     </>
@@ -305,6 +301,13 @@ function ArtistCard({ artist }: { artist: ArtistHistorySummary }) {
 
 export default function Home() {
   const { recentSongs, resolveAndPlaySong } = useAudio();
+  const { t } = useAppLanguage();
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return t("home.greetingMorning");
+    if (hour < 18) return t("home.greetingAfternoon");
+    return t("home.greetingEvening");
+  }, [t]);
   const initialMadeForYouCache =
     typeof window === "undefined"
       ? null
@@ -575,8 +578,9 @@ export default function Home() {
 
   const showAuthDisabledNotice = (mode: "signup" | "signin") => {
     setAuthNotice({
-      title: mode === "signup" ? "Sign up is disabled" : "Sign in is disabled",
-      body: "Auth is not live yet. Music playback and the rest of the app still work normally for now.",
+      title:
+        mode === "signup" ? t("home.signUpDisabled") : t("home.signInDisabled"),
+      body: t("home.authDisabledBody"),
     });
   };
 
@@ -598,7 +602,7 @@ export default function Home() {
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <p className="text-2xl font-bold tracking-tight text-white">
-            {getGreeting()}
+            {greeting}
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -606,14 +610,14 @@ export default function Home() {
               onClick={() => showAuthDisabledNotice("signup")}
               className="theme-button-soft rounded-full border px-4 py-2 text-sm font-semibold transition"
             >
-              Sign Up
+              {t("home.signUp")}
             </button>
             <button
               type="button"
               onClick={() => showAuthDisabledNotice("signin")}
               className="theme-button-solid rounded-full px-4 py-2 text-sm font-semibold transition"
             >
-              Sign In
+              {t("home.signIn")}
             </button>
           </div>
         </div>
@@ -645,7 +649,9 @@ export default function Home() {
                   type="button"
                   onClick={() => void playQueue(heroSongs, heroSongs[0])}
                   className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-[0_16px_40px_rgba(0,0,0,0.35)] transition hover:scale-[1.03] md:h-20 md:w-20"
-                  aria-label={`Play songs by ${mostPlayedYouTubeArtist.name}`}
+                  aria-label={t("home.playSongsBy", {
+                    name: mostPlayedYouTubeArtist.name,
+                  })}
                 >
                   <PlayGlyph className="h-7 w-7 md:h-8 md:w-8" />
                 </button>
@@ -657,14 +663,13 @@ export default function Home() {
         ) : (
           <section className="theme-surface rounded-2xl border p-6 md:p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/55">
-              Home
+              {t("home.emptyHeroEyebrow")}
             </p>
             <h1 className="mt-3 text-3xl font-black tracking-tight text-white md:text-4xl">
-              Start playing music to build your home mix
+              {t("home.emptyHeroTitle")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm text-white/60 md:text-base">
-              Your most played YouTube artist, recent songs, and recent artists
-              show up here once you have some listening history.
+              {t("home.emptyHeroDescription")}
             </p>
           </section>
         )}
@@ -672,7 +677,7 @@ export default function Home() {
         <section>
           <div className="mb-4 flex items-center justify-between gap-4">
             <h2 className="text-2xl font-bold tracking-tight">
-              Recently Played
+              {t("home.recentlyPlayed")}
             </h2>
           </div>
 
@@ -691,7 +696,7 @@ export default function Home() {
             </HorizontalScrollRow>
           ) : (
             <div className="theme-surface-soft rounded-2xl border p-5 text-white/55">
-              No recently played songs yet.
+              {t("home.noRecentSongs")}
             </div>
           )}
         </section>
@@ -700,11 +705,11 @@ export default function Home() {
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-bold tracking-tight">
-                Made For You
+                {t("home.madeForYou")}
               </h2>
               {madeForYouSeedSong ? (
                 <p className="mt-1 text-sm text-white/50">
-                  Based on {madeForYouSeedSong.title}
+                  {t("home.basedOn", { title: madeForYouSeedSong.title })}
                 </p>
               ) : null}
             </div>
@@ -728,10 +733,12 @@ export default function Home() {
               {isLoadingMadeForYou ? (
                 <div className="flex items-center gap-3">
                   <span className="theme-spinner h-5 w-5" />
-                  <span className="loading-dots">Loading recommendations</span>
+                  <span className="loading-dots">
+                    {t("common.loadingRecommendations")}
+                  </span>
                 </div>
               ) : (
-                "Play a YouTube song to build your Made For You mix."
+                t("home.playYoutubeToBuildMix")
               )}
             </div>
           )}
@@ -740,7 +747,7 @@ export default function Home() {
         <section>
           <div className="mb-4 flex items-center justify-between gap-4">
             <h2 className="text-2xl font-bold tracking-tight">
-              Recently Played Artists
+              {t("home.playedArtists")}
             </h2>
           </div>
 
@@ -755,7 +762,7 @@ export default function Home() {
             </HorizontalScrollRow>
           ) : (
             <div className="theme-surface-soft rounded-2xl border p-5 text-white/55">
-              No recently played artists yet.
+              {t("home.noRecentArtists")}
             </div>
           )}
         </section>

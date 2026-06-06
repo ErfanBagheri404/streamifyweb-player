@@ -13,7 +13,20 @@ export type AppTheme =
   | "sunset"
   | "forest"
   | "rose"
-  | "frost";
+  | "frost"
+  | "midnight"
+  | "ember"
+  | "aurora"
+  | "sapphire"
+  | "violet"
+  | "copper"
+  | "graphite"
+  | "lagoon"
+  | "ruby"
+  | "olive"
+  | "starlight";
+
+export type AppLanguage = "en" | "fa";
 
 export interface AppSettings {
   autoplayRecommendations: boolean;
@@ -22,9 +35,9 @@ export interface AppSettings {
   autoScrollLyrics: boolean;
   keyboardShortcuts: boolean;
   theme: AppTheme;
+  language: AppLanguage;
   disableAnimations: boolean;
   rememberLastSearch: boolean;
-  showSidebarActivity: boolean;
   preferredSearchSource: PreferredSearchSource;
   seekStepSeconds: number;
 }
@@ -39,12 +52,16 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   autoScrollLyrics: true,
   keyboardShortcuts: true,
   theme: "default",
+  language: "en",
   disableAnimations: false,
   rememberLastSearch: true,
-  showSidebarActivity: true,
   preferredSearchSource: "youtube",
   seekStepSeconds: 10,
 };
+
+function isAppLanguage(value: unknown): value is AppLanguage {
+  return value === "en" || value === "fa";
+}
 
 function isAppTheme(value: unknown): value is AppTheme {
   return (
@@ -54,7 +71,18 @@ function isAppTheme(value: unknown): value is AppTheme {
     value === "sunset" ||
     value === "forest" ||
     value === "rose" ||
-    value === "frost"
+    value === "frost" ||
+    value === "midnight" ||
+    value === "ember" ||
+    value === "aurora" ||
+    value === "sapphire" ||
+    value === "violet" ||
+    value === "copper" ||
+    value === "graphite" ||
+    value === "lagoon" ||
+    value === "ruby" ||
+    value === "olive" ||
+    value === "starlight"
   );
 }
 
@@ -107,6 +135,9 @@ export function sanitizeAppSettings(value: unknown): AppSettings {
         ? record.keyboardShortcuts
         : DEFAULT_APP_SETTINGS.keyboardShortcuts,
     theme: isAppTheme(record.theme) ? record.theme : DEFAULT_APP_SETTINGS.theme,
+    language: isAppLanguage(record.language)
+      ? record.language
+      : DEFAULT_APP_SETTINGS.language,
     disableAnimations:
       typeof record.disableAnimations === "boolean"
         ? record.disableAnimations
@@ -115,10 +146,6 @@ export function sanitizeAppSettings(value: unknown): AppSettings {
       typeof record.rememberLastSearch === "boolean"
         ? record.rememberLastSearch
         : DEFAULT_APP_SETTINGS.rememberLastSearch,
-    showSidebarActivity:
-      typeof record.showSidebarActivity === "boolean"
-        ? record.showSidebarActivity
-        : DEFAULT_APP_SETTINGS.showSidebarActivity,
     preferredSearchSource: isPreferredSearchSource(record.preferredSearchSource)
       ? record.preferredSearchSource
       : DEFAULT_APP_SETTINGS.preferredSearchSource,

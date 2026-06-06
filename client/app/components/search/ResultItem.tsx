@@ -2,6 +2,7 @@ import React, { memo } from "react";
 import { SearchResult } from "./types";
 import { formatDuration, shortCount } from "./helpers";
 import Image from "next/image";
+import { useAppLanguage } from "../../hooks/useAppLanguage";
 
 interface ResultItemProps {
   item: SearchResult;
@@ -24,9 +25,9 @@ function formatSubscribers(
 
   const formatted = shortCount(num);
   if (source === "soundcloud" || source === "jiosaavn") {
-    return `${formatted} listeners`;
+    return formatted;
   }
-  return `${formatted} Subscribers`;
+  return formatted;
 }
 
 function formatMetric(
@@ -43,6 +44,7 @@ function formatMetric(
 }
 
 export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
+  const { t } = useAppLanguage();
   const itemWithExtras = item as SearchResultWithExtras;
   const isArtist = item.type === "artist" || item.type === "channel";
   const isYouTubeSource =
@@ -87,32 +89,37 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
       ? item.uploaded
       : undefined;
 
-  const subCountLabel = isArtist
+  const rawSubCountLabel = isArtist
     ? formatSubscribers(itemWithExtras.subCount, item.source)
+    : "";
+  const subCountLabel = rawSubCountLabel
+    ? item.source === "soundcloud" || item.source === "jiosaavn"
+      ? t("search.listeners", { count: rawSubCountLabel })
+      : t("search.subscribers", { count: rawSubCountLabel })
     : "";
   // Thumbnail styling
   const thumbnailClasses = isArtist
-    ? "w-12 h-12 rounded-full object-cover mr-3"
+    ? "h-12 w-12 rounded-full object-cover"
     : isYouTubeSource
-    ? "w-64 h-36 rounded-xl object-cover mr-3"
-    : "w-32 h-32 rounded-xl object-cover mr-3";
+    ? "h-36 w-64 rounded-xl object-cover"
+    : "h-32 w-32 rounded-xl object-cover";
 
   const placeholderClasses = isArtist
-    ? "w-12 h-12 rounded-full bg-neutral-700 mr-3"
+    ? "h-12 w-12 rounded-full bg-neutral-700"
     : isYouTubeSource
-    ? "w-64 h-36 rounded-xl bg-neutral-700 mr-3"
-    : "w-32 h-32 rounded-xl bg-neutral-700 mr-3";
+    ? "h-36 w-64 rounded-xl bg-neutral-700"
+    : "h-32 w-32 rounded-xl bg-neutral-700";
 
   const imgWidth = isArtist ? 48 : isYouTubeSource ? 256 : 64;
   const imgHeight = isArtist ? 48 : isYouTubeSource ? 144 : 64;
 
   return (
-    <div className="flex py-2.5 rounded-lg">
+    <div className="flex items-start gap-3 rounded-lg py-2.5">
       <button
         type="button"
         onClick={onPress}
-        className="mr-3 shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-        aria-label={`Open ${displayTitle}`}
+        className="shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        aria-label={t("search.open", { title: displayTitle })}
       >
         {thumbnail ? (
           <Image
@@ -120,21 +127,21 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
             alt=""
             width={imgWidth}
             height={imgHeight}
-            className={thumbnailClasses.replace(" mr-3", "")}
+            className={thumbnailClasses}
             unoptimized
           />
         ) : (
-          <div className={placeholderClasses.replace(" mr-3", "")} />
+          <div className={placeholderClasses} />
         )}
       </button>
 
       <div className="min-w-0 flex-1">
         {/* Channel / Artist name */}
-        <h3 className="truncate text-white font-medium">
+        <h3 className="truncate text-start font-medium text-white">
           <button
             type="button"
             onClick={onPress}
-            className="truncate text-left transition hover:underline focus:outline-none focus-visible:underline"
+            className="block max-w-full truncate text-start transition hover:underline focus:outline-none focus-visible:underline"
           >
             {displayTitle}
           </button>
@@ -151,7 +158,7 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
         )}
 
         {!isArtist && (
-          <div className="flex items-center gap-2 text-xs text-neutral-500">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-500">
             {durationFormatted && <span>{durationFormatted}</span>}
             {viewsFormatted && (
               <>

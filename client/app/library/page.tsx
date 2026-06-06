@@ -2,8 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type Song, useAudio } from "../contexts/AudioContext";
+import { useAppLanguage } from "../hooks/useAppLanguage";
+import PlaylistCreateModal from "../components/PlaylistCreateModal";
 import {
   createStoredPlaylist,
   getLocalCollectionPath,
@@ -480,6 +482,8 @@ function ArtistCard({
   artist: ArtistSummary;
   priority?: boolean;
 }) {
+  const { t } = useAppLanguage();
+
   return (
     <div className="group text-left">
       <div className="relative aspect-square overflow-hidden rounded-full bg-[#181818] transition duration-200 group-hover:bg-[#222222]">
@@ -503,13 +507,14 @@ function ArtistCard({
         <p className="truncate text-[15px] font-semibold text-white">
           {artist.name}
         </p>
-        <p className="mt-1 text-sm text-white/55">Artist</p>
+        <p className="mt-1 text-sm text-white/55">{t("library.artist")}</p>
       </div>
     </div>
   );
 }
 
 function LibraryListRow({ item }: { item: LibraryGridItem }) {
+  const { t } = useAppLanguage();
   const isArtist = item.kind === "artist";
   const onClick = !isArtist ? item.onClick : undefined;
   const Component = onClick ? "button" : "div";
@@ -551,7 +556,7 @@ function LibraryListRow({ item }: { item: LibraryGridItem }) {
           {isArtist ? item.artist.name : item.title}
         </p>
         <p className="mt-1 truncate text-sm text-white/55">
-          {isArtist ? "Artist" : item.subtitle}
+          {isArtist ? t("library.artist") : item.subtitle}
         </p>
       </div>
 
@@ -559,11 +564,11 @@ function LibraryListRow({ item }: { item: LibraryGridItem }) {
         <p className="text-xs text-white/40">
           {isArtist
             ? formatSongCount(item.artist.count, "play")
-            : item.meta || "Open"}
+            : item.meta || t("library.open")}
         </p>
         {!isArtist && item.onClick ? (
           <p className="mt-1 text-xs font-medium text-white/60 transition group-hover:text-white">
-            Open
+            {t("library.open")}
           </p>
         ) : null}
       </div>
@@ -571,154 +576,11 @@ function LibraryListRow({ item }: { item: LibraryGridItem }) {
   );
 }
 
-function CreatePlaylistModal({
-  open,
-  name,
-  description,
-  onNameChange,
-  onDescriptionChange,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean;
-  name: string;
-  description: string;
-  onNameChange: (value: string) => void;
-  onDescriptionChange: (value: string) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const canSubmit = name.trim().length > 0;
-  const previewName = name.trim() || "My Playlist";
-  const previewDescription =
-    description.trim() || "Add an optional description for your playlist.";
-
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose, open]);
-
-  return (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center px-4 transition-all duration-200 ${
-        open
-          ? "pointer-events-auto bg-black/70 opacity-100 backdrop-blur-sm"
-          : "pointer-events-none bg-black/0 opacity-0"
-      }`}
-      onClick={open ? onClose : undefined}
-      aria-hidden={!open}
-    >
-      <div
-        className={`w-full max-w-2xl rounded-3xl bg-[#282828] p-6 shadow-[0_24px_64px_rgba(0,0,0,0.45)] transition-all duration-200 md:p-7 ${
-          open ? "scale-100 translate-y-0" : "scale-[0.97] translate-y-3"
-        }`}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-white">Create playlist</h2>
-            <p className="mt-1 text-sm text-white/55">
-              Give it a name and description, then save it to your library.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-white/55 transition hover:bg-white/8 hover:text-white"
-            aria-label="Close playlist modal"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              className="h-5 w-5"
-              aria-hidden="true"
-            >
-              <path strokeLinecap="round" d="m6 6 12 12M18 6 6 18" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="mt-6 grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
-          <div className="rounded-2xl bg-[#202020] p-4">
-            <div className="mx-auto flex aspect-square w-full max-w-[220px] items-center justify-center rounded-2xl bg-gradient-to-br from-[#4731c8] via-[#795bff] to-[#b7f4d8] text-white shadow-[0_20px_45px_rgba(71,49,200,0.4)]">
-              <FolderGlyph />
-            </div>
-            <div className="mt-4 px-1">
-              <p className="truncate text-lg font-semibold text-white">
-                {previewName}
-              </p>
-              <p className="mt-2 line-clamp-3 text-sm text-white/55">
-                {previewDescription}
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-white/75">
-                Name
-              </span>
-              <input
-                value={name}
-                onChange={(event) => onNameChange(event.target.value)}
-                placeholder="My Playlist"
-                className="w-full rounded-xl border border-white/10 bg-[#3e3e3e] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/30"
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-white/75">
-                Description
-              </span>
-              <textarea
-                value={description}
-                onChange={(event) => onDescriptionChange(event.target.value)}
-                placeholder="What is this playlist for?"
-                rows={7}
-                className="w-full resize-none rounded-xl border border-white/10 bg-[#3e3e3e] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/30"
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="mt-6 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:text-white"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={!canSubmit}
-            className="rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
-          >
-            Create
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function LibraryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { recentSongs, playSong } = useAudio();
+  const { t } = useAppLanguage();
   const [selectedChip, setSelectedChip] = useState<FilterChip | null>(null);
   const [userPlaylists, setUserPlaylists] =
     useState<StoredPlaylist[]>(readStoredPlaylists);
@@ -786,10 +648,10 @@ export default function LibraryPage() {
       topArtists.length > 0
         ? topArtists
         : [
-            { name: "Discover more", count: 0 },
-            { name: "Your next artist", count: 0 },
+            { name: t("library.discoverMore"), count: 0 },
+            { name: t("library.yourNextArtist"), count: 0 },
           ],
-    [topArtists]
+    [t, topArtists]
   );
 
   const previouslyPlayed = useMemo(
@@ -801,12 +663,11 @@ export default function LibraryPage() {
     const baseCards = [
       {
         id: "liked-songs",
-        title: "Liked Songs",
-        subtitle: "Playlist",
-        meta: `${formatSongCount(
-          Math.max(likedSongs.length, 1),
-          "song"
-        )} saved`,
+        title: t("library.likedSongs"),
+        subtitle: t("common.playlist"),
+        meta: t("library.savedSongs", {
+          count: Math.max(likedSongs.length, 1),
+        }),
         artwork: (
           <SmartPlaylistArtwork
             variant="liked"
@@ -819,12 +680,11 @@ export default function LibraryPage() {
       },
       {
         id: "previously-played",
-        title: "Previously Played",
-        subtitle: "Playlist",
-        meta: `${formatSongCount(
-          previouslyPlayed.length,
-          "track"
-        )} from your history`,
+        title: t("library.previouslyPlayed"),
+        subtitle: t("common.playlist"),
+        meta: t("library.fromHistory", {
+          count: previouslyPlayed.length,
+        }),
         artwork: (
           <SmartPlaylistArtwork
             variant="history"
@@ -838,8 +698,8 @@ export default function LibraryPage() {
       ...userPlaylists.map((playlist) => ({
         id: playlist.id,
         title: playlist.name,
-        subtitle: playlist.description || "Playlist",
-        meta: `${formatSongCount(playlist.songs.length, "song")} saved`,
+        subtitle: playlist.description || t("common.playlist"),
+        meta: t("library.savedSongs", { count: playlist.songs.length }),
         artwork: (
           <SmartPlaylistArtwork
             variant="playlist"
@@ -852,7 +712,7 @@ export default function LibraryPage() {
     ];
 
     return baseCards;
-  }, [likedSongs, previouslyPlayed, router, userPlaylists]);
+  }, [likedSongs, previouslyPlayed, router, t, userPlaylists]);
 
   const pinnedPlaylistCards = useMemo(
     () => [
@@ -871,16 +731,16 @@ export default function LibraryPage() {
         : [
             {
               id: "album-placeholder-1",
-              title: "Play something new",
-              artist: "Album",
+              title: t("library.playSomethingNew"),
+              artist: t("library.album"),
             },
             {
               id: "album-placeholder-2",
-              title: "Your next replay",
-              artist: "Album",
+              title: t("library.yourNextReplay"),
+              artist: t("library.album"),
             },
           ],
-    [recentSongs]
+    [recentSongs, t]
   );
 
   const mixedLibraryItems = useMemo<LibraryGridItem[]>(() => {
@@ -1048,12 +908,11 @@ export default function LibraryPage() {
   const isPlaylistView = selectedChip === "Playlists";
   const hasSearchQuery = libraryQuery.trim().length > 0;
   const librarySummary = hasSearchQuery
-    ? `${displayedGridItems.length} ${
-        displayedGridItems.length === 1 ? "result" : "results"
-      }`
-    : `${userPlaylists.length + 2} playlists • ${likedSongs.length} liked ${
-        likedSongs.length === 1 ? "song" : "songs"
-      }`;
+    ? t("library.results", { count: displayedGridItems.length })
+    : t("library.playlistsSummary", {
+        playlists: userPlaylists.length + 2,
+        likedSongs: likedSongs.length,
+      });
 
   const openCreatePlaylist = () => {
     setPlaylistName("");
@@ -1066,6 +925,15 @@ export default function LibraryPage() {
     setPlaylistName("");
     setPlaylistDescription("");
   };
+
+  useEffect(() => {
+    if (searchParams.get("createPlaylist") !== "1") return;
+
+    setPlaylistName("");
+    setPlaylistDescription("");
+    setIsModalOpen(true);
+    router.replace("/library", { scroll: false });
+  }, [router, searchParams]);
 
   const submitCreatePlaylist = () => {
     const name = playlistName.trim();
@@ -1092,7 +960,12 @@ export default function LibraryPage() {
           }`}
         >
           <div className="theme-overlay pointer-events-auto flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-medium text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-            <span>{`Created ${createdPlaylistToast?.name || "playlist"}`}</span>
+            <span>
+              {t("library.created", {
+                name:
+                  createdPlaylistToast?.name || t("library.createdFallback"),
+              })}
+            </span>
             {createdPlaylistToast ? (
               <button
                 type="button"
@@ -1101,7 +974,7 @@ export default function LibraryPage() {
                 }
                 className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-black transition hover:scale-[1.02]"
               >
-                Open
+                {t("library.open")}
               </button>
             ) : null}
           </div>
@@ -1113,7 +986,7 @@ export default function LibraryPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-base font-black tracking-tight text-white">
-                    Your Library
+                    {t("library.yourLibrary")}
                   </p>
                 </div>
 
@@ -1122,10 +995,10 @@ export default function LibraryPage() {
                     type="button"
                     onClick={openCreatePlaylist}
                     className="inline-flex items-center gap-2 rounded-full bg-white/8 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/12"
-                    aria-label="Create playlist"
+                    aria-label={t("library.createPlaylistAria")}
                   >
                     <PlusGlyph />
-                    Create
+                    {t("library.create")}
                   </button>
                   <button
                     type="button"
@@ -1137,13 +1010,13 @@ export default function LibraryPage() {
                     className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/8 hover:text-white"
                     aria-label={
                       viewMode === "grid"
-                        ? "Switch to list view"
-                        : "Switch to grid view"
+                        ? t("library.switchToList")
+                        : t("library.switchToGrid")
                     }
                     title={
                       viewMode === "grid"
-                        ? "Switch to list view"
-                        : "Switch to grid view"
+                        ? t("library.switchToList")
+                        : t("library.switchToGrid")
                     }
                   >
                     {viewMode === "grid" ? <ListGlyph /> : <GridGlyph />}
@@ -1168,7 +1041,15 @@ export default function LibraryPage() {
                           : "bg-white/8 text-white/82 hover:bg-white/12"
                       }`}
                     >
-                      {chip}
+                      {chip === "Playlists"
+                        ? t("library.playlists")
+                        : chip === "Podcasts & Shows"
+                        ? t("library.podcastsShows")
+                        : chip === "Albums"
+                        ? t("search.albums")
+                        : chip === "Artists"
+                        ? t("library.artists")
+                        : t("library.downloaded")}
                     </button>
                   ))}
                 </div>
@@ -1179,16 +1060,16 @@ export default function LibraryPage() {
                     <input
                       value={libraryQuery}
                       onChange={(event) => setLibraryQuery(event.target.value)}
-                      placeholder="Search in Your Library"
+                      placeholder={t("library.searchInLibrary")}
                       className="w-[220px] bg-transparent text-sm text-white outline-none placeholder:text-white/35"
-                      aria-label="Search in Your Library"
+                      aria-label={t("library.searchInLibrary")}
                     />
                     {hasSearchQuery ? (
                       <button
                         type="button"
                         onClick={() => setLibraryQuery("")}
                         className="rounded-full p-1 text-white/45 transition hover:bg-white/8 hover:text-white"
-                        aria-label="Clear library search"
+                        aria-label={t("library.clearSearch")}
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -1214,26 +1095,29 @@ export default function LibraryPage() {
                     <button
                       type="button"
                       onClick={() => setIsSortMenuOpen((value) => !value)}
-                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 transition hover:bg-white/8 hover:text-white"
+                      className="theme-button-soft inline-flex items-center gap-1.5 rounded-full border px-3 py-2 transition hover:text-white"
                     >
                       {sortMode === "recents"
-                        ? "Recents"
+                        ? t("library.recents")
                         : sortMode === "alphabetical"
-                        ? "Alphabetical"
-                        : "Creator"}
+                        ? t("library.alphabetical")
+                        : t("library.creator")}
                       <ChevronDownGlyph className="h-3.5 w-3.5" />
                     </button>
                     <div
-                      className={`absolute right-0 top-full z-20 mt-2 w-44 rounded-2xl border border-white/10 bg-[#202020] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.35)] transition-all duration-150 ${
+                      className={`theme-overlay absolute right-0 top-full z-20 mt-2 w-44 rounded-2xl border p-1 shadow-[0_18px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all duration-150 ${
                         isSortMenuOpen
                           ? "pointer-events-auto translate-y-0 opacity-100"
                           : "pointer-events-none -translate-y-1 opacity-0"
                       }`}
                     >
                       {[
-                        { id: "recents", label: "Recents" },
-                        { id: "alphabetical", label: "Alphabetical" },
-                        { id: "creator", label: "Creator" },
+                        { id: "recents", label: t("library.recents") },
+                        {
+                          id: "alphabetical",
+                          label: t("library.alphabetical"),
+                        },
+                        { id: "creator", label: t("library.creator") },
                       ].map((option) => (
                         <button
                           key={option.id}
@@ -1244,7 +1128,7 @@ export default function LibraryPage() {
                           }}
                           className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${
                             sortMode === option.id
-                              ? "bg-white text-black"
+                              ? "theme-accent-fill"
                               : "text-white/82 hover:bg-white/8"
                           }`}
                         >
@@ -1260,10 +1144,17 @@ export default function LibraryPage() {
 
           <div className="flex items-center justify-between gap-3 px-1 text-xs uppercase tracking-[0.18em] text-white/38">
             <p>{librarySummary}</p>
-            <p>{viewMode === "grid" ? "Grid view" : "List view"}</p>
+            <p>
+              {viewMode === "grid"
+                ? t("library.gridView")
+                : t("library.listView")}
+            </p>
           </div>
 
-          <section className="min-h-0 flex-1 overflow-y-auto hide-scrollbar pr-1">
+          <section
+            className="min-h-0 flex-1 overflow-y-auto hide-scrollbar"
+            style={{ paddingInlineEnd: "0.25rem" }}
+          >
             {displayedGridItems.length > 0 ? (
               viewMode === "grid" ? (
                 <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
@@ -1297,11 +1188,13 @@ export default function LibraryPage() {
                       </div>
                       <div className="px-1 pt-3">
                         <p className="truncate text-[15px] font-semibold text-white">
-                          Create playlist
+                          {t("library.createPlaylist")}
                         </p>
-                        <p className="mt-1 text-sm text-white/55">Playlist</p>
+                        <p className="mt-1 text-sm text-white/55">
+                          {t("common.playlist")}
+                        </p>
                         <p className="mt-1 text-xs text-white/38">
-                          Name it and make it yours
+                          {t("library.nameItYours")}
                         </p>
                       </div>
                     </button>
@@ -1323,10 +1216,10 @@ export default function LibraryPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-white">
-                          Create playlist
+                          {t("library.createPlaylist")}
                         </p>
                         <p className="mt-1 text-sm text-white/55">
-                          Name it and make it yours
+                          {t("library.nameItYours")}
                         </p>
                       </div>
                     </button>
@@ -1336,17 +1229,17 @@ export default function LibraryPage() {
             ) : (
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/55">
                 {libraryQuery.trim()
-                  ? "No library items match your search."
+                  ? t("library.noSearchMatch")
                   : selectedChip === "Downloaded"
-                  ? "Downloaded items will appear here."
-                  : "Podcasts and shows will appear here."}
+                  ? t("library.downloadedEmpty")
+                  : t("library.podcastsEmpty")}
               </div>
             )}
           </section>
         </div>
       </div>
 
-      <CreatePlaylistModal
+      <PlaylistCreateModal
         open={isModalOpen}
         name={playlistName}
         description={playlistDescription}

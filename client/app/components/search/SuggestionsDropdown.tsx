@@ -1,4 +1,5 @@
 import React from "react";
+import { useAppLanguage } from "../../hooks/useAppLanguage";
 
 interface SuggestionsDropdownProps {
   suggestions: string[];
@@ -13,6 +14,8 @@ export const SuggestionsDropdown: React.FC<SuggestionsDropdownProps> = ({
   onClose,
   isLoading = false,
 }) => {
+  const { t } = useAppLanguage();
+
   if (suggestions.length === 0 && !isLoading) return null;
 
   return (
@@ -23,7 +26,7 @@ export const SuggestionsDropdown: React.FC<SuggestionsDropdownProps> = ({
           onClick={onClose}
           className="rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-white/45 transition hover:bg-white/6 hover:text-white"
         >
-          Close
+          {t("common.close")}
         </button>
       </div>
 

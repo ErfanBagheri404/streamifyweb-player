@@ -416,7 +416,11 @@ function normalizeJioSaavnPayload(
     author: pickJioSaavnArtistNames(root) || pickJioSaavnArtistNames(moreInfo),
     lengthSeconds: toNumber(root.duration) ?? toNumber(moreInfo.duration),
     thumbnailUrl: image,
+    url:
+      pickArrayString(root, ["url", "perma_url", "permaUrl", "permalink"]) ||
+      pickArrayString(moreInfo, ["url", "perma_url", "permaUrl", "permalink"]),
     audioUrl: buildDirectProxyAudioUrl(audioStream),
+    source: "jiosaavn",
   };
 }
 
@@ -1427,6 +1431,25 @@ async function fetchVideoDetails(
   source?: string,
   options?: { title?: string; artist?: string; urlHint?: string }
 ): Promise<Record<string, unknown>> {
+  if (source === "youtubemusic") {
+    const matchedJioSaavnSong = await findJioSaavnMatch(
+      options?.title || "",
+      options?.artist
+    );
+
+    if (matchedJioSaavnSong?.id) {
+      const jioSaavnPayload = await fetchJioSaavnFromEndpoints(
+        buildJioSaavnSongEndpoints(
+          matchedJioSaavnSong.id,
+          matchedJioSaavnSong.url
+        )
+      );
+      if (jioSaavnPayload?.audioUrl) {
+        return jioSaavnPayload;
+      }
+    }
+  }
+
   // The videoId should be the only thing needed for youtube/youtubemusic
   if (source === "youtube" || source === "youtubemusic" || !source) {
     const providers = [

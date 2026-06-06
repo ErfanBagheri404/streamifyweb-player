@@ -15,6 +15,8 @@ import {
   readSessionCache,
   writeSessionCache,
 } from "../../../lib/session-cache";
+import { useAppLanguage } from "../../../hooks/useAppLanguage";
+import { findSavedCollectionRouteContext } from "../../../lib/navigation-state";
 
 const DEBUG_SERVER_URL = "";
 const DEBUG_SESSION_ID = "soundcloud-collection-bug";
@@ -320,15 +322,25 @@ export default function CollectionPage() {
   const params = useParams<{ kind: string; id: string }>();
   const searchParams = useSearchParams();
   const { currentSong, isPlaying, resolveAndPlaySong } = useAudio();
+  const {
+    t,
+    formatNumber,
+    formatDate,
+    getSourceLabel: getLocalizedSourceLabel,
+  } = useAppLanguage();
 
   const kind = params.kind === "album" ? "album" : "playlist";
   const id = decodeURIComponent(params.id);
-  const source = searchParams.get("source") || "";
-  const title = searchParams.get("title") || "Untitled";
-  const author = searchParams.get("author") || "";
-  const image = searchParams.get("image") || "";
-  const href = searchParams.get("href") || "";
-  const count = searchParams.get("count") || "";
+  const savedRouteContext = useMemo(
+    () => findSavedCollectionRouteContext(id, kind),
+    [id, kind]
+  );
+  const source = searchParams.get("source") || savedRouteContext?.source || "";
+  const title = savedRouteContext?.title || "Untitled";
+  const author = savedRouteContext?.author || "";
+  const image = savedRouteContext?.image || "";
+  const href = savedRouteContext?.href || "";
+  const count = savedRouteContext?.count || "";
   const runId = useMemo(() => `pre-${Date.now()}`, []);
 
   const storedItem = useMemo(
@@ -641,21 +653,50 @@ export default function CollectionPage() {
 
   const displayCountText =
     entries.length > 0
-      ? `${formatCount(entries.length)} ${
-          entries.length === 1 ? "song" : "songs"
-        }`
+      ? t("collection.songCount", { count: formatNumber(entries.length) })
       : localCollection?.collection.count != null
-      ? `${formatCount(localCollection.collection.count)} items`
+      ? t("collection.itemsCount", {
+          count: formatNumber(localCollection.collection.count),
+        })
       : remoteState.collection?.count != null
-      ? `${formatCount(remoteState.collection.count)} items`
+      ? t("collection.itemsCount", {
+          count: formatNumber(remoteState.collection.count),
+        })
       : count
-      ? `${count} items`
+      ? t("collection.itemsCount", { count })
       : "";
 
+  const localizedRuntime = (() => {
+    if (!totalRuntime) return "";
+
+    const hours = Math.floor(totalRuntime / 3600);
+    const minutes = Math.round((totalRuntime % 3600) / 60);
+
+    if (hours <= 0) {
+      return t("collection.min", { count: minutes });
+    }
+
+    if (minutes <= 0) {
+      return t("collection.hr", { count: hours });
+    }
+
+    return t("collection.hrMin", { hours, minutes });
+  })();
+
   const metaParts = [
-    getSourceLabel(collectionSource),
+    collectionSource.toLowerCase() === "local"
+      ? t("collection.yourLibrary")
+      : collectionSource.toLowerCase() === "youtube"
+      ? getLocalizedSourceLabel("youtube")
+      : collectionSource.toLowerCase() === "youtubemusic"
+      ? getLocalizedSourceLabel("youtubemusic")
+      : collectionSource.toLowerCase() === "soundcloud"
+      ? getLocalizedSourceLabel("soundcloud")
+      : collectionSource.toLowerCase() === "jiosaavn"
+      ? getLocalizedSourceLabel("jiosaavn")
+      : t("collection.collection"),
     displayCountText,
-    formatCollectionRuntime(totalRuntime),
+    localizedRuntime,
   ].filter(Boolean);
 
   const canPlayEntries =
@@ -744,7 +785,7 @@ export default function CollectionPage() {
   };
 
   return (
-    <div className="min-h-full overflow-hidden rounded-2xl bg-[#121212] text-white">
+    <div className="theme-surface-strong min-h-full overflow-hidden rounded-2xl border text-white">
       <div
         className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm transition ${
           isDeleteModalOpen
@@ -754,20 +795,19 @@ export default function CollectionPage() {
         onClick={() => setIsDeleteModalOpen(false)}
       >
         <div
-          className={`w-full max-w-md rounded-[28px] border border-white/10 bg-[#181818] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.45)] transition ${
+          className={`theme-surface w-full max-w-md rounded-[28px] border p-6 shadow-[0_30px_80px_rgba(0,0,0,0.45)] transition ${
             isDeleteModalOpen ? "scale-100" : "scale-95"
           }`}
           onClick={(event) => event.stopPropagation()}
         >
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-            Remove Playlist
+            {t("collection.removePlaylist")}
           </p>
           <h2 className="mt-3 text-2xl font-semibold text-white">
-            Delete {displayTitle}?
+            {t("collection.deletePlaylist", { title: displayTitle })}
           </h2>
           <p className="mt-2 text-sm text-white/60">
-            This removes the playlist from your library. Your liked songs and
-            listening history stay unchanged.
+            {t("collection.removePlaylistDescription")}
           </p>
           <div className="mt-6 flex items-center justify-end gap-3">
             <button
@@ -775,27 +815,33 @@ export default function CollectionPage() {
               onClick={() => setIsDeleteModalOpen(false)}
               className="rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:text-white"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="button"
               onClick={handleDeletePlaylist}
               className="rounded-full bg-[#f15e6c] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#ff7280]"
             >
-              Remove playlist
+              {t("collection.removePlaylistAction")}
             </button>
           </div>
         </div>
       </div>
 
-      <section className="relative overflow-hidden bg-[linear-gradient(180deg,#9fadab_0%,#5d6b69_42%,#1e2726_70%,#121212_100%)] px-5 pb-8 pt-5 md:px-8 md:pb-10 md:pt-6">
+      <section
+        className="relative overflow-hidden px-5 pb-8 pt-5 md:px-8 md:pb-10 md:pt-6"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg,var(--collection-hero-start) 0%,var(--collection-hero-mid) 42%,var(--collection-hero-end) 70%,var(--surface-2) 100%)",
+        }}
+      >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_32%),linear-gradient(180deg,rgba(0,0,0,0)_0%,rgba(0,0,0,0.22)_55%,rgba(0,0,0,0.6)_100%)]" />
         <div className="relative z-10">
           <Link
             href={backHref}
             className="inline-flex rounded-full bg-black/25 px-3 py-2 text-sm text-white/82 backdrop-blur-sm transition hover:bg-black/35"
           >
-            Back
+            {t("common.back")}
           </Link>
 
           <div className="mt-7 flex flex-col items-start gap-6 md:flex-row md:items-end">
@@ -844,21 +890,21 @@ export default function CollectionPage() {
             onClick={handlePrimaryPlay}
             disabled={!entries[0] || !canPlayEntries}
             className="flex h-14 w-14 items-center justify-center rounded-full bg-[#1ed760] text-black transition hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
-            aria-label="Play collection"
+            aria-label={t("collection.playCollection")}
           >
             <PlayGlyph className="h-6 w-6" />
           </button>
           <button
             type="button"
             className="rounded-full p-2.5 text-white/75 transition hover:bg-white/8 hover:text-white"
-            aria-label="Like collection"
+            aria-label={t("collection.likeCollection")}
           >
             <HeartGlyph />
           </button>
           <button
             type="button"
             className="rounded-full p-2.5 text-white/75 transition hover:bg-white/8 hover:text-white"
-            aria-label="More actions"
+            aria-label={t("collection.moreActions")}
           >
             <MoreGlyph />
           </button>
@@ -867,10 +913,10 @@ export default function CollectionPage() {
               type="button"
               onClick={() => setIsDeleteModalOpen(true)}
               className="inline-flex items-center gap-2 rounded-full border border-white/12 px-4 py-2.5 text-sm font-semibold text-white/78 transition hover:border-white/18 hover:bg-white/8 hover:text-white"
-              aria-label="Remove playlist"
+              aria-label={t("collection.removePlaylistAction")}
             >
               <TrashGlyph />
-              Remove playlist
+              {t("collection.removePlaylistAction")}
             </button>
           ) : null}
         </div>
@@ -883,9 +929,11 @@ export default function CollectionPage() {
           <div className="mt-8">
             <div className="grid grid-cols-[42px_minmax(0,1fr)_64px] gap-3 border-b border-white/10 px-3 pb-3 text-[11px] uppercase tracking-[0.18em] text-white/45 md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px]">
               <div className="text-center">#</div>
-              <div>Title</div>
-              <div className="hidden truncate md:block">Album</div>
-              <div className="hidden md:block">Date Added</div>
+              <div>{t("collection.titleColumn")}</div>
+              <div className="hidden truncate md:block">
+                {t("collection.albumColumn")}
+              </div>
+              <div className="hidden md:block">{t("collection.dateAdded")}</div>
               <div className="flex justify-end">
                 <ClockGlyph />
               </div>
@@ -967,7 +1015,18 @@ export default function CollectionPage() {
                     </p>
 
                     <p className="hidden text-sm text-white/45 md:block">
-                      {formatDateAdded(entry.addedAt)}
+                      {entry.addedAt
+                        ? (() => {
+                            const date = new Date(entry.addedAt);
+                            return Number.isNaN(date.getTime())
+                              ? entry.addedAt
+                              : formatDate(date, {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                });
+                          })()
+                        : t("collection.recently")}
                     </p>
 
                     <div className="flex items-center justify-end gap-3 text-sm text-white/55">
@@ -992,7 +1051,7 @@ export default function CollectionPage() {
           </div>
         ) : (
           <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/55">
-            No mapped tracks were available for this {kind} yet.
+            {t("collection.noMappedTracks", { kind })}
           </div>
         )}
       </section>

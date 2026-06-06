@@ -1,5 +1,6 @@
 import React from "react";
 import Image from "next/image";
+import { useAppLanguage } from "../../hooks/useAppLanguage";
 import { SearchResult, SourceType } from "./types";
 import { SearchSection } from "./SearchSection";
 import { SkeletonItem } from "./SkeletonItem";
@@ -43,6 +44,8 @@ export const ResultsList: React.FC<ResultsListProps> = ({
   onSongPress,
   onCategorySelect,
 }) => {
+  const { t, getCategoryLabel } = useAppLanguage();
+
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -75,13 +78,14 @@ export const ResultsList: React.FC<ResultsListProps> = ({
     return (
       <div className="grid grid-cols-3 gap-2 px-1 py-4">
         {categories.map((fileName) => {
-          const label = fileName.replace(/\.jpg$/i, "");
+          const rawLabel = fileName.replace(/\.jpg$/i, "");
+          const label = getCategoryLabel(rawLabel);
           const src = `/categories/${encodeURIComponent(fileName)}`;
           return (
             <button
               key={fileName}
               type="button"
-              onClick={() => onCategorySelect?.(label)}
+              onClick={() => onCategorySelect?.(rawLabel)}
               className="relative w-full overflow-hidden rounded-xl"
             >
               <Image
@@ -104,7 +108,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
 
   if (searchQuery.trim() && hasSearched && searchResults.length === 0) {
     return (
-      <p className="mt-8 text-center text-white/48">No results found</p>
+      <p className="mt-8 text-center text-white/48">{t("search.noResults")}</p>
     );
   }
 
@@ -113,30 +117,30 @@ export const ResultsList: React.FC<ResultsListProps> = ({
   return (
     <>
       <SearchSection
-        title="Top Result"
+        title={t("search.topResult")}
         items={filteredResults.topResults}
         onItemPress={onTopResultPress}
       />
       <SearchSection
-        title="Artists"
+        title={t("search.artists")}
         items={filteredResults.artists}
         onItemPress={onArtistPress}
         isArtistsSection={true}
       />
       {selectedSource !== "youtube" && selectedSource !== "youtubemusic" && (
         <SearchSection
-          title="Albums"
+          title={t("search.albums")}
           items={filteredResults.albums}
           onItemPress={onAlbumPress}
         />
       )}
       <SearchSection
-        title="Playlists"
+        title={t("search.playlists")}
         items={filteredResults.playlists}
         onItemPress={onAlbumPress}
       />
       <SearchSection
-        title="Songs"
+        title={t("search.songs")}
         items={filteredResults.songs}
         onItemPress={onSongPress}
       />
@@ -144,7 +148,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
       {!hasMoreResults ? (
         <div className="py-5 text-center">
           <span className="text-sm text-white/45">
-            End of search results
+            {t("search.endResults")}
           </span>
         </div>
       ) : (
@@ -152,14 +156,14 @@ export const ResultsList: React.FC<ResultsListProps> = ({
           {isLoadingMore ? (
             <div className="inline-flex items-center gap-3 rounded-full px-4 py-2 text-sm text-white/65">
               <span className="theme-spinner h-5 w-5" />
-              <span className="loading-dots">Loading more</span>
+              <span className="loading-dots">{t("common.loadingMore")}</span>
             </div>
           ) : (
             <button
               onClick={onLoadMore}
               className="theme-button-soft rounded-full border px-6 py-2.5 text-sm font-semibold transition"
             >
-              Load More
+              {t("common.loadMore")}
             </button>
           )}
         </div>
