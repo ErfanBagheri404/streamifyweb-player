@@ -983,18 +983,18 @@ export default function LibraryPage() {
         <div className="flex h-full min-h-0 w-full flex-col gap-6 rounded-xl px-4 py-4">
           <section className="rounded-xl">
             <div className="flex flex-col gap-5">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-base font-black tracking-tight text-white">
                     {t("library.yourLibrary")}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 text-white/65">
+                <div className="flex items-center gap-2 text-white/65 sm:justify-end">
                   <button
                     type="button"
                     onClick={openCreatePlaylist}
-                    className="inline-flex items-center gap-2 rounded-full bg-white/8 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/12"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/12 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm"
                     aria-label={t("library.createPlaylistAria")}
                   >
                     <PlusGlyph />
@@ -1007,7 +1007,7 @@ export default function LibraryPage() {
                         current === "grid" ? "list" : "grid"
                       )
                     }
-                    className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/8 hover:text-white"
+                    className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-white/8 hover:text-white sm:h-9 sm:w-9"
                     aria-label={
                       viewMode === "grid"
                         ? t("library.switchToList")
@@ -1025,7 +1025,7 @@ export default function LibraryPage() {
               </div>
 
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <div className="flex flex-wrap gap-2">
+                <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 hide-scrollbar sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 sm:gap-2">
                   {FILTER_CHIPS.map((chip) => (
                     <button
                       key={chip}
@@ -1035,7 +1035,7 @@ export default function LibraryPage() {
                           current === chip ? null : chip
                         )
                       }
-                      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition sm:px-4 sm:py-2 sm:text-sm ${
                         selectedChip === chip
                           ? "bg-white text-black"
                           : "bg-white/8 text-white/82 hover:bg-white/12"
@@ -1054,14 +1054,14 @@ export default function LibraryPage() {
                   ))}
                 </div>
 
-                <div className="relative flex flex-col gap-3 text-sm text-white/55 sm:flex-row sm:items-center">
+                <div className="relative flex flex-col gap-2 text-sm text-white/55 sm:flex-row sm:items-center sm:gap-3">
                   <label className="inline-flex items-center gap-2 rounded-xl bg-white/6 px-3 py-2 transition focus-within:bg-white/10 focus-within:text-white">
                     <SearchGlyph />
                     <input
                       value={libraryQuery}
                       onChange={(event) => setLibraryQuery(event.target.value)}
                       placeholder={t("library.searchInLibrary")}
-                      className="w-[220px] bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+                      className="w-full min-w-0 bg-transparent text-sm text-white outline-none placeholder:text-white/35 sm:w-[220px]"
                       aria-label={t("library.searchInLibrary")}
                     />
                     {hasSearchQuery ? (
@@ -1095,7 +1095,7 @@ export default function LibraryPage() {
                     <button
                       type="button"
                       onClick={() => setIsSortMenuOpen((value) => !value)}
-                      className="theme-button-soft inline-flex items-center gap-1.5 rounded-full border px-3 py-2 transition hover:text-white"
+                      className="theme-button-soft inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition hover:text-white sm:py-2 sm:text-sm"
                     >
                       {sortMode === "recents"
                         ? t("library.recents")

@@ -76,7 +76,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
     ];
 
     return (
-      <div className="grid grid-cols-3 gap-2 px-1 py-4">
+      <div className="grid grid-cols-2 gap-2 px-1 py-4 sm:grid-cols-3">
         {categories.map((fileName) => {
           const rawLabel = fileName.replace(/\.jpg$/i, "");
           const label = getCategoryLabel(rawLabel);
@@ -96,7 +96,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
                 className="w-full aspect-[3/2] object-cover bg-neutral-800"
                 unoptimized
               />
-              <div className="absolute bottom-5 left-5 text-white text-xl font-bold">
+              <div className="absolute bottom-4 left-4 text-lg font-bold text-white sm:bottom-5 sm:left-5 sm:text-xl">
                 {label}
               </div>
             </button>

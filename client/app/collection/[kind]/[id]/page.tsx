@@ -829,7 +829,7 @@ export default function CollectionPage() {
       </div>
 
       <section
-        className="relative overflow-hidden px-5 pb-8 pt-5 md:px-8 md:pb-10 md:pt-6"
+        className="relative overflow-hidden px-4 pb-8 pt-5 sm:px-5 md:px-8 md:pb-10 md:pt-6"
         style={{
           backgroundImage:
             "linear-gradient(180deg,var(--collection-hero-start) 0%,var(--collection-hero-mid) 42%,var(--collection-hero-end) 70%,var(--surface-2) 100%)",
@@ -851,18 +851,18 @@ export default function CollectionPage() {
                 alt={displayTitle}
                 width={224}
                 height={224}
-                className="h-44 w-44 rounded-md bg-black/20 object-cover shadow-[0_24px_60px_rgba(0,0,0,0.4)] md:h-56 md:w-56"
+                className="h-36 w-36 rounded-md bg-black/20 object-cover shadow-[0_24px_60px_rgba(0,0,0,0.4)] sm:h-44 sm:w-44 md:h-56 md:w-56"
                 unoptimized
               />
             ) : (
-              <div className="h-44 w-44 rounded-md bg-black/20 shadow-[0_24px_60px_rgba(0,0,0,0.4)] md:h-56 md:w-56" />
+              <div className="h-36 w-36 rounded-md bg-black/20 shadow-[0_24px_60px_rgba(0,0,0,0.4)] sm:h-44 sm:w-44 md:h-56 md:w-56" />
             )}
 
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
                 {kind}
               </p>
-              <h1 className="mt-3 text-4xl font-black tracking-tight text-white sm:text-6xl lg:text-7xl">
+              <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-6xl lg:text-7xl">
                 {displayTitle}
               </h1>
               {displayDescription ? (
@@ -883,8 +883,8 @@ export default function CollectionPage() {
         </div>
       </section>
 
-      <section className="px-5 pb-10 pt-6 md:px-8">
-        <div className="flex items-center gap-4">
+      <section className="px-4 pb-10 pt-6 sm:px-5 md:px-8">
+        <div className="flex flex-wrap items-center gap-4">
           <button
             type="button"
             onClick={handlePrimaryPlay}
@@ -927,7 +927,7 @@ export default function CollectionPage() {
           </div>
         ) : entries.length > 0 ? (
           <div className="mt-8">
-            <div className="grid grid-cols-[42px_minmax(0,1fr)_64px] gap-3 border-b border-white/10 px-3 pb-3 text-[11px] uppercase tracking-[0.18em] text-white/45 md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px]">
+            <div className="grid grid-cols-[32px_minmax(0,1fr)_52px] gap-3 border-b border-white/10 px-3 pb-3 text-[11px] uppercase tracking-[0.18em] text-white/45 sm:grid-cols-[42px_minmax(0,1fr)_64px] md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px]">
               <div className="text-center">#</div>
               <div>{t("collection.titleColumn")}</div>
               <div className="hidden truncate md:block">
@@ -954,7 +954,7 @@ export default function CollectionPage() {
                         ? () => void handleEntryPress(entry)
                         : undefined
                     }
-                    className={`group grid w-full grid-cols-[42px_minmax(0,1fr)_64px] items-center gap-3 rounded-md px-3 py-2.5 text-left transition hover:bg-white/10 md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px] ${
+                    className={`group grid w-full grid-cols-[32px_minmax(0,1fr)_52px] items-center gap-3 rounded-md px-3 py-2.5 text-left transition hover:bg-white/10 sm:grid-cols-[42px_minmax(0,1fr)_64px] md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px] ${
                       isActiveTrack ? "bg-white/8" : ""
                     }`}
                   >

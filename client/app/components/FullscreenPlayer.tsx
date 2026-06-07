@@ -810,7 +810,7 @@ export default function FullscreenPlayer() {
   };
 
   return (
-    <div className="relative h-full overflow-hidden rounded-xl">
+    <div className="relative h-full w-full min-w-0 overflow-x-hidden overflow-y-auto rounded-xl lg:overflow-hidden">
       <div
         className={`pointer-events-none absolute left-1/2 top-4 z-40 flex -translate-x-1/2 transition-all duration-200 ${
           feedbackMessage
@@ -916,8 +916,8 @@ export default function FullscreenPlayer() {
         </div>
       </div>
 
-      <div className="grid h-full w-full gap-2 bg-[#070707] lg:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)]">
-        <section className="relative min-h-[320px] overflow-hidden rounded-xl bg-[#8a1207]">
+      <div className="grid min-h-full w-full min-w-0 gap-2 overflow-x-hidden bg-[#070707] lg:h-full lg:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)]">
+        <section className="relative min-h-[54svh] min-w-0 overflow-hidden rounded-xl bg-[#8a1207] lg:min-h-[320px]">
           {currentSong.coverUrl ? (
             <>
               <Image
@@ -934,11 +934,11 @@ export default function FullscreenPlayer() {
             <div className="absolute inset-0 bg-gradient-to-br from-[#c01c0c] to-[#250707]" />
           )}
 
-          <div className="absolute left-3 top-3 z-10 flex flex-wrap items-center gap-2">
+          <div className="absolute left-3 right-3 top-3 z-10 flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={closeFullscreen}
-              className="inline-flex items-center gap-2 rounded-full bg-black/25 px-4 py-2 text-sm font-medium text-white backdrop-blur-md transition hover:bg-black/35"
+              className="inline-flex items-center gap-2 rounded-full bg-black/25 px-3 py-2 text-xs font-medium text-white backdrop-blur-md transition hover:bg-black/35 sm:px-4 sm:text-sm"
             >
               {t("fullscreen.minimize")}
               <ChevronDownGlyph />
@@ -946,7 +946,7 @@ export default function FullscreenPlayer() {
             <button
               type="button"
               onClick={() => setIsPlaylistPickerOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full bg-black/25 px-4 py-2 text-sm font-medium text-white backdrop-blur-md transition hover:bg-black/35"
+              className="inline-flex items-center gap-2 rounded-full bg-black/25 px-3 py-2 text-xs font-medium text-white backdrop-blur-md transition hover:bg-black/35 sm:px-4 sm:text-sm"
             >
               {t("fullscreen.addToPlaylist")}
               <PlusGlyph />
@@ -954,7 +954,7 @@ export default function FullscreenPlayer() {
             <button
               type="button"
               onClick={handleToggleLike}
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium backdrop-blur-md transition ${
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium backdrop-blur-md transition sm:px-4 sm:text-sm ${
                 isCurrentSongLiked
                   ? "bg-[#1ed760] text-black hover:bg-[#3be477]"
                   : "bg-black/25 text-white hover:bg-black/35"
@@ -967,25 +967,27 @@ export default function FullscreenPlayer() {
             </button>
           </div>
 
-          <div className="absolute bottom-2 left-2 right-2 rounded-xl bg-black/25 px-6 py-5 backdrop-blur-xl md:px-7">
-            <p className="text-sm text-white/70">{t("common.song")}</p>
-            <h2 className="mt-1 text-2xl font-semibold text-white md:text-3xl">
+          <div className="absolute bottom-2 left-2 right-2 rounded-xl bg-black/25 px-4 py-4 backdrop-blur-xl sm:px-6 sm:py-5 md:px-7">
+            <p className="text-xs text-white/70 sm:text-sm">
+              {t("common.song")}
+            </p>
+            <h2 className="mt-1 text-xl font-semibold text-white sm:text-2xl md:text-3xl">
               {currentSong.title}
             </h2>
             {songMeta ? (
-              <p className="mt-2 text-sm text-white/75 md:text-base">
+              <p className="mt-2 text-xs text-white/75 sm:text-sm md:text-base">
                 {songMeta}
               </p>
             ) : null}
           </div>
         </section>
 
-        <aside className="flex min-h-0 flex-col gap-2">
-          <section className="theme-surface flex min-h-0 flex-1 flex-col rounded-xl border px-3 py-3 md:px-4 md:py-4">
+        <aside className="flex min-h-0 min-w-0 flex-col gap-2">
+          <section className="theme-surface flex min-h-0 min-w-0 flex-col rounded-xl border px-3 py-3 md:px-4 md:py-4 lg:flex-1">
             <div className="flex min-h-0 flex-1 flex-col rounded-[24px]">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="mt-1 truncate text-lg font-semibold text-white">
+                  <p className="mt-1 truncate text-base font-semibold text-white sm:text-lg">
                     {currentSong.title}
                   </p>
                   <p className="text-sm text-white/55">
@@ -1010,10 +1012,10 @@ export default function FullscreenPlayer() {
                 onWheel={markLyricsUserScrollIntent}
                 onTouchStart={markLyricsUserScrollIntent}
                 onScroll={handleLyricsContainerScroll}
-                className="mt-5 flex-1 overflow-y-auto hide-scrollbar text-white/90"
+                className="mt-4 max-h-[42svh] flex-1 overflow-y-auto hide-scrollbar text-white/90 lg:mt-5 lg:max-h-none"
                 style={{ paddingInlineEnd: "0.25rem" }}
               >
-                <div className="space-y-2 text-lg leading-9 md:text-[22px] md:leading-[1.5]">
+                <div className="space-y-2 text-base leading-8 sm:text-lg sm:leading-9 md:text-[22px] md:leading-[1.5]">
                   {lyricsState.loading ? (
                     <div className="space-y-3 py-2">
                       <div className="inline-flex items-center gap-3 rounded-full px-3 py-2 text-white/60">
@@ -1069,7 +1071,7 @@ export default function FullscreenPlayer() {
                       <p className="pb-3 text-sm text-white/40">
                         {t("fullscreen.syncedUnavailable")}
                       </p>
-                      <pre className="whitespace-pre-wrap font-sans text-lg leading-9 text-white md:text-[22px] md:leading-[1.5]">
+                      <pre className="whitespace-pre-wrap break-words font-sans text-base leading-8 text-white sm:text-lg sm:leading-9 md:text-[22px] md:leading-[1.5]">
                         {plainLyricsText}
                       </pre>
                     </>
@@ -1126,7 +1128,7 @@ export default function FullscreenPlayer() {
           </section>
 
           <section
-            className="flex max-h-[230px] min-h-0 flex-col overflow-hidden rounded-xl px-3 py-3 md:max-h-[250px] md:px-4 md:py-4"
+            className="flex max-h-[42svh] min-h-0 flex-col overflow-hidden rounded-xl px-3 py-3 md:px-4 md:py-4 lg:max-h-[250px]"
             style={{
               backgroundImage: `linear-gradient(180deg, ${rgbToCss(
                 sectionPrimary,

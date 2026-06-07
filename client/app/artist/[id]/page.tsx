@@ -317,7 +317,7 @@ export default function ArtistPage() {
   };
 
   return (
-    <div className="min-h-screen text-white">
+    <div className="min-h-full text-white">
       <div className="theme-surface-strong relative overflow-hidden rounded-xl border">
         <button
           type="button"
@@ -328,13 +328,13 @@ export default function ArtistPage() {
             }
             router.back();
           }}
-          className="theme-overlay absolute left-4 top-4 z-20 rounded-full border px-3 py-2 text-sm text-white/78 transition-colors hover:text-white"
+          className="theme-overlay absolute left-3 top-3 z-20 rounded-full border px-3 py-2 text-xs text-white/78 transition-colors hover:text-white sm:left-4 sm:top-4 sm:text-sm"
         >
           {`← ${t("common.back")}`}
         </button>
 
         <div
-          className="relative min-h-[280px] bg-neutral-800 sm:min-h-[360px]"
+          className="relative min-h-[220px] bg-neutral-800 sm:min-h-[360px]"
           style={{
             backgroundImage: header.banner
               ? `url(${header.banner})`
@@ -344,16 +344,16 @@ export default function ArtistPage() {
           }}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-[#080808] via-black/45 to-black/10" />
-          <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
+          <div className="absolute inset-x-0 bottom-0 p-3 sm:p-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-6">
               {header.image ? (
                 <img
                   src={header.image}
                   alt={header.name}
-                  className="theme-surface h-24 w-24 rounded-full border object-cover shadow-[0_20px_45px_rgba(0,0,0,0.28)] sm:h-36 sm:w-36"
+                  className="theme-surface h-20 w-20 rounded-full border object-cover shadow-[0_20px_45px_rgba(0,0,0,0.28)] sm:h-36 sm:w-36"
                 />
               ) : (
-                <div className="theme-surface h-24 w-24 rounded-full border sm:h-36 sm:w-36" />
+                <div className="theme-surface h-20 w-20 rounded-full border sm:h-36 sm:w-36" />
               )}
 
               <div className="min-w-0 flex-1">
@@ -370,11 +370,11 @@ export default function ArtistPage() {
                   ) : null}
                 </div>
 
-                <h1 className="mt-3 text-4xl font-black tracking-tight text-white sm:text-6xl">
+                <h1 className="mt-2 text-2xl font-black tracking-tight text-white sm:mt-3 sm:text-6xl">
                   {header.name}
                 </h1>
 
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white/72">
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/72 sm:gap-3 sm:text-sm">
                   {header.subscribers != null && header.subscribers > 0 ? (
                     <span className="rounded-full border border-white/12 bg-black/20 px-3 py-1.5">
                       {t("artist.subscribers", {
@@ -395,7 +395,7 @@ export default function ArtistPage() {
                 </div>
 
                 {header.description ? (
-                  <p className="mt-4 max-w-3xl text-sm leading-6 text-white/62 sm:text-base">
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-white/62 sm:mt-4 sm:text-base">
                     {header.description}
                   </p>
                 ) : null}
@@ -417,10 +417,10 @@ export default function ArtistPage() {
         ) : null}
 
         {data ? (
-          <div className="relative z-10 -mt-6 px-4 pb-8 sm:px-6">
+          <div className="relative z-10 -mt-5 px-2 pb-8 sm:-mt-6 sm:px-6">
             <div className="theme-surface overflow-hidden rounded-xl border border-white/8 shadow-[0_24px_90px_rgba(0,0,0,0.22)]">
               {data.songs.length > 0 ? (
-                <div className="border-b border-white/8 px-4 py-5 sm:px-6 sm:py-6">
+                <div className="border-b border-white/8 px-3 py-4 sm:px-6 sm:py-6">
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h2 className="text-2xl font-bold text-white">
@@ -432,7 +432,7 @@ export default function ArtistPage() {
                         type="button"
                         onClick={() => void handleSongPress(featuredSong)}
                         disabled={loadingSongId === featuredSong.id}
-                        className="theme-button-accent inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold shadow-[0_16px_40px_rgba(0,0,0,0.24)] transition hover:scale-[1.02] disabled:cursor-wait disabled:opacity-70"
+                        className="theme-button-accent inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold shadow-[0_16px_40px_rgba(0,0,0,0.24)] transition hover:scale-[1.02] disabled:cursor-wait disabled:opacity-70 sm:w-auto"
                       >
                         <PlayGlyph className="h-4 w-4" />
                         {t("common.play")}
@@ -448,9 +448,9 @@ export default function ArtistPage() {
                           type="button"
                           onClick={() => void handleSongPress(song)}
                           disabled={loadingSongId === song.id}
-                          className="group theme-surface-soft grid w-full grid-cols-[42px_52px_minmax(0,1fr)_64px] items-center gap-3 rounded-lg border border-white/8 px-3 py-3 text-left transition hover:border-white/12 hover:bg-white/[0.05] disabled:cursor-wait disabled:opacity-60 md:grid-cols-[42px_52px_minmax(0,1fr)_120px_64px]"
+                          className="group theme-surface-soft grid w-full grid-cols-[24px_40px_minmax(0,1fr)_44px] items-center gap-2 rounded-lg border border-white/8 px-2.5 py-2.5 text-left transition hover:border-white/12 hover:bg-white/[0.05] disabled:cursor-wait disabled:opacity-60 sm:grid-cols-[42px_52px_minmax(0,1fr)_64px] sm:gap-3 sm:px-3 sm:py-3 md:grid-cols-[42px_52px_minmax(0,1fr)_120px_64px]"
                         >
-                          <div className="relative flex h-10 w-10 items-center justify-center text-sm tabular-nums text-white/35">
+                          <div className="relative flex h-8 w-8 items-center justify-center text-xs tabular-nums text-white/35 sm:h-10 sm:w-10 sm:text-sm">
                             <span
                               className={[
                                 "transition-opacity",
@@ -476,16 +476,16 @@ export default function ArtistPage() {
                             <img
                               src={song.thumbnail}
                               alt=""
-                              className="theme-surface h-12 w-12 flex-shrink-0 rounded-xl border object-cover"
+                              className="theme-surface h-10 w-10 flex-shrink-0 rounded-lg border object-cover sm:h-12 sm:w-12 sm:rounded-xl"
                             />
                           ) : (
-                            <div className="theme-surface h-12 w-12 flex-shrink-0 rounded-xl border" />
+                            <div className="theme-surface h-10 w-10 flex-shrink-0 rounded-lg border sm:h-12 sm:w-12 sm:rounded-xl" />
                           )}
                           <div className="min-w-0">
-                            <div className="truncate font-medium text-white">
+                            <div className="truncate text-sm font-medium text-white sm:text-base">
                               {song.title}
                             </div>
-                            <div className="truncate text-sm text-white/45">
+                            <div className="truncate text-xs text-white/45 sm:text-sm">
                               {song.artist || header.name}
                             </div>
                           </div>
@@ -498,7 +498,7 @@ export default function ArtistPage() {
                               : ""}
                           </div>
 
-                          <div className="text-right text-sm tabular-nums text-white/42">
+                          <div className="text-right text-xs tabular-nums text-white/42 sm:text-sm">
                             {formatDuration(song.duration)}
                           </div>
                         </button>
@@ -567,12 +567,12 @@ export default function ArtistPage() {
               )}
 
               {data.albums.length > 0 ? (
-                <div className="border-b border-white/8 px-4 py-5 sm:px-6 sm:py-6">
+                <div className="border-b border-white/8 px-3 py-4 sm:px-6 sm:py-6">
                   <h2 className="mb-4 text-2xl font-bold">
                     {t("artist.albums")}
                   </h2>
                   <HorizontalScrollRow
-                    containerClassName="pb-2 px-12"
+                    containerClassName="px-4 pb-2 sm:px-12"
                     contentClassName="flex w-max gap-4"
                   >
                     {data.albums.map((album, idx) =>
@@ -663,7 +663,7 @@ export default function ArtistPage() {
               ) : null}
 
               {data.playlists.length > 0 ? (
-                <div className="px-4 py-5 sm:px-6 sm:py-6">
+                <div className="px-3 py-4 sm:px-6 sm:py-6">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <h2 className="text-2xl font-bold">
                       {t("artist.playlists")}

@@ -15,7 +15,7 @@ export default function DynamicMainContent({
 }: DynamicMainContentProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { isFullscreenOpen, closeFullscreen } = useAudio();
+  const { isFullscreenOpen, closeFullscreen, isPlayerVisible } = useAudio();
   const { settings } = useSettings();
   const [shouldRenderFullscreen, setShouldRenderFullscreen] =
     useState(isFullscreenOpen);
@@ -80,8 +80,18 @@ export default function DynamicMainContent({
       className={`flex-1 relative ${
         shouldRenderFullscreen
           ? "overflow-hidden"
-          : "overflow-y-auto hide-scrollbar"
-      } min-h-0 pb-20`}
+          : "overflow-y-auto overflow-x-hidden hide-scrollbar"
+      } min-h-0 ${
+        shouldRenderFullscreen
+          ? "pb-0"
+          : "pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+      } ${
+        isPlayerVisible
+          ? shouldRenderFullscreen
+            ? "lg:pb-0"
+            : "lg:pb-20 pb-[calc(11rem+env(safe-area-inset-bottom))]"
+          : "lg:pb-20"
+      }`}
     >
       {isFullscreenOpen ? <FullscreenPlayer /> : children}
     </main>

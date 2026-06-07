@@ -49,8 +49,13 @@ export default function LeftPanel() {
   const pathname = usePathname();
   const { settings } = useSettings();
   const { t } = useAppLanguage();
-  const { recentSongs, resolveAndPlaySong, closeFullscreen, isPlayerVisible } =
-    useAudio();
+  const {
+    recentSongs,
+    resolveAndPlaySong,
+    closeFullscreen,
+    isPlayerVisible,
+    isFullscreenOpen,
+  } = useAudio();
   const [lastSearch, setLastSearch] = useState<SearchState | null>(
     readLastSearchState
   );
@@ -164,125 +169,128 @@ export default function LeftPanel() {
 
   return (
     <div
-      className="flex h-full flex-col gap-3"
-      style={{ paddingInlineEnd: "1rem" }}
+      className={`fixed bottom-0 left-1.5 right-1.5 z-40 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] lg:static lg:z-auto lg:pb-0 ${
+        isFullscreenOpen ? "hidden lg:block" : ""
+      }`}
     >
-      {/* First Box */}
-      <div className="theme-surface flex w-[86px] flex-col items-center gap-7 rounded-xl border px-7 py-6">
-        <button
-          type="button"
-          onClick={() => {
-            closeFullscreen();
-            router.push("/");
-          }}
-          className="flex items-center justify-center"
-          aria-label={t("leftPanel.goHome")}
-        >
-          <LogoIcon
-            className={getIconClassName(isHomePage)}
-            strokeWidth={navIconStrokeWidth}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={openSearch}
-          className="flex items-center justify-center"
-          aria-label={t("leftPanel.openSearch")}
-        >
-          <SearchIcon
-            className={getIconClassName(isSearchPage)}
-            strokeWidth={navIconStrokeWidth}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            closeFullscreen();
-            router.push("/library");
-          }}
-          className="flex items-center justify-center"
-          aria-label={t("leftPanel.openLibrary")}
-        >
-          <LibraryIcon
-            className={getIconClassName(isLibraryPage)}
-            strokeWidth={navIconStrokeWidth}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            closeFullscreen();
-            router.push("/settings");
-          }}
-          className="flex cursor-pointer items-center justify-center"
-          aria-label={t("leftPanel.openSettings")}
-        >
-          <Image
-            src="/Settings.svg"
-            alt=""
-            width={30}
-            height={30}
-            className={getAssetIconClassName(isSettingsPage)}
-            aria-hidden="true"
-            unoptimized
-          />
-        </button>
-      </div>
-
-      {/* Second Box */}
-      <div
-        className={[
-          "theme-surface relative flex w-[86px] min-h-0 flex-1 flex-col items-center overflow-hidden rounded-xl border py-6",
-          isPlayerVisible ? "mb-20" : "",
-        ].join(" ")}
-      >
-        <div
-          className="flex w-full flex-1 flex-col items-center gap-3 overflow-y-auto hide-scrollbar px-1 pb-20"
-          style={{ paddingInlineEnd: "0.25rem" }}
-        >
-          {recentCovers.length > 0
-            ? recentCovers.map((song, index) => (
-                <button
-                  key={`recent-${song.id}-${index}`}
-                  type="button"
-                  onClick={() => {
-                    void resolveAndPlaySong(song).catch((error) => {
-                      console.error("Failed to replay recent song:", error);
-                    });
-                  }}
-                  className="h-[40px] w-[40px] shrink-0 overflow-hidden rounded-sm"
-                  title={song.title}
-                >
-                  <Image
-                    src={song.coverUrl!}
-                    alt={song.title}
-                    width={40}
-                    height={40}
-                    className="h-[40px] w-[40px] object-cover"
-                    unoptimized
-                  />
-                </button>
-              ))
-            : [...Array(3)].map((_, index) => (
-                <div
-                  key={index}
-                  className="theme-surface-soft flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md border"
-                >
-                  <LogoIcon className="h-4 w-4 opacity-40 text-white" />
-                </div>
-              ))}
+      <div className="flex flex-col gap-3 lg:h-full [padding-inline-end:0] lg:[padding-inline-end:1rem]">
+        {/* First Box */}
+        <div className="theme-surface flex w-full flex-row items-center justify-around gap-2 rounded-xl border px-4 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.26)] lg:w-[86px] lg:flex-col lg:items-center lg:gap-7 lg:px-7 lg:py-6 lg:shadow-none">
+          <button
+            type="button"
+            onClick={() => {
+              closeFullscreen();
+              router.push("/");
+            }}
+            className="flex flex-1 items-center justify-center lg:flex-none"
+            aria-label={t("leftPanel.goHome")}
+          >
+            <LogoIcon
+              className={getIconClassName(isHomePage)}
+              strokeWidth={navIconStrokeWidth}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={openSearch}
+            className="flex flex-1 items-center justify-center lg:flex-none"
+            aria-label={t("leftPanel.openSearch")}
+          >
+            <SearchIcon
+              className={getIconClassName(isSearchPage)}
+              strokeWidth={navIconStrokeWidth}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              closeFullscreen();
+              router.push("/library");
+            }}
+            className="flex flex-1 items-center justify-center lg:flex-none"
+            aria-label={t("leftPanel.openLibrary")}
+          >
+            <LibraryIcon
+              className={getIconClassName(isLibraryPage)}
+              strokeWidth={navIconStrokeWidth}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              closeFullscreen();
+              router.push("/settings");
+            }}
+            className="flex flex-1 cursor-pointer items-center justify-center lg:flex-none"
+            aria-label={t("leftPanel.openSettings")}
+          >
+            <Image
+              src="/Settings.svg"
+              alt=""
+              width={30}
+              height={30}
+              className={getAssetIconClassName(isSettingsPage)}
+              aria-hidden="true"
+              unoptimized
+            />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            openCreatePlaylist();
-          }}
-          className="theme-button-accent absolute bottom-4 left-1/2 z-10 flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-white/10 shadow-[0_12px_30px_rgba(0,0,0,0.32)] transition hover:scale-[1.04]"
-          aria-label={t("library.createPlaylistAria")}
-          title={t("library.createPlaylist")}
+
+        {/* Second Box */}
+        <div
+          className={[
+            "theme-surface relative hidden w-[86px] min-h-0 flex-1 flex-col items-center overflow-hidden rounded-xl border py-6 lg:flex",
+            isPlayerVisible ? "lg:mb-20" : "",
+          ].join(" ")}
         >
-          <PlusGlyph />
-        </button>
+          <div
+            className="flex w-full flex-1 flex-col items-center gap-3 overflow-y-auto hide-scrollbar px-1 pb-20"
+            style={{ paddingInlineEnd: "0.25rem" }}
+          >
+            {recentCovers.length > 0
+              ? recentCovers.map((song, index) => (
+                  <button
+                    key={`recent-${song.id}-${index}`}
+                    type="button"
+                    onClick={() => {
+                      void resolveAndPlaySong(song).catch((error) => {
+                        console.error("Failed to replay recent song:", error);
+                      });
+                    }}
+                    className="h-[40px] w-[40px] shrink-0 overflow-hidden rounded-sm"
+                    title={song.title}
+                  >
+                    <Image
+                      src={song.coverUrl!}
+                      alt={song.title}
+                      width={40}
+                      height={40}
+                      className="h-[40px] w-[40px] object-cover"
+                      unoptimized
+                    />
+                  </button>
+                ))
+              : [...Array(3)].map((_, index) => (
+                  <div
+                    key={index}
+                    className="theme-surface-soft flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md border"
+                  >
+                    <LogoIcon className="h-4 w-4 opacity-40 text-white" />
+                  </div>
+                ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              openCreatePlaylist();
+            }}
+            className="theme-button-accent absolute bottom-4 left-1/2 z-10 flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-white/10 shadow-[0_12px_30px_rgba(0,0,0,0.32)] transition hover:scale-[1.04]"
+            aria-label={t("library.createPlaylistAria")}
+            title={t("library.createPlaylist")}
+          >
+            <PlusGlyph />
+          </button>
+        </div>
       </div>
       <PlaylistCreateModal
         open={isCreateModalOpen}

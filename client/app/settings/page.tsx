@@ -138,7 +138,7 @@ function ThemeChoiceCard({
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
+      className={`flex min-h-[4rem] w-full items-start gap-2.5 rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition sm:min-h-0 sm:items-center sm:gap-3 sm:px-4 ${
         selected
           ? "theme-accent-soft border-white/25 text-white shadow-[0_0_0_1px_var(--theme-accent),0_14px_30px_rgba(0,0,0,0.28)]"
           : "theme-button-soft text-white/78 hover:bg-white/[0.08] hover:text-white"
@@ -153,7 +153,9 @@ function ThemeChoiceCard({
           />
         ))}
       </span>
-      <span className="min-w-0 flex-1 truncate text-start">{label}</span>
+      <span className="min-w-0 flex-1 whitespace-normal text-xs leading-tight text-start sm:truncate sm:whitespace-nowrap sm:text-sm">
+        {label}
+      </span>
       <span
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition ${
           selected
@@ -380,7 +382,7 @@ export default function SettingsPage() {
                 description={t("settings.themeDescription")}
                 layout="stacked"
                 control={
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  <div className="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                     {themeOptions.map(({ value, label, preview }) => (
                       <ThemeChoiceCard
                         key={value}

@@ -232,7 +232,12 @@ const MiniPlayer: React.FC = () => {
     : null;
 
   return (
-    <div dir="ltr" className="fixed bottom-3 left-3 right-3 z-50">
+    <div
+      dir="ltr"
+      className={`fixed bottom-[calc(4.6rem+env(safe-area-inset-bottom))] left-1.5 right-1.5 z-50 sm:bottom-[calc(4.85rem+env(safe-area-inset-bottom))] lg:bottom-3 lg:left-3 lg:right-3 ${
+        isFullscreenOpen ? "hidden lg:block" : ""
+      }`}
+    >
       <div
         className={`pointer-events-none absolute bottom-full left-1/2 mb-3 flex -translate-x-1/2 transition-all duration-200 ${
           showAutoRetryPrompt || autoRetryStatusMessage
@@ -275,17 +280,17 @@ const MiniPlayer: React.FC = () => {
         ) : null}
       </div>
 
-      <div className="theme-surface rounded-full border p-2 shadow-[0_20px_50px_rgba(0,0,0,0.35)]">
-        <div className="mx-auto flex max-w-full items-center justify-between">
-          <div className="flex min-w-0 flex-1 items-center space-x-3">
-            <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-gray-700 transition">
+      <div className="theme-surface rounded-[24px] border px-3 py-2 shadow-[0_20px_50px_rgba(0,0,0,0.35)] lg:rounded-full lg:p-2">
+        <div className="mx-auto flex max-w-full flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center space-x-2.5 lg:flex-1 lg:space-x-3">
+            <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-gray-700 transition lg:h-12 lg:w-12">
               {currentSong.coverUrl ? (
                 <Image
                   src={currentSong.coverUrl}
                   alt={currentSong.title}
                   fill
                   style={{ objectFit: "cover" }}
-                  sizes="48px"
+                  sizes="(max-width: 1024px) 40px, 48px"
                   unoptimized
                 />
               ) : (
@@ -293,19 +298,19 @@ const MiniPlayer: React.FC = () => {
                   <Image
                     src="/StreamifyLogo.svg"
                     alt={t("common.defaultCover")}
-                    width={24}
-                    height={24}
+                    width={20}
+                    height={20}
                     className="opacity-50"
                   />
                 </div>
               )}
             </div>
             <div className="flex min-w-0 flex-col gap-1">
-              <h4 className="truncate text-sm font-medium text-white">
+              <h4 className="truncate text-[13px] font-medium text-white lg:text-sm">
                 {currentSong.title}
               </h4>
               <p
-                className={`truncate text-xs ${
+                className={`truncate text-[11px] lg:text-xs ${
                   statusText
                     ? isSongLoading
                       ? "text-gray-400"
@@ -318,7 +323,7 @@ const MiniPlayer: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center justify-center space-x-3 px-4">
+          <div className="flex min-w-0 items-center justify-between gap-2.5 lg:flex-1 lg:justify-center lg:px-4">
             <button
               ref={compactWaveformRef}
               type="button"
@@ -326,7 +331,7 @@ const MiniPlayer: React.FC = () => {
               onPointerMove={handleCompactWaveformPointerMove}
               onPointerUp={handleCompactWaveformPointerEnd}
               onPointerCancel={handleCompactWaveformPointerEnd}
-              className="relative h-8 flex-1 min-w-[180px] max-w-[240px] cursor-ew-resize overflow-hidden touch-none"
+              className="relative h-7 min-w-0 flex-1 cursor-ew-resize overflow-hidden touch-none lg:h-8 lg:min-w-[180px] lg:max-w-[240px]"
               aria-label={t("miniPlayer.seekPlayback")}
             >
               <div className="absolute inset-0 flex items-center gap-[2px]">
@@ -355,7 +360,7 @@ const MiniPlayer: React.FC = () => {
               />
             </button>
             <div
-              className={`${spaceMono.className} whitespace-nowrap text-xs tabular-nums`}
+              className={`${spaceMono.className} whitespace-nowrap text-[11px] tabular-nums lg:text-xs`}
             >
               <span className="text-white">{formatTime(currentTime)}</span>
               <span className="text-white/50">
@@ -365,7 +370,7 @@ const MiniPlayer: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex flex-1 items-center justify-end space-x-2">
+          <div className="flex items-center justify-between gap-1.5 lg:flex-1 lg:justify-end lg:gap-2">
             {queuePositionLabel ? (
               <span
                 dir={isRtl ? "rtl" : "ltr"}
@@ -381,14 +386,15 @@ const MiniPlayer: React.FC = () => {
               type="button"
               onClick={playPrevious}
               disabled={!canGoPrevious}
-              className="rounded-full transition duration-150 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100"
+              className="flex h-10 w-10 items-center justify-center rounded-full transition duration-150 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100 lg:h-auto lg:w-auto"
               aria-label={t("miniPlayer.previousTrack")}
             >
               <Image
                 src="/Previous.svg"
                 alt={t("miniPlayer.previousTrack")}
-                width={42}
-                height={42}
+                width={34}
+                height={34}
+                className="h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
               />
             </button>
 
@@ -396,14 +402,26 @@ const MiniPlayer: React.FC = () => {
               type="button"
               disabled={isSongLoading}
               onClick={handlePlayPause}
-              className="flex h-10 w-10 items-center justify-center transition duration-150 hover:scale-[1.03] disabled:hover:scale-100"
+              className="flex h-10 w-10 items-center justify-center transition duration-150 hover:scale-[1.03] disabled:hover:scale-100 lg:h-10 lg:w-10"
             >
               {isSongLoading ? (
                 <div className="theme-spinner h-5 w-5" />
               ) : isPlaying ? (
-                <Image src="/Pause.svg" alt="Pause" width={32} height={32} />
+                <Image
+                  src="/Pause.svg"
+                  alt="Pause"
+                  width={28}
+                  height={28}
+                  className="h-8 w-8 lg:h-8 lg:w-8"
+                />
               ) : (
-                <Image src="/Play.svg" alt="Play" width={32} height={32} />
+                <Image
+                  src="/Play.svg"
+                  alt="Play"
+                  width={28}
+                  height={28}
+                  className="h-8 w-8 lg:h-8 lg:w-8"
+                />
               )}
             </button>
 
@@ -411,33 +429,40 @@ const MiniPlayer: React.FC = () => {
               type="button"
               onClick={playNext}
               disabled={!canGoNext}
-              className="rounded-full transition duration-150 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100"
+              className="flex h-10 w-10 items-center justify-center rounded-full transition duration-150 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100 lg:h-auto lg:w-auto"
               aria-label={t("miniPlayer.nextTrack")}
             >
               <Image
                 src="/Next.svg"
                 alt={t("miniPlayer.nextTrack")}
-                width={42}
-                height={42}
+                width={34}
+                height={34}
+                className="h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
               />
             </button>
 
             <button
               type="button"
               onClick={toggleRepeat}
-              className={`rounded-full transition-colors ${
+              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors lg:h-auto lg:w-auto ${
                 isRepeat ? "opacity-100" : "opacity-70"
               }`}
             >
-              <Image src="/Repeat.svg" alt="Repeat" width={42} height={42} />
+              <Image
+                src="/Repeat.svg"
+                alt="Repeat"
+                width={34}
+                height={34}
+                className="h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
+              />
             </button>
 
             <div
               ref={volumeControlRef}
-              className="relative flex items-center pr-2"
+              className="relative flex items-center lg:pr-2"
             >
               {isVolumeOpen ? (
-                <div className="theme-overlay absolute bottom-full right-1 mb-3 w-[220px] rounded-2xl border px-4 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+                <div className="theme-overlay absolute bottom-full right-0 mb-3 w-[min(85vw,220px)] rounded-2xl border px-4 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.4)] backdrop-blur-xl lg:right-1 lg:w-[220px]">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
@@ -496,15 +521,16 @@ const MiniPlayer: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsVolumeOpen((prev) => !prev)}
-                className="theme-button-soft flex h-10 w-10 items-center justify-center rounded-full border transition duration-150 hover:scale-[1.03]"
+                className="theme-button-soft flex h-10 w-10 items-center justify-center rounded-full border transition duration-150 hover:scale-[1.03] lg:h-10 lg:w-10"
                 aria-label={t("miniPlayer.toggleVolume")}
                 aria-expanded={isVolumeOpen}
               >
                 <Image
                   src="/Volume.svg"
                   alt={t("miniPlayer.volume")}
-                  width={42}
-                  height={42}
+                  width={34}
+                  height={34}
+                  className="h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
                 />
               </button>
             </div>
@@ -512,7 +538,7 @@ const MiniPlayer: React.FC = () => {
             <button
               type="button"
               onClick={handleFullscreenToggle}
-              className="rounded-full pr-2 transition duration-150 hover:scale-[1.03]"
+              className="rounded-full transition duration-150 hover:scale-[1.03] lg:pr-2"
               aria-label={
                 isFullscreenOpen
                   ? t("miniPlayer.closeFullscreen")

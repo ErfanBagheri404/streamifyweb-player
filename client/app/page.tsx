@@ -657,12 +657,12 @@ export default function Home() {
         ) : null}
       </div>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
+      <div className="space-y-5 md:space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-2xl font-bold tracking-tight text-white">
             {greeting}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             <button
               type="button"
               onClick={() => showAuthDisabledNotice("signup")}
@@ -697,8 +697,8 @@ export default function Home() {
               <div className="absolute inset-0 bg-[linear-gradient(135deg,#1a1a1a_0%,#151515_48%,#101010_100%)]" />
             ) : null}
 
-            <div className="relative z-10 flex min-h-[300px] flex-col justify-between p-6 md:min-h-[360px] md:p-8">
-              <h1 className="max-w-[70%] text-4xl font-black tracking-tight text-white md:text-5xl">
+            <div className="relative z-10 flex min-h-[240px] flex-col justify-between p-5 sm:p-6 md:min-h-[360px] md:p-8">
+              <h1 className="max-w-full text-3xl font-black tracking-tight text-white sm:text-4xl md:max-w-[70%] md:text-5xl">
                 {mostPlayedYouTubeArtist.name}
               </h1>
 
@@ -706,12 +706,12 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => void playQueue(heroSongs, heroSongs[0])}
-                  className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-[0_16px_40px_rgba(0,0,0,0.35)] transition hover:scale-[1.03] md:h-20 md:w-20"
+                  className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-[0_16px_40px_rgba(0,0,0,0.35)] transition hover:scale-[1.03] md:h-20 md:w-20"
                   aria-label={t("home.playSongsBy", {
                     name: mostPlayedYouTubeArtist.name,
                   })}
                 >
-                  <PlayGlyph className="h-7 w-7 md:h-8 md:w-8" />
+                  <PlayGlyph className="h-6 w-6 md:h-8 md:w-8" />
                 </button>
               </div>
 
@@ -719,11 +719,11 @@ export default function Home() {
             </div>
           </section>
         ) : (
-          <section className="theme-surface rounded-2xl border p-6 md:p-8">
+          <section className="theme-surface rounded-2xl border p-5 sm:p-6 md:p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/55">
               {t("home.emptyHeroEyebrow")}
             </p>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-white md:text-4xl">
+            <h1 className="mt-3 text-2xl font-black tracking-tight text-white sm:text-3xl md:text-4xl">
               {t("home.emptyHeroTitle")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm text-white/60 md:text-base">

@@ -101,17 +101,17 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
   const thumbnailClasses = isArtist
     ? "h-12 w-12 rounded-full object-cover"
     : isYouTubeSource
-    ? "h-36 w-64 rounded-xl object-cover"
-    : "h-32 w-32 rounded-xl object-cover";
+    ? "h-20 w-32 rounded-xl object-cover sm:h-28 sm:w-48 lg:h-36 lg:w-64"
+    : "h-16 w-16 rounded-xl object-cover sm:h-24 sm:w-24 lg:h-32 lg:w-32";
 
   const placeholderClasses = isArtist
     ? "h-12 w-12 rounded-full bg-neutral-700"
     : isYouTubeSource
-    ? "h-36 w-64 rounded-xl bg-neutral-700"
-    : "h-32 w-32 rounded-xl bg-neutral-700";
+    ? "h-20 w-32 rounded-xl bg-neutral-700 sm:h-28 sm:w-48 lg:h-36 lg:w-64"
+    : "h-16 w-16 rounded-xl bg-neutral-700 sm:h-24 sm:w-24 lg:h-32 lg:w-32";
 
-  const imgWidth = isArtist ? 48 : isYouTubeSource ? 256 : 64;
-  const imgHeight = isArtist ? 48 : isYouTubeSource ? 144 : 64;
+  const imgWidth = isArtist ? 48 : isYouTubeSource ? 192 : 96;
+  const imgHeight = isArtist ? 48 : isYouTubeSource ? 108 : 96;
 
   return (
     <div className="flex items-start gap-3 rounded-lg py-2.5">

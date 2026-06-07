@@ -148,7 +148,7 @@ export default function RootLayout({
         className={`h-full antialiased ${dmSans.variable} ${spaceMono.variable} ${yekanBakh.variable}`}
     >
       <body
-        className={`${dmSans.className} theme-shell flex h-full flex-row p-3`}
+        className={`${dmSans.className} theme-shell flex min-h-full flex-col p-2 sm:p-3 lg:h-full lg:flex-row lg:p-3`}
       >
         <SettingsProvider>
           <AudioProvider>
