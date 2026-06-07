@@ -63,27 +63,27 @@ export default function PlaylistCreateModal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center px-4 transition-all duration-200 ${
+      className={`fixed inset-0 z-[70] flex items-center justify-center px-4 transition-all duration-200 ${
         open
           ? "pointer-events-auto opacity-100"
           : "pointer-events-none opacity-0"
       }`}
       style={{
-        background: open ? "var(--surface-overlay)" : "transparent",
+        background: open ? "rgba(0, 0, 0, 0.62)" : "transparent",
         backdropFilter: open ? "blur(10px)" : "blur(0px)",
       }}
       onClick={open ? onClose : undefined}
       aria-hidden={!open}
     >
       <div
-        className={`theme-surface w-full max-w-2xl rounded-3xl border p-6 text-white shadow-[0_24px_64px_rgba(0,0,0,0.45)] transition-all duration-200 md:p-7 ${
+        className={`theme-surface w-full max-w-2xl rounded-3xl border p-6 text-[color:var(--foreground)] shadow-[0_24px_64px_rgba(0,0,0,0.45)] transition-all duration-200 md:p-7 ${
           open ? "translate-y-0 scale-100" : "translate-y-3 scale-[0.97]"
         }`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-white">
+            <h2 className="text-2xl font-bold text-[color:var(--foreground)]">
               {t("library.createPlaylistModalTitle")}
             </h2>
             <p
@@ -96,7 +96,7 @@ export default function PlaylistCreateModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 transition hover:bg-white/8 hover:text-white"
+            className="rounded-full p-2 transition hover:bg-white/8 hover:text-[color:var(--foreground)]"
             style={{ color: "var(--muted-foreground)" }}
             aria-label={t("library.closePlaylistModal")}
           >
@@ -127,7 +127,7 @@ export default function PlaylistCreateModal({
               <FolderGlyph />
             </div>
             <div className="mt-4 px-1">
-              <p className="truncate text-lg font-semibold text-white">
+              <p className="truncate text-lg font-semibold text-[color:var(--foreground)]">
                 {previewName}
               </p>
               <p
@@ -151,7 +151,7 @@ export default function PlaylistCreateModal({
                 value={name}
                 onChange={(event) => onNameChange(event.target.value)}
                 placeholder={t("library.myPlaylist")}
-                className="theme-surface-strong w-full rounded-xl border px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/30"
+                className="theme-surface-strong w-full rounded-xl border px-4 py-3 text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_30%,transparent)]"
               />
             </label>
 
@@ -167,7 +167,7 @@ export default function PlaylistCreateModal({
                 onChange={(event) => onDescriptionChange(event.target.value)}
                 placeholder={t("library.whatIsPlaylistFor")}
                 rows={7}
-                className="theme-surface-strong w-full resize-none rounded-xl border px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/30"
+                className="theme-surface-strong w-full resize-none rounded-xl border px-4 py-3 text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_30%,transparent)]"
               />
             </label>
           </div>
@@ -177,7 +177,7 @@ export default function PlaylistCreateModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full px-4 py-2 text-sm font-semibold transition hover:text-white"
+            className="rounded-full px-4 py-2 text-sm font-semibold transition hover:text-[color:var(--foreground)]"
             style={{ color: "var(--muted-foreground)" }}
           >
             {t("common.cancel")}

@@ -55,13 +55,11 @@ function Toggle({
       onClick={onClick}
       disabled={disabled}
       className={`relative inline-flex h-8 w-14 items-center px-1 rounded-full transition ${justifyClass} ${
-        enabled ? "theme-accent-fill" : "bg-white/12"
+        enabled ? "theme-accent-fill" : "theme-button-soft border"
       } ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
       aria-pressed={enabled}
     >
-      <span
-        className="inline-block h-6 w-6 rounded-full bg-white shadow-[0_3px_10px_rgba(0,0,0,0.25)] transition"
-      />
+      <span className="inline-block h-6 w-6 rounded-full bg-[color:var(--foreground)] shadow-[0_3px_10px_rgba(0,0,0,0.25)] transition" />
     </button>
   );
 }
@@ -84,7 +82,7 @@ function ChoiceChip({
       className={`rounded-full px-4 py-2 text-sm font-semibold transition ${className} ${
         selected
           ? "theme-accent-fill"
-          : "bg-white/[0.06] text-white/72 hover:bg-white/[0.1] hover:text-white"
+          : "theme-button-soft hover:text-[color:var(--foreground)]"
       }`}
     >
       {label}
@@ -112,8 +110,10 @@ function SettingRow({
       }`}
     >
       <div className="min-w-0">
-        <p className="text-base font-semibold text-white">{label}</p>
-        <p className="mt-1 max-w-2xl text-sm text-white/52">{description}</p>
+        <p className="text-base font-semibold text-[color:var(--foreground)]">
+          {label}
+        </p>
+        <p className="theme-muted mt-1 max-w-2xl text-sm">{description}</p>
       </div>
       <div className={layout === "stacked" ? "w-full" : "shrink-0"}>
         {control}
@@ -140,15 +140,15 @@ function ThemeChoiceCard({
       aria-pressed={selected}
       className={`flex min-h-[4rem] w-full items-start gap-2.5 rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition sm:min-h-0 sm:items-center sm:gap-3 sm:px-4 ${
         selected
-          ? "theme-accent-soft border-white/25 text-white shadow-[0_0_0_1px_var(--theme-accent),0_14px_30px_rgba(0,0,0,0.28)]"
-          : "theme-button-soft text-white/78 hover:bg-white/[0.08] hover:text-white"
+          ? "theme-accent-soft border-transparent text-[color:var(--foreground)] shadow-[0_0_0_1px_var(--theme-accent)]"
+          : "theme-button-soft text-[color:color-mix(in_srgb,var(--foreground)_78%,transparent)] hover:text-[color:var(--foreground)]"
       }`}
     >
       <span className="flex shrink-0 items-center gap-1.5">
         {preview.map((color, index) => (
           <span
             key={`${label}-${index}`}
-            className="h-3 w-3 rounded-full border border-white/15"
+            className="h-3 w-3 rounded-full border border-[color:var(--border-subtle)]"
             style={{ backgroundColor: color }}
           />
         ))}
@@ -160,7 +160,7 @@ function ThemeChoiceCard({
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition ${
           selected
             ? "theme-accent-fill border-transparent"
-            : "border-white/12 bg-black/10 text-transparent"
+            : "border-[color:var(--border-subtle)] bg-[color:color-mix(in_srgb,var(--foreground)_5%,transparent)] text-transparent"
         }`}
         aria-hidden="true"
       >
@@ -172,7 +172,11 @@ function ThemeChoiceCard({
           strokeWidth="2"
           className="h-3.5 w-3.5"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="m4 10 4 4 8-8" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="m4 10 4 4 8-8"
+          />
         </svg>
       </span>
     </button>
@@ -191,14 +195,14 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="theme-surface-strong rounded-xl border p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)] md:p-6">
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/42">
+    <section className="theme-surface-strong rounded-xl border p-5 md:p-6">
+      <p className="theme-muted text-xs font-semibold uppercase tracking-[0.22em]">
         {eyebrow}
       </p>
-      <h2 className="mt-3 text-2xl font-bold tracking-tight text-white">
+      <h2 className="mt-3 text-2xl font-bold tracking-tight text-[color:var(--foreground)]">
         {title}
       </h2>
-      <p className="mt-2 max-w-3xl text-sm text-white/56">{description}</p>
+      <p className="theme-muted mt-2 max-w-3xl text-sm">{description}</p>
       <div className="mt-5 space-y-4">{children}</div>
     </section>
   );
@@ -285,30 +289,162 @@ export default function SettingsPage() {
     ruby: getThemeLabel("ruby"),
     olive: getThemeLabel("olive"),
     starlight: getThemeLabel("starlight"),
+    dawn: getThemeLabel("dawn"),
+    mist: getThemeLabel("mist"),
+    petal: getThemeLabel("petal"),
+    meadow: getThemeLabel("meadow"),
+    daybreak: getThemeLabel("daybreak"),
+    linen: getThemeLabel("linen"),
+    sky: getThemeLabel("sky"),
+    lavender: getThemeLabel("lavender"),
+    peach: getThemeLabel("peach"),
+    mint: getThemeLabel("mint"),
   };
   const themeOptions: Array<{
     value: AppTheme;
     label: string;
     preview: [string, string, string];
   }> = [
-    { value: "default", label: themeLabels.default, preview: ["#1ed760", "#181818", "#131313"] },
-    { value: "ocean", label: themeLabels.ocean, preview: ["#5cc8ff", "#102235", "#0c1b2b"] },
-    { value: "amethyst", label: themeLabels.amethyst, preview: ["#c084fc", "#241439", "#1b102c"] },
-    { value: "sunset", label: themeLabels.sunset, preview: ["#ff9153", "#2a1610", "#21110d"] },
-    { value: "forest", label: themeLabels.forest, preview: ["#4ade80", "#112219", "#0d1a13"] },
-    { value: "rose", label: themeLabels.rose, preview: ["#fb7185", "#2a1220", "#210e18"] },
-    { value: "frost", label: themeLabels.frost, preview: ["#67e8f9", "#10212a", "#0b1a22"] },
-    { value: "midnight", label: themeLabels.midnight, preview: ["#818cf8", "#0e1330", "#0a1027"] },
-    { value: "ember", label: themeLabels.ember, preview: ["#fb923c", "#28150f", "#1e100b"] },
-    { value: "aurora", label: themeLabels.aurora, preview: ["#2dd4bf", "#0e241d", "#0a1c16"] },
-    { value: "sapphire", label: themeLabels.sapphire, preview: ["#60a5fa", "#0f2035", "#0a182a"] },
-    { value: "violet", label: themeLabels.violet, preview: ["#d8b4fe", "#241136", "#1a0d29"] },
-    { value: "copper", label: themeLabels.copper, preview: ["#d97757", "#2a1711", "#1f110d"] },
-    { value: "graphite", label: themeLabels.graphite, preview: ["#94a3b8", "#151922", "#10141c"] },
-    { value: "lagoon", label: themeLabels.lagoon, preview: ["#22d3ee", "#0d2628", "#091d1f"] },
-    { value: "ruby", label: themeLabels.ruby, preview: ["#f43f5e", "#2b121a", "#210d14"] },
-    { value: "olive", label: themeLabels.olive, preview: ["#a3e635", "#212813", "#181d0e"] },
-    { value: "starlight", label: themeLabels.starlight, preview: ["#a5b4fc", "#161a34", "#101327"] },
+    {
+      value: "default",
+      label: themeLabels.default,
+      preview: ["#1ed760", "#181818", "#131313"],
+    },
+    {
+      value: "ocean",
+      label: themeLabels.ocean,
+      preview: ["#5cc8ff", "#102235", "#0c1b2b"],
+    },
+    {
+      value: "amethyst",
+      label: themeLabels.amethyst,
+      preview: ["#c084fc", "#241439", "#1b102c"],
+    },
+    {
+      value: "sunset",
+      label: themeLabels.sunset,
+      preview: ["#ff9153", "#2a1610", "#21110d"],
+    },
+    {
+      value: "forest",
+      label: themeLabels.forest,
+      preview: ["#4ade80", "#112219", "#0d1a13"],
+    },
+    {
+      value: "rose",
+      label: themeLabels.rose,
+      preview: ["#fb7185", "#2a1220", "#210e18"],
+    },
+    {
+      value: "frost",
+      label: themeLabels.frost,
+      preview: ["#67e8f9", "#10212a", "#0b1a22"],
+    },
+    {
+      value: "midnight",
+      label: themeLabels.midnight,
+      preview: ["#818cf8", "#0e1330", "#0a1027"],
+    },
+    {
+      value: "ember",
+      label: themeLabels.ember,
+      preview: ["#fb923c", "#28150f", "#1e100b"],
+    },
+    {
+      value: "aurora",
+      label: themeLabels.aurora,
+      preview: ["#2dd4bf", "#0e241d", "#0a1c16"],
+    },
+    {
+      value: "sapphire",
+      label: themeLabels.sapphire,
+      preview: ["#60a5fa", "#0f2035", "#0a182a"],
+    },
+    {
+      value: "violet",
+      label: themeLabels.violet,
+      preview: ["#d8b4fe", "#241136", "#1a0d29"],
+    },
+    {
+      value: "copper",
+      label: themeLabels.copper,
+      preview: ["#d97757", "#2a1711", "#1f110d"],
+    },
+    {
+      value: "graphite",
+      label: themeLabels.graphite,
+      preview: ["#94a3b8", "#151922", "#10141c"],
+    },
+    {
+      value: "lagoon",
+      label: themeLabels.lagoon,
+      preview: ["#22d3ee", "#0d2628", "#091d1f"],
+    },
+    {
+      value: "ruby",
+      label: themeLabels.ruby,
+      preview: ["#f43f5e", "#2b121a", "#210d14"],
+    },
+    {
+      value: "olive",
+      label: themeLabels.olive,
+      preview: ["#a3e635", "#212813", "#181d0e"],
+    },
+    {
+      value: "starlight",
+      label: themeLabels.starlight,
+      preview: ["#a5b4fc", "#161a34", "#101327"],
+    },
+    {
+      value: "dawn",
+      label: themeLabels.dawn,
+      preview: ["#ff8a5b", "#fff7f1", "#ffe3d5"],
+    },
+    {
+      value: "mist",
+      label: themeLabels.mist,
+      preview: ["#60a5fa", "#f4f8ff", "#dde8ff"],
+    },
+    {
+      value: "petal",
+      label: themeLabels.petal,
+      preview: ["#fb7185", "#fff6fa", "#ffd9e3"],
+    },
+    {
+      value: "meadow",
+      label: themeLabels.meadow,
+      preview: ["#22c55e", "#f5fff7", "#d9f7df"],
+    },
+    {
+      value: "daybreak",
+      label: themeLabels.daybreak,
+      preview: ["#8b5cf6", "#f7f6ff", "#e4defe"],
+    },
+    {
+      value: "linen",
+      label: themeLabels.linen,
+      preview: ["#c08457", "#fffdfa", "#f4eadf"],
+    },
+    {
+      value: "sky",
+      label: themeLabels.sky,
+      preview: ["#0ea5e9", "#f6fbff", "#dcefff"],
+    },
+    {
+      value: "lavender",
+      label: themeLabels.lavender,
+      preview: ["#a78bfa", "#fbf9ff", "#ebe4ff"],
+    },
+    {
+      value: "peach",
+      label: themeLabels.peach,
+      preview: ["#fb923c", "#fff8f2", "#ffe2cc"],
+    },
+    {
+      value: "mint",
+      label: themeLabels.mint,
+      preview: ["#10b981", "#f5fffb", "#d9f7ec"],
+    },
   ];
   const languageLabels: Record<AppLanguage, string> = {
     en: t("language.english"),
@@ -329,9 +465,9 @@ export default function SettingsPage() {
     : t("settings.searchMemoryOff");
 
   return (
-    <div className="theme-surface-strong relative h-full overflow-y-auto hide-scrollbar rounded-xl text-white">
-      <div className="relative space-y-5">
-        <section className="theme-surface overflow-hidden rounded-xl border p-5 shadow-[0_30px_80px_rgba(0,0,0,0.28)] md:p-6">
+    <div className="relative h-full overflow-y-auto hide-scrollbar rounded-xl bg-transparent text-[color:var(--foreground)]">
+      <div className="relative space-y-5 bg-transparent">
+        <section className="theme-surface overflow-hidden rounded-xl border p-5  md:p-6">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-3xl">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-white/58">
@@ -597,47 +733,47 @@ export default function SettingsPage() {
           </div>
 
           <aside className="space-y-5 xl:sticky xl:top-0 xl:self-start">
-            <section className="theme-surface-strong rounded-xl border p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/42">
+            <section className="theme-surface-strong rounded-xl border p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:color-mix(in_srgb,var(--foreground)_42%,transparent)]">
                 {t("settings.activeSetup")}
               </p>
               <div className="mt-4 space-y-3">
                 <div className="theme-surface-soft rounded-xl border p-4">
-                  <p className="text-sm text-white/45">
+                  <p className="text-sm text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)]">
                     {t("settings.playbackSummary")}
                   </p>
-                  <p className="mt-1 text-base font-semibold text-white">
+                  <p className="mt-1 text-base font-semibold text-[color:var(--foreground)]">
                     {autoRetryLabel}
                   </p>
-                  <p className="mt-1 text-sm text-white/55">
+                  <p className="theme-muted mt-1 text-sm">
                     {settings.autoplayRecommendations
                       ? t("settings.recommendationsContinue")
                       : t("settings.playbackStops")}
                   </p>
                 </div>
                 <div className="theme-surface-soft rounded-xl border p-4">
-                  <p className="text-sm text-white/45">
+                  <p className="text-sm text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)]">
                     {t("settings.searchSummary")}
                   </p>
-                  <p className="mt-1 text-base font-semibold text-white">
+                  <p className="mt-1 text-base font-semibold text-[color:var(--foreground)]">
                     {searchSourceLabels[settings.preferredSearchSource]}
                   </p>
-                  <p className="mt-1 text-sm text-white/55">
+                  <p className="theme-muted mt-1 text-sm">
                     {settings.rememberLastSearch
                       ? t("settings.searchRestores")
                       : t("settings.searchOpensFresh")}
                   </p>
                 </div>
                 <div className="theme-surface-soft rounded-xl border p-4">
-                  <p className="text-sm text-white/45">
+                  <p className="text-sm text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)]">
                     {t("settings.lyricsControlsSummary")}
                   </p>
-                  <p className="mt-1 text-base font-semibold text-white">
+                  <p className="mt-1 text-base font-semibold text-[color:var(--foreground)]">
                     {settings.lyricsEnabled
                       ? t("settings.lyricsOn")
                       : t("settings.lyricsOff")}
                   </p>
-                  <p className="mt-1 text-sm text-white/55">
+                  <p className="theme-muted mt-1 text-sm">
                     {settings.keyboardShortcuts
                       ? t("settings.shortcutsEnabled", {
                           seconds: settings.seekStepSeconds,
@@ -646,22 +782,22 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="theme-surface-soft rounded-xl border p-4">
-                  <p className="text-sm text-white/45">
+                  <p className="text-sm text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)]">
                     {t("settings.appearancePerformance")}
                   </p>
-                  <p className="mt-1 text-base font-semibold text-white">
+                  <p className="mt-1 text-base font-semibold text-[color:var(--foreground)]">
                     {themeLabels[settings.theme]}
                   </p>
-                  <p className="mt-1 text-sm text-white/55">{motionLabel}</p>
+                  <p className="theme-muted mt-1 text-sm">{motionLabel}</p>
                 </div>
               </div>
             </section>
 
-            <section className="theme-surface-strong rounded-xl border p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/42">
+            <section className="theme-surface-strong rounded-xl border p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:color-mix(in_srgb,var(--foreground)_42%,transparent)]">
                 {t("settings.quickHelp")}
               </p>
-              <div className="mt-4 space-y-3 text-sm text-white/58">
+              <div className="theme-muted mt-4 space-y-3 text-sm">
                 <p>{t("settings.quickHelpShortcuts")}</p>
                 <p>{t("settings.quickHelpLyrics")}</p>
                 <p>{t("settings.quickHelpThemes")}</p>

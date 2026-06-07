@@ -28,7 +28,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   return (
     <div className="flex items-center gap-3 pb-4">
       <div className="relative flex-1">
-        <div className="theme-surface flex items-center rounded-xl border shadow-[0_12px_30px_rgba(0,0,0,0.18)]">
+        <div className="theme-surface theme-shadow-soft flex items-center rounded-xl border">
           <input
             type="text"
             placeholder={placeholder}
@@ -41,7 +41,8 @@ export const SearchInput: React.FC<SearchInputProps> = ({
           {value.length > 0 && (
             <button
               onClick={onClear}
-              className="mr-1 rounded-full p-2 text-white/40 transition hover:bg-white/6 hover:text-white"
+              className="rounded-full p-2 text-[color:color-mix(in_srgb,var(--foreground)_40%,transparent)] transition hover:bg-[color:color-mix(in_srgb,var(--foreground)_6%,transparent)] hover:text-[color:var(--foreground)]"
+              style={{ marginInlineEnd: "0.25rem" }}
               aria-label={t("search.clear")}
             >
               <svg
@@ -66,7 +67,13 @@ export const SearchInput: React.FC<SearchInputProps> = ({
         className="theme-button-soft flex h-11 w-11 items-center justify-center rounded-xl border transition focus:outline-none"
         aria-label={t("search.toggleFilters")}
       >
-        <Image src="/Filter.svg" alt="Filter" width={22} height={22} />
+        <Image
+          src="/Filter.svg"
+          alt="Filter"
+          width={22}
+          height={22}
+          className="theme-asset-icon"
+        />
       </button>
     </div>
   );

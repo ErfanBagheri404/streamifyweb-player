@@ -5,6 +5,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -12,6 +13,7 @@ import {
   APP_SETTINGS_STORAGE_KEY,
   DEFAULT_APP_SETTINGS,
   type AppSettings,
+  isLightAppTheme,
   sanitizeAppSettings,
 } from "../lib/app-settings";
 import { getLanguageDirection } from "../lib/i18n";
@@ -32,6 +34,9 @@ const SettingsContext = createContext<SettingsContextType | undefined>(
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [hasHydratedSettings, setHasHydratedSettings] = useState(false);
+  const previousThemeRef = useRef<AppSettings["theme"]>(
+    DEFAULT_APP_SETTINGS.theme
+  );
 
   useEffect(() => {
     try {
@@ -57,20 +62,49 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
+    const themeMode = isLightAppTheme(settings.theme) ? "light" : "dark";
     root.dataset.theme = settings.theme;
+    root.dataset.themeMode = themeMode;
     root.dataset.language = settings.language;
     root.lang = settings.language === "fa" ? "fa" : "en";
     root.dir = getLanguageDirection(settings.language);
+    root.style.colorScheme = themeMode;
     root.classList.toggle("reduce-motion", settings.disableAnimations);
 
     return () => {
       root.classList.remove("reduce-motion");
       delete root.dataset.theme;
+      delete root.dataset.themeMode;
       delete root.dataset.language;
+      root.style.colorScheme = "dark";
       root.lang = "en";
       root.dir = "ltr";
     };
   }, [settings.disableAnimations, settings.language, settings.theme]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!hasHydratedSettings || settings.disableAnimations) {
+      root.classList.remove("theme-changing");
+      previousThemeRef.current = settings.theme;
+      return;
+    }
+
+    if (previousThemeRef.current === settings.theme) {
+      return;
+    }
+
+    previousThemeRef.current = settings.theme;
+    root.classList.add("theme-changing");
+    const timeoutId = window.setTimeout(() => {
+      root.classList.remove("theme-changing");
+    }, 280);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      root.classList.remove("theme-changing");
+    };
+  }, [hasHydratedSettings, settings.disableAnimations, settings.theme]);
 
   useEffect(() => {
     if (settings.rememberLastSearch) return;

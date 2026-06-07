@@ -19,7 +19,7 @@ export const SearchSection = memo<SearchSectionProps>(
       return (
         <div className="mb-6">
           <h2
-            className="mb-3 text-lg font-bold text-white"
+            className="mb-3 text-lg font-bold text-[color:var(--foreground)]"
             style={{ marginInlineStart: "0.25rem" }}
           >
             {title}
@@ -44,7 +44,7 @@ export const SearchSection = memo<SearchSectionProps>(
     return (
       <div className="mb-4">
         <h2
-          className="mb-2 text-lg font-bold text-white"
+          className="mb-2 text-lg font-bold text-[color:var(--foreground)]"
           style={{ marginInlineStart: "0.25rem" }}
         >
           {title}

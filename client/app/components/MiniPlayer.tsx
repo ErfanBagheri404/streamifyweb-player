@@ -246,44 +246,44 @@ const MiniPlayer: React.FC = () => {
         }`}
       >
         {showAutoRetryPrompt ? (
-          <div className="theme-surface pointer-events-auto w-[min(92vw,420px)] rounded-[28px] border p-4 text-white shadow-[0_22px_55px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+          <div className="theme-surface theme-shadow-strong pointer-events-auto w-[min(92vw,420px)] rounded-[28px] border p-4 text-[color:var(--foreground)] backdrop-blur-2xl">
+            <p className="theme-muted text-xs font-semibold uppercase tracking-[0.18em]">
               {t("miniPlayer.playbackHelp")}
             </p>
-            <p className="mt-2 text-sm font-medium text-white">
+            <p className="mt-2 text-sm font-medium text-[color:var(--foreground)]">
               {t("miniPlayer.enableAutoRetryQuestion")}
             </p>
-            <p className="mt-1 text-sm text-white/60">
+            <p className="theme-muted mt-1 text-sm">
               {t("miniPlayer.enableAutoRetryDescription")}
             </p>
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={disableAutoRetry}
-                className="rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:text-white"
+                className="theme-muted rounded-full px-4 py-2 text-sm font-semibold transition hover:text-[color:var(--foreground)]"
               >
                 {t("miniPlayer.noThanks")}
               </button>
               <button
                 type="button"
                 onClick={enableAutoRetry}
-                className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:scale-[1.02]"
+                className="theme-button-solid rounded-full px-4 py-2 text-sm font-semibold transition hover:scale-[1.02]"
               >
                 {t("miniPlayer.enableAutoRetry")}
               </button>
             </div>
           </div>
         ) : autoRetryStatusMessage ? (
-          <div className="theme-overlay pointer-events-auto rounded-full border px-4 py-2 text-sm font-medium text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+          <div className="theme-overlay theme-shadow-floating pointer-events-auto rounded-full border px-4 py-2 text-sm font-medium text-[color:var(--foreground)] backdrop-blur-xl">
             {autoRetryStatusMessage}
           </div>
         ) : null}
       </div>
 
-      <div className="theme-surface rounded-[24px] border px-3 py-2 shadow-[0_20px_50px_rgba(0,0,0,0.35)] lg:rounded-full lg:p-2">
+      <div className="theme-surface theme-shadow-strong rounded-[24px] border px-3 py-2 lg:rounded-full lg:p-2">
         <div className="mx-auto flex max-w-full flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center space-x-2.5 lg:flex-1 lg:space-x-3">
-            <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-gray-700 transition lg:h-12 lg:w-12">
+            <div className="theme-surface-soft relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border transition lg:h-12 lg:w-12">
               {currentSong.coverUrl ? (
                 <Image
                   src={currentSong.coverUrl}
@@ -294,28 +294,28 @@ const MiniPlayer: React.FC = () => {
                   unoptimized
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center bg-gray-600">
+                <div className="theme-surface-soft flex h-full w-full items-center justify-center">
                   <Image
                     src="/StreamifyLogo.svg"
                     alt={t("common.defaultCover")}
                     width={20}
                     height={20}
-                    className="opacity-50"
+                    className="theme-asset-icon opacity-50"
                   />
                 </div>
               )}
             </div>
             <div className="flex min-w-0 flex-col gap-1">
-              <h4 className="truncate text-[13px] font-medium text-white lg:text-sm">
+              <h4 className="truncate text-[13px] font-medium text-[color:var(--foreground)] lg:text-sm">
                 {currentSong.title}
               </h4>
               <p
                 className={`truncate text-[11px] lg:text-xs ${
                   statusText
                     ? isSongLoading
-                      ? "text-gray-400"
-                      : "text-red-300"
-                    : "text-gray-400"
+                      ? "theme-muted"
+                      : "text-red-400"
+                    : "theme-muted"
                 }`}
               >
                 {statusText || currentSong.artist}
@@ -343,14 +343,14 @@ const MiniPlayer: React.FC = () => {
                       height: `${Math.max(18, Math.round(height * 100))}%`,
                       backgroundColor:
                         index < playedBars
-                          ? "rgba(255, 255, 255, 1)"
-                          : "rgba(255, 255, 255, 0.45)",
+                          ? "var(--foreground)"
+                          : "color-mix(in srgb, var(--foreground) 45%, transparent)",
                     }}
                   />
                 ))}
               </div>
               <div
-                className="pointer-events-none absolute inset-y-0 z-10 w-px bg-white/90"
+                className="pointer-events-none absolute inset-y-0 z-10 w-px bg-[color:color-mix(in_srgb,var(--foreground)_90%,transparent)]"
                 style={{
                   left:
                     progressPercent <= 0
@@ -362,8 +362,10 @@ const MiniPlayer: React.FC = () => {
             <div
               className={`${spaceMono.className} whitespace-nowrap text-[11px] tabular-nums lg:text-xs`}
             >
-              <span className="text-white">{formatTime(currentTime)}</span>
-              <span className="text-white/50">
+              <span className="text-[color:var(--foreground)]">
+                {formatTime(currentTime)}
+              </span>
+              <span className="theme-muted">
                 {" "}
                 / {formatTime(duration || 0)}
               </span>
@@ -374,7 +376,7 @@ const MiniPlayer: React.FC = () => {
             {queuePositionLabel ? (
               <span
                 dir={isRtl ? "rtl" : "ltr"}
-                className={`theme-surface-soft hidden rounded-full border px-3 py-1 text-[11px] font-medium text-white/55 xl:inline-flex ${
+                className={`theme-surface-soft theme-muted hidden rounded-full border px-3 py-1 text-[11px] font-medium xl:inline-flex ${
                   isRtl ? "" : "uppercase tracking-[0.18em]"
                 }`}
                 style={{ unicodeBidi: "plaintext" }}
@@ -394,7 +396,7 @@ const MiniPlayer: React.FC = () => {
                 alt={t("miniPlayer.previousTrack")}
                 width={34}
                 height={34}
-                className="h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
+                className="theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
               />
             </button>
 
@@ -412,7 +414,7 @@ const MiniPlayer: React.FC = () => {
                   alt="Pause"
                   width={28}
                   height={28}
-                  className="h-8 w-8 lg:h-8 lg:w-8"
+                  className="theme-asset-icon h-8 w-8 lg:h-8 lg:w-8"
                 />
               ) : (
                 <Image
@@ -420,7 +422,7 @@ const MiniPlayer: React.FC = () => {
                   alt="Play"
                   width={28}
                   height={28}
-                  className="h-8 w-8 lg:h-8 lg:w-8"
+                  className="theme-asset-icon h-8 w-8 lg:h-8 lg:w-8"
                 />
               )}
             </button>
@@ -437,7 +439,7 @@ const MiniPlayer: React.FC = () => {
                 alt={t("miniPlayer.nextTrack")}
                 width={34}
                 height={34}
-                className="h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
+                className="theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
               />
             </button>
 
@@ -453,7 +455,7 @@ const MiniPlayer: React.FC = () => {
                 alt="Repeat"
                 width={34}
                 height={34}
-                className="h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
+                className="theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
               />
             </button>
 
@@ -462,13 +464,13 @@ const MiniPlayer: React.FC = () => {
               className="relative flex items-center lg:pr-2"
             >
               {isVolumeOpen ? (
-                <div className="theme-overlay absolute bottom-full right-0 mb-3 w-[min(85vw,220px)] rounded-2xl border px-4 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.4)] backdrop-blur-xl lg:right-1 lg:w-[220px]">
+                <div className="theme-overlay theme-shadow-strong absolute bottom-full right-0 mb-3 w-[min(85vw,220px)] rounded-2xl border px-4 py-4 backdrop-blur-xl lg:right-1 lg:w-[220px]">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
+                      <p className="theme-muted text-[11px] font-semibold uppercase tracking-[0.18em]">
                         {t("miniPlayer.volume")}
                       </p>
-                      <p className="mt-1 text-sm font-medium text-white">
+                      <p className="mt-1 text-sm font-medium text-[color:var(--foreground)]">
                         {volumeLabel} · {volumePercent}%
                       </p>
                     </div>
@@ -481,7 +483,7 @@ const MiniPlayer: React.FC = () => {
                     </button>
                   </div>
                   <div className="mt-4 flex items-center gap-3">
-                    <span className="text-xs text-white/40">0</span>
+                    <span className="theme-muted text-xs">0</span>
                     <input
                       type="range"
                       min="0"
@@ -498,7 +500,7 @@ const MiniPlayer: React.FC = () => {
                       }
                       aria-label={t("miniPlayer.adjustVolume")}
                     />
-                    <span className="text-xs text-white/40">100</span>
+                    <span className="theme-muted text-xs">100</span>
                   </div>
                   <div className="mt-3 flex gap-2">
                     {[25, 60, 100].map((preset) => (
@@ -530,15 +532,15 @@ const MiniPlayer: React.FC = () => {
                   alt={t("miniPlayer.volume")}
                   width={34}
                   height={34}
-                  className="h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
+                  className="theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
                 />
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={handleFullscreenToggle}
-              className="rounded-full transition duration-150 hover:scale-[1.03] lg:pr-2"
+              <button
+                type="button"
+                onClick={handleFullscreenToggle}
+                className="theme-button-soft flex h-10 w-10 items-center justify-center rounded-full border transition duration-150 hover:scale-[1.03] lg:h-10 lg:w-10"
               aria-label={
                 isFullscreenOpen
                   ? t("miniPlayer.closeFullscreen")
@@ -554,6 +556,7 @@ const MiniPlayer: React.FC = () => {
                 }
                 width={16}
                 height={16}
+                className="theme-asset-icon h-4 w-4"
               />
             </button>
           </div>

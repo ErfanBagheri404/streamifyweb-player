@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HorizontalScrollRow } from "./components/HorizontalScrollRow";
 import { type Song, useAudio } from "./contexts/AudioContext";
 import { useAppLanguage } from "./hooks/useAppLanguage";
@@ -222,7 +222,10 @@ function rankMadeForYouCandidates(songs: Song[]): Song[] {
       return score;
     };
 
-    return scoreSong(right, deduped.indexOf(right)) - scoreSong(left, deduped.indexOf(left));
+    return (
+      scoreSong(right, deduped.indexOf(right)) -
+      scoreSong(left, deduped.indexOf(left))
+    );
   });
 }
 
@@ -253,8 +256,8 @@ function SongCard({ song, onPlay }: { song: Song; onPlay: () => void }) {
       onClick={onPlay}
       className="group min-w-[168px] max-w-[168px] text-left"
     >
-      <div className="relative overflow-hidden rounded-2xl bg-[#1a1a1a] transition duration-200 group-hover:bg-[#202020]">
-        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-white/6">
+      <div className="theme-surface theme-shadow-soft relative overflow-hidden rounded-2xl transition duration-200 group-hover:bg-[color:color-mix(in_srgb,var(--surface-2)_78%,var(--foreground)_6%)]">
+        <div className="theme-surface-soft relative aspect-square w-full overflow-hidden rounded-2xl">
           {song.coverUrl ? (
             <Image
               src={song.coverUrl}
@@ -265,23 +268,23 @@ function SongCard({ song, onPlay }: { song: Song; onPlay: () => void }) {
               unoptimized
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#2d2d2d] to-[#161616] text-white/60">
+            <div className="theme-surface-soft theme-muted flex h-full w-full items-center justify-center">
               <NoteGlyph />
             </div>
           )}
         </div>
-        <div className="pointer-events-none absolute bottom-3 right-3 flex h-10 w-10 translate-y-2 items-center justify-center rounded-full bg-[#9dff00] text-black opacity-0 shadow-[0_12px_26px_rgba(0,0,0,0.35)] transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+        <div className="theme-button-accent theme-shadow-soft pointer-events-none absolute bottom-3 right-3 flex h-10 w-10 translate-y-2 items-center justify-center rounded-full border opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
           <PlayGlyph />
         </div>
       </div>
       <div className="px-1 pt-3">
-        <p className="truncate text-[15px] font-semibold text-white">
+        <p className="truncate text-[15px] font-semibold text-[color:var(--foreground)]">
           {song.title}
         </p>
-        <p className="mt-1 truncate text-sm text-white/55">
+        <p className="theme-muted mt-1 truncate text-sm">
           {song.artist || t("home.unknownArtist")}
         </p>
-        <p className="mt-1 truncate text-xs text-white/38">
+        <p className="mt-1 truncate text-xs text-[color:color-mix(in_srgb,var(--foreground)_38%,transparent)]">
           {formatDuration(song.duration)}
         </p>
       </div>
@@ -294,7 +297,7 @@ function ArtistCard({ artist }: { artist: ArtistHistorySummary }) {
   const href = buildArtistHref(artist);
   const content = (
     <>
-      <div className="relative aspect-square overflow-hidden rounded-full bg-[#1a1a1a]">
+      <div className="theme-surface theme-shadow-soft relative aspect-square overflow-hidden rounded-full">
         {artist.image ? (
           <Image
             src={artist.image}
@@ -305,16 +308,16 @@ function ArtistCard({ artist }: { artist: ArtistHistorySummary }) {
             unoptimized
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#343434] to-[#181818] text-white/70">
+          <div className="theme-surface-soft theme-muted flex h-full w-full items-center justify-center">
             <NoteGlyph />
           </div>
         )}
       </div>
       <div className="px-1 pt-3 text-center">
-        <p className="truncate text-[15px] font-semibold text-white">
+        <p className="truncate text-[15px] font-semibold text-[color:var(--foreground)]">
           {artist.name}
         </p>
-        <p className="mt-1 truncate text-sm text-white/55">
+        <p className="theme-muted mt-1 truncate text-sm">
           {t("home.play", { count: artist.count })}
         </p>
       </div>
@@ -356,6 +359,7 @@ export default function Home() {
     initialMadeForYouCache?.songs || []
   );
   const [isLoadingMadeForYou, setIsLoadingMadeForYou] = useState(false);
+  const lastMadeForYouRequestKeyRef = useRef<string | null>(null);
   const [authNotice, setAuthNotice] = useState<{
     title: string;
     body: string;
@@ -380,6 +384,13 @@ export default function Home() {
   const madeForYouSeedCandidates = useMemo(
     () => rankMadeForYouCandidates(recentSongs).slice(0, 6),
     [recentSongs]
+  );
+  const madeForYouCandidateKey = useMemo(
+    () =>
+      madeForYouSeedCandidates
+        .map((song) => `${song.source || "unknown"}:${song.id}`)
+        .join("|"),
+    [madeForYouSeedCandidates]
   );
   const recentArtists = useMemo<ArtistHistorySummary[]>(() => {
     const artistMap = new Map<string, ArtistHistorySummary>();
@@ -523,6 +534,7 @@ export default function Home() {
 
     const loadMadeForYou = async () => {
       if (madeForYouSeedCandidates.length === 0) {
+        lastMadeForYouRequestKeyRef.current = null;
         setMadeForYouSeedSong(null);
         setMadeForYouSongs([]);
         setIsLoadingMadeForYou(false);
@@ -532,19 +544,29 @@ export default function Home() {
       if (
         madeForYouSeedSong &&
         madeForYouSongs.length > 0 &&
-        madeForYouSeedCandidates.some((song) => song.id === madeForYouSeedSong.id)
+        madeForYouSeedCandidates.some(
+          (song) => song.id === madeForYouSeedSong.id
+        )
       ) {
+        lastMadeForYouRequestKeyRef.current = madeForYouCandidateKey;
         setIsLoadingMadeForYou(false);
         return;
       }
+
+      if (lastMadeForYouRequestKeyRef.current === madeForYouCandidateKey) {
+        setIsLoadingMadeForYou(false);
+        return;
+      }
+
+      lastMadeForYouRequestKeyRef.current = madeForYouCandidateKey;
 
       setIsLoadingMadeForYou(true);
 
       try {
         for (const candidate of madeForYouSeedCandidates) {
-          const seededSongs = dedupeSongsById(candidate.relatedSongs || []).filter(
-            (song) => song.id !== candidate.id
-          );
+          const seededSongs = dedupeSongsById(
+            candidate.relatedSongs || []
+          ).filter((song) => song.id !== candidate.id);
 
           if (seededSongs.length > 0) {
             if (!cancelled) {
@@ -611,7 +633,12 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [madeForYouSeedCandidates, madeForYouSeedSong, madeForYouSongs.length]);
+  }, [
+    madeForYouCandidateKey,
+    madeForYouSeedCandidates,
+    madeForYouSeedSong,
+    madeForYouSongs.length,
+  ]);
 
   const heroSongs = useMemo(
     () => dedupeSongsById(mostPlayedYouTubeArtist?.songs || []),
@@ -643,23 +670,23 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-full text-white">
+    <div className="min-h-full text-[color:var(--foreground)]">
       <div
         className={`pointer-events-none fixed left-1/2 top-6 z-40 flex -translate-x-1/2 transition-all duration-200 ${
           authNotice ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"
         }`}
       >
         {authNotice ? (
-          <div className="theme-overlay pointer-events-auto w-[min(92vw,420px)] rounded-2xl border px-4 py-3 text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+          <div className="theme-overlay theme-shadow-floating pointer-events-auto w-[min(92vw,420px)] rounded-2xl border px-4 py-3 text-[color:var(--foreground)] backdrop-blur-xl">
             <p className="text-sm font-semibold">{authNotice.title}</p>
-            <p className="mt-1 text-sm text-white/62">{authNotice.body}</p>
+            <p className="theme-muted mt-1 text-sm">{authNotice.body}</p>
           </div>
         ) : null}
       </div>
 
       <div className="space-y-5 md:space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-2xl font-bold tracking-tight text-white">
+          <p className="text-2xl font-bold tracking-tight text-[color:var(--foreground)]">
             {greeting}
           </p>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
@@ -684,7 +711,7 @@ export default function Home() {
           <section
             className={`theme-surface relative overflow-hidden rounded-2xl ${
               heroBanner ? "" : "border"
-            }`}
+            } ${heroBanner ? "theme-media-hero" : ""}`}
           >
             {heroBanner ? (
               <div
@@ -692,9 +719,15 @@ export default function Home() {
                 style={{ backgroundImage: `url(${heroBanner})` }}
               />
             ) : null}
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.1)_0%,rgba(0,0,0,0.35)_45%,rgba(0,0,0,0.88)_100%)]" />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.12)_0%,rgba(0,0,0,0.4)_45%,rgba(0,0,0,0.88)_100%)]" />
             {!heroBanner ? (
-              <div className="absolute inset-0 bg-[linear-gradient(135deg,#1a1a1a_0%,#151515_48%,#101010_100%)]" />
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(135deg,var(--collection-hero-start) 0%,var(--collection-hero-mid) 48%,var(--collection-hero-end) 100%)",
+                }}
+              />
             ) : null}
 
             <div className="relative z-10 flex min-h-[240px] flex-col justify-between p-5 sm:p-6 md:min-h-[360px] md:p-8">
@@ -706,7 +739,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => void playQueue(heroSongs, heroSongs[0])}
-                  className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-[0_16px_40px_rgba(0,0,0,0.35)] transition hover:scale-[1.03] md:h-20 md:w-20"
+                  className="theme-button-accent theme-shadow-strong flex h-14 w-14 items-center justify-center rounded-full border transition hover:scale-[1.03] md:h-20 md:w-20"
                   aria-label={t("home.playSongsBy", {
                     name: mostPlayedYouTubeArtist.name,
                   })}
@@ -720,13 +753,13 @@ export default function Home() {
           </section>
         ) : (
           <section className="theme-surface rounded-2xl border p-5 sm:p-6 md:p-8">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/55">
+            <p className="theme-muted text-sm font-semibold uppercase tracking-[0.24em]">
               {t("home.emptyHeroEyebrow")}
             </p>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-white sm:text-3xl md:text-4xl">
+            <h1 className="mt-3 text-2xl font-black tracking-tight text-[color:var(--foreground)] sm:text-3xl md:text-4xl">
               {t("home.emptyHeroTitle")}
             </h1>
-            <p className="mt-3 max-w-2xl text-sm text-white/60 md:text-base">
+            <p className="theme-muted mt-3 max-w-2xl text-sm md:text-base">
               {t("home.emptyHeroDescription")}
             </p>
           </section>
@@ -753,7 +786,7 @@ export default function Home() {
               ))}
             </HorizontalScrollRow>
           ) : (
-            <div className="theme-surface-soft rounded-2xl border p-5 text-white/55">
+            <div className="theme-surface-soft theme-muted rounded-2xl border p-5">
               {t("home.noRecentSongs")}
             </div>
           )}
@@ -766,7 +799,7 @@ export default function Home() {
                 {t("home.madeForYou")}
               </h2>
               {madeForYouSeedSong ? (
-                <p className="mt-1 text-sm text-white/50">
+                <p className="theme-muted mt-1 text-sm">
                   {t("home.basedOn", { title: madeForYouSeedSong.title })}
                 </p>
               ) : null}
@@ -787,7 +820,7 @@ export default function Home() {
               ))}
             </HorizontalScrollRow>
           ) : (
-            <div className="theme-surface-soft rounded-2xl border p-5 text-white/55">
+            <div className="theme-surface-soft theme-muted rounded-2xl border p-5">
               {isLoadingMadeForYou ? (
                 <div className="flex items-center gap-3">
                   <span className="theme-spinner h-5 w-5" />
@@ -819,7 +852,7 @@ export default function Home() {
               ))}
             </HorizontalScrollRow>
           ) : (
-            <div className="theme-surface-soft rounded-2xl border p-5 text-white/55">
+            <div className="theme-surface-soft theme-muted rounded-2xl border p-5">
               {t("home.noRecentArtists")}
             </div>
           )}

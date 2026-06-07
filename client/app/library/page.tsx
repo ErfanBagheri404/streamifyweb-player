@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type Song, useAudio } from "../contexts/AudioContext";
@@ -258,7 +258,13 @@ function SmartPlaylistArtwork({
 }) {
   if (variant === "liked") {
     return (
-      <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-gradient-to-br from-[#5f4bff] via-[#8a7dff] to-[#d7f9e9] text-white shadow-[0_18px_40px_rgba(95,75,255,0.35)]">
+      <div
+        className="flex aspect-square w-full items-center justify-center rounded-xl text-white shadow-[0_18px_40px_rgba(95,75,255,0.35)]"
+        style={{
+          background:
+            "linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 86%, white 14%) 0%, color-mix(in srgb, var(--theme-accent) 62%, #7c3aed 38%) 48%, color-mix(in srgb, var(--surface-2) 80%, black 20%) 100%)",
+        }}
+      >
         <HeartGlyph />
       </div>
     );
@@ -279,7 +285,7 @@ function SmartPlaylistArtwork({
 
     if (covers.length > 0) {
       return (
-        <div className="grid aspect-square w-full grid-cols-2 overflow-hidden rounded-xl bg-white/6">
+        <div className="theme-surface-soft grid aspect-square w-full grid-cols-2 overflow-hidden rounded-xl">
           {covers.map((song, index) => (
             <div
               key={`history-cover-${song.id}-${index}`}
@@ -300,7 +306,7 @@ function SmartPlaylistArtwork({
             [...Array(4 - covers.length)].map((_, index) => (
               <div
                 key={`history-empty-${index}`}
-                className="flex items-center justify-center bg-white/6 text-white/45"
+                className="theme-surface-soft flex items-center justify-center theme-muted"
               >
                 <ClockGlyph />
               </div>
@@ -330,7 +336,7 @@ function SmartPlaylistArtwork({
 
   if (covers.length === 1) {
     return (
-      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-white/6">
+      <div className="theme-surface-soft relative aspect-square w-full overflow-hidden rounded-xl">
         <Image
           src={covers[0].coverUrl!}
           alt={label}
@@ -346,7 +352,7 @@ function SmartPlaylistArtwork({
 
   if (covers.length === 2) {
     return (
-      <div className="grid aspect-square w-full grid-cols-2 overflow-hidden rounded-xl bg-white/6">
+      <div className="theme-surface-soft grid aspect-square w-full grid-cols-2 overflow-hidden rounded-xl">
         {covers.map((song, index) => (
           <div
             key={`playlist-cover-${song.id}-${index}`}
@@ -369,7 +375,7 @@ function SmartPlaylistArtwork({
 
   if (covers.length === 3) {
     return (
-      <div className="grid aspect-square w-full grid-cols-2 grid-rows-2 overflow-hidden rounded-xl bg-white/6">
+      <div className="theme-surface-soft grid aspect-square w-full grid-cols-2 grid-rows-2 overflow-hidden rounded-xl">
         <div className="relative row-span-2 h-full w-full">
           <Image
             src={covers[0].coverUrl!}
@@ -409,7 +415,7 @@ function SmartPlaylistArtwork({
 
   if (covers.length >= 4) {
     return (
-      <div className="grid aspect-square w-full grid-cols-2 grid-rows-2 overflow-hidden rounded-xl bg-white/6">
+      <div className="theme-surface-soft grid aspect-square w-full grid-cols-2 grid-rows-2 overflow-hidden rounded-xl">
         {covers.slice(0, 4).map((song, index) => (
           <div
             key={`playlist-cover-${song.id}-${index}`}
@@ -431,7 +437,7 @@ function SmartPlaylistArtwork({
   }
 
   return (
-    <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-[#2b2b2b] text-white/60">
+    <div className="theme-surface flex aspect-square w-full items-center justify-center rounded-xl theme-muted">
       <FolderGlyph />
     </div>
   );
@@ -458,18 +464,22 @@ function PlaylistCard({
       onClick={onClick}
       className="group text-left"
     >
-      <div className="relative overflow-hidden rounded-xl bg-[#181818] transition duration-200 group-hover:bg-[#222222]">
+      <div className="theme-surface relative overflow-hidden rounded-xl transition duration-200 group-hover:bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--foreground)_6%)]">
         {artwork}
         {onClick && (
-          <div className="pointer-events-none absolute bottom-3 right-3 flex h-12 w-12 translate-y-2 items-center justify-center rounded-full bg-[#1ed760] text-black opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.35)] transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+          <div className="theme-button-accent pointer-events-none absolute bottom-3 right-3 flex h-12 w-12 translate-y-2 items-center justify-center rounded-full opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.35)] transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
             <PlayGlyph />
           </div>
         )}
       </div>
       <div className="px-1 pt-3">
-        <p className="truncate text-[15px] font-semibold text-white">{title}</p>
-        <p className="mt-1 truncate text-sm text-white/55">{subtitle}</p>
-        <p className="mt-1 truncate text-xs text-white/38">{meta}</p>
+        <p className="truncate text-[15px] font-semibold text-[color:var(--foreground)]">
+          {title}
+        </p>
+        <p className="theme-muted mt-1 truncate text-sm">{subtitle}</p>
+        <p className="mt-1 truncate text-xs text-[color:color-mix(in_srgb,var(--foreground)_38%,transparent)]">
+          {meta}
+        </p>
       </div>
     </Component>
   );
@@ -486,7 +496,7 @@ function ArtistCard({
 
   return (
     <div className="group text-left">
-      <div className="relative aspect-square overflow-hidden rounded-full bg-[#181818] transition duration-200 group-hover:bg-[#222222]">
+      <div className="theme-surface relative aspect-square overflow-hidden rounded-full transition duration-200 group-hover:bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--foreground)_6%)]">
         {artist.image ? (
           <Image
             src={artist.image}
@@ -498,16 +508,16 @@ function ArtistCard({
             unoptimized
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#3b3b3b] to-[#161616] text-2xl font-semibold text-white/80">
+          <div className="theme-surface-soft flex h-full w-full items-center justify-center text-2xl font-semibold text-[color:color-mix(in_srgb,var(--foreground)_80%,transparent)]">
             {getInitials(artist.name)}
           </div>
         )}
       </div>
       <div className="px-1 pt-3">
-        <p className="truncate text-[15px] font-semibold text-white">
+        <p className="truncate text-[15px] font-semibold text-[color:var(--foreground)]">
           {artist.name}
         </p>
-        <p className="mt-1 text-sm text-white/55">{t("library.artist")}</p>
+        <p className="theme-muted mt-1 text-sm">{t("library.artist")}</p>
       </div>
     </div>
   );
@@ -523,10 +533,10 @@ function LibraryListRow({ item }: { item: LibraryGridItem }) {
     <Component
       type={onClick ? "button" : undefined}
       onClick={onClick}
-      className="group flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition hover:bg-white/[0.06]"
+      className="group flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_5%)]"
     >
       <div
-        className={`relative h-14 w-14 shrink-0 overflow-hidden bg-[#1a1a1a] ${
+        className={`theme-surface relative h-14 w-14 shrink-0 overflow-hidden ${
           isArtist ? "rounded-full" : "rounded-xl"
         }`}
       >
@@ -542,7 +552,7 @@ function LibraryListRow({ item }: { item: LibraryGridItem }) {
               unoptimized
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#3b3b3b] to-[#161616] text-sm font-semibold text-white/80">
+            <div className="theme-surface-soft flex h-full w-full items-center justify-center text-sm font-semibold text-[color:color-mix(in_srgb,var(--foreground)_80%,transparent)]">
               {getInitials(item.artist.name)}
             </div>
           )
@@ -552,22 +562,22 @@ function LibraryListRow({ item }: { item: LibraryGridItem }) {
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-white">
+        <p className="truncate text-sm font-semibold text-[color:var(--foreground)]">
           {isArtist ? item.artist.name : item.title}
         </p>
-        <p className="mt-1 truncate text-sm text-white/55">
+        <p className="theme-muted mt-1 truncate text-sm">
           {isArtist ? t("library.artist") : item.subtitle}
         </p>
       </div>
 
       <div className="shrink-0 text-right">
-        <p className="text-xs text-white/40">
+        <p className="text-xs text-[color:color-mix(in_srgb,var(--foreground)_40%,transparent)]">
           {isArtist
             ? formatSongCount(item.artist.count, "play")
             : item.meta || t("library.open")}
         </p>
         {!isArtist && item.onClick ? (
-          <p className="mt-1 text-xs font-medium text-white/60 transition group-hover:text-white">
+          <p className="mt-1 text-xs font-medium text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] transition group-hover:text-[color:var(--foreground)]">
             {t("library.open")}
           </p>
         ) : null}
@@ -592,6 +602,7 @@ export default function LibraryPage() {
   const [sortMode, setSortMode] = useState<SortMode>("recents");
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<LibraryViewMode>("grid");
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const [createdPlaylistToast, setCreatedPlaylistToast] = useState<{
     id: string;
     name: string;
@@ -626,6 +637,21 @@ export default function LibraryPage() {
       window.clearTimeout(timer);
     };
   }, [createdPlaylistToast]);
+
+  useEffect(() => {
+    if (!isSortMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!sortMenuRef.current?.contains(event.target as Node)) {
+        setIsSortMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [isSortMenuOpen]);
 
   const topArtists = useMemo<ArtistSummary[]>(() => {
     const map = new Map<string, ArtistSummary>();
@@ -951,7 +977,7 @@ export default function LibraryPage() {
 
   return (
     <>
-      <div className="theme-surface relative h-full overflow-hidden rounded-xl border text-white">
+      <div className="theme-surface relative h-full overflow-hidden rounded-xl border text-[color:var(--foreground)]">
         <div
           className={`pointer-events-none absolute left-1/2 top-4 z-40 flex -translate-x-1/2 transition-all duration-200 ${
             createdPlaylistToast
@@ -959,7 +985,7 @@ export default function LibraryPage() {
               : "-translate-y-2 opacity-0"
           }`}
         >
-          <div className="theme-overlay pointer-events-auto flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-medium text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+          <div className="theme-overlay pointer-events-auto flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-medium text-[color:var(--foreground)] shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
             <span>
               {t("library.created", {
                 name:
@@ -972,7 +998,7 @@ export default function LibraryPage() {
                 onClick={() =>
                   router.push(getLocalCollectionPath(createdPlaylistToast.id))
                 }
-                className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-black transition hover:scale-[1.02]"
+                className="theme-button-solid rounded-full px-3 py-1 text-xs font-semibold transition hover:scale-[1.02]"
               >
                 {t("library.open")}
               </button>
@@ -985,16 +1011,16 @@ export default function LibraryPage() {
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-base font-black tracking-tight text-white">
+                  <p className="text-base font-black tracking-tight text-[color:var(--foreground)]">
                     {t("library.yourLibrary")}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 text-white/65 sm:justify-end">
+                <div className="theme-muted flex items-center gap-2 sm:justify-end">
                   <button
                     type="button"
                     onClick={openCreatePlaylist}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/12 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm"
+                    className="theme-button-soft inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition sm:gap-2 sm:px-4 sm:py-2 sm:text-sm"
                     aria-label={t("library.createPlaylistAria")}
                   >
                     <PlusGlyph />
@@ -1007,7 +1033,7 @@ export default function LibraryPage() {
                         current === "grid" ? "list" : "grid"
                       )
                     }
-                    className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-white/8 hover:text-white sm:h-9 sm:w-9"
+                    className="theme-button-soft flex h-8 w-8 items-center justify-center rounded-full border transition sm:h-9 sm:w-9"
                     aria-label={
                       viewMode === "grid"
                         ? t("library.switchToList")
@@ -1037,8 +1063,8 @@ export default function LibraryPage() {
                       }
                       className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition sm:px-4 sm:py-2 sm:text-sm ${
                         selectedChip === chip
-                          ? "bg-white text-black"
-                          : "bg-white/8 text-white/82 hover:bg-white/12"
+                          ? "theme-button-solid"
+                          : "theme-button-soft border text-[color:color-mix(in_srgb,var(--foreground)_82%,transparent)]"
                       }`}
                     >
                       {chip === "Playlists"
@@ -1054,21 +1080,21 @@ export default function LibraryPage() {
                   ))}
                 </div>
 
-                <div className="relative flex flex-col gap-2 text-sm text-white/55 sm:flex-row sm:items-center sm:gap-3">
-                  <label className="inline-flex items-center gap-2 rounded-xl bg-white/6 px-3 py-2 transition focus-within:bg-white/10 focus-within:text-white">
+                <div className="theme-muted relative flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-3">
+                  <label className="theme-button-soft inline-flex items-center gap-2 rounded-xl border px-3 py-2 transition focus-within:border-[color:color-mix(in_srgb,var(--foreground)_16%,transparent)] focus-within:text-[color:var(--foreground)]">
                     <SearchGlyph />
                     <input
                       value={libraryQuery}
                       onChange={(event) => setLibraryQuery(event.target.value)}
                       placeholder={t("library.searchInLibrary")}
-                      className="w-full min-w-0 bg-transparent text-sm text-white outline-none placeholder:text-white/35 sm:w-[220px]"
+                      className="w-full min-w-0 bg-transparent text-sm text-[color:var(--foreground)] outline-none placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] sm:w-[220px]"
                       aria-label={t("library.searchInLibrary")}
                     />
                     {hasSearchQuery ? (
                       <button
                         type="button"
                         onClick={() => setLibraryQuery("")}
-                        className="rounded-full p-1 text-white/45 transition hover:bg-white/8 hover:text-white"
+                        className="rounded-full p-1 text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)] transition hover:bg-[color:color-mix(in_srgb,var(--foreground)_8%,transparent)] hover:text-[color:var(--foreground)]"
                         aria-label={t("library.clearSearch")}
                       >
                         <svg
@@ -1088,14 +1114,11 @@ export default function LibraryPage() {
                       </button>
                     ) : null}
                   </label>
-                  <div
-                    className="relative"
-                    onMouseLeave={() => setIsSortMenuOpen(false)}
-                  >
+                  <div className="relative" ref={sortMenuRef}>
                     <button
                       type="button"
                       onClick={() => setIsSortMenuOpen((value) => !value)}
-                      className="theme-button-soft inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition hover:text-white sm:py-2 sm:text-sm"
+                      className="theme-button-soft inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition sm:py-2 sm:text-sm"
                     >
                       {sortMode === "recents"
                         ? t("library.recents")
@@ -1129,7 +1152,7 @@ export default function LibraryPage() {
                           className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${
                             sortMode === option.id
                               ? "theme-accent-fill"
-                              : "text-white/82 hover:bg-white/8"
+                              : "text-[color:color-mix(in_srgb,var(--foreground)_82%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--foreground)_8%,transparent)]"
                           }`}
                         >
                           {option.label}
@@ -1142,7 +1165,7 @@ export default function LibraryPage() {
             </div>
           </section>
 
-          <div className="flex items-center justify-between gap-3 px-1 text-xs uppercase tracking-[0.18em] text-white/38">
+          <div className="flex items-center justify-between gap-3 px-1 text-xs uppercase tracking-[0.18em] text-[color:color-mix(in_srgb,var(--foreground)_38%,transparent)]">
             <p>{librarySummary}</p>
             <p>
               {viewMode === "grid"
@@ -1183,17 +1206,17 @@ export default function LibraryPage() {
                       onClick={openCreatePlaylist}
                       className="group text-left"
                     >
-                      <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-[#1c1c1c] text-white/55 transition group-hover:bg-[#232323] group-hover:text-white/75">
+                      <div className="theme-button-soft flex aspect-square w-full items-center justify-center rounded-xl border text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)] transition group-hover:bg-[color:color-mix(in_srgb,var(--surface-3)_70%,var(--foreground)_6%)] group-hover:text-[color:color-mix(in_srgb,var(--foreground)_75%,transparent)]">
                         <PlusGlyph />
                       </div>
                       <div className="px-1 pt-3">
-                        <p className="truncate text-[15px] font-semibold text-white">
+                        <p className="truncate text-[15px] font-semibold text-[color:var(--foreground)]">
                           {t("library.createPlaylist")}
                         </p>
-                        <p className="mt-1 text-sm text-white/55">
+                        <p className="theme-muted mt-1 text-sm">
                           {t("common.playlist")}
                         </p>
-                        <p className="mt-1 text-xs text-white/38">
+                        <p className="mt-1 text-xs text-[color:color-mix(in_srgb,var(--foreground)_38%,transparent)]">
                           {t("library.nameItYours")}
                         </p>
                       </div>
@@ -1209,16 +1232,16 @@ export default function LibraryPage() {
                     <button
                       type="button"
                       onClick={openCreatePlaylist}
-                      className="flex w-full items-center gap-4 rounded-2xl border border-dashed border-white/10 px-3 py-3 text-left text-white/72 transition hover:border-white/18 hover:bg-white/[0.04] hover:text-white"
+                      className="theme-button-soft flex w-full items-center gap-4 rounded-2xl border border-dashed px-3 py-3 text-left text-[color:color-mix(in_srgb,var(--foreground)_72%,transparent)] transition hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_5%)] hover:text-[color:var(--foreground)]"
                     >
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/[0.04]">
+                      <div className="theme-surface-soft flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
                         <PlusGlyph />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">
+                        <p className="truncate text-sm font-semibold text-[color:var(--foreground)]">
                           {t("library.createPlaylist")}
                         </p>
-                        <p className="mt-1 text-sm text-white/55">
+                        <p className="theme-muted mt-1 text-sm">
                           {t("library.nameItYours")}
                         </p>
                       </div>
@@ -1227,7 +1250,7 @@ export default function LibraryPage() {
                 </div>
               )
             ) : (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/55">
+              <div className="theme-surface-soft rounded-2xl border p-5 theme-muted">
                 {libraryQuery.trim()
                   ? t("library.noSearchMatch")
                   : selectedChip === "Downloaded"

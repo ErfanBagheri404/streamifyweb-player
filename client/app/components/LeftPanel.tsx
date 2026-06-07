@@ -158,12 +158,12 @@ export default function LeftPanel() {
   const isSettingsPage = pathname.startsWith("/settings");
   const getIconClassName = (isActive: boolean) =>
     [
-      "h-[30px] w-[30px] cursor-pointer transition-all duration-200 ease-out text-white",
+      "h-[30px] w-[30px] cursor-pointer transition-all duration-200 ease-out text-[color:var(--foreground)]",
       isActive ? "opacity-100 scale-100" : "scale-[0.88] opacity-65",
     ].join(" ");
   const getAssetIconClassName = (isActive: boolean) =>
     [
-      "h-[30px] w-[30px] select-none cursor-pointer transition-all duration-200 ease-out",
+      "theme-asset-icon h-[30px] w-[30px] select-none cursor-pointer transition-all duration-200 ease-out",
       isActive ? "opacity-100 scale-100" : "scale-[0.88] opacity-65",
     ].join(" ");
 
@@ -175,7 +175,7 @@ export default function LeftPanel() {
     >
       <div className="flex flex-col gap-3 lg:h-full [padding-inline-end:0] lg:[padding-inline-end:1rem]">
         {/* First Box */}
-        <div className="theme-surface flex w-full flex-row items-center justify-around gap-2 rounded-xl border px-4 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.26)] lg:w-[86px] lg:flex-col lg:items-center lg:gap-7 lg:px-7 lg:py-6 lg:shadow-none">
+        <div className="theme-surface-strong theme-shadow-soft flex w-full flex-row items-center justify-around gap-2 rounded-xl border px-4 py-3 lg:w-[86px] lg:flex-col lg:items-center lg:gap-7 lg:px-7 lg:py-6 lg:shadow-none">
           <button
             type="button"
             onClick={() => {
@@ -239,7 +239,7 @@ export default function LeftPanel() {
         {/* Second Box */}
         <div
           className={[
-            "theme-surface relative hidden w-[86px] min-h-0 flex-1 flex-col items-center overflow-hidden rounded-xl border py-6 lg:flex",
+            "theme-surface-strong relative hidden w-[86px] min-h-0 flex-1 flex-col items-center overflow-hidden rounded-xl border py-6 lg:flex",
             isPlayerVisible ? "lg:mb-20" : "",
           ].join(" ")}
         >
@@ -273,9 +273,9 @@ export default function LeftPanel() {
               : [...Array(3)].map((_, index) => (
                   <div
                     key={index}
-                    className="theme-surface-soft flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md border"
+                    className="theme-surface-soft flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md"
                   >
-                    <LogoIcon className="h-4 w-4 opacity-40 text-white" />
+                    <LogoIcon className="h-4 w-4 text-[color:var(--foreground)] opacity-40" />
                   </div>
                 ))}
           </div>
@@ -284,7 +284,7 @@ export default function LeftPanel() {
             onClick={() => {
               openCreatePlaylist();
             }}
-            className="theme-button-accent absolute bottom-4 left-1/2 z-10 flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-white/10 shadow-[0_12px_30px_rgba(0,0,0,0.32)] transition hover:scale-[1.04]"
+            className="theme-button-accent theme-shadow-soft absolute bottom-4 left-1/2 z-10 flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full border transition hover:scale-[1.04]"
             aria-label={t("library.createPlaylistAria")}
             title={t("library.createPlaylist")}
           >

@@ -105,10 +105,10 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
     : "h-16 w-16 rounded-xl object-cover sm:h-24 sm:w-24 lg:h-32 lg:w-32";
 
   const placeholderClasses = isArtist
-    ? "h-12 w-12 rounded-full bg-neutral-700"
+    ? "theme-surface-soft h-12 w-12 rounded-full border"
     : isYouTubeSource
-    ? "h-20 w-32 rounded-xl bg-neutral-700 sm:h-28 sm:w-48 lg:h-36 lg:w-64"
-    : "h-16 w-16 rounded-xl bg-neutral-700 sm:h-24 sm:w-24 lg:h-32 lg:w-32";
+    ? "theme-surface-soft h-20 w-32 rounded-xl border sm:h-28 sm:w-48 lg:h-36 lg:w-64"
+    : "theme-surface-soft h-16 w-16 rounded-xl border sm:h-24 sm:w-24 lg:h-32 lg:w-32";
 
   const imgWidth = isArtist ? 48 : isYouTubeSource ? 192 : 96;
   const imgHeight = isArtist ? 48 : isYouTubeSource ? 108 : 96;
@@ -118,7 +118,7 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
       <button
         type="button"
         onClick={onPress}
-        className="shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        className="shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)]"
         aria-label={t("search.open", { title: displayTitle })}
       >
         {thumbnail ? (
@@ -137,7 +137,7 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
 
       <div className="min-w-0 flex-1">
         {/* Channel / Artist name */}
-        <h3 className="truncate text-start font-medium text-white">
+        <h3 className="truncate text-start font-medium text-[color:var(--foreground)]">
           <button
             type="button"
             onClick={onPress}
@@ -149,26 +149,26 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
 
         {/* Subscriber / listener count – now properly below the name */}
         {isArtist && subCountLabel && (
-          <p className="text-neutral-400 text-sm truncate">{subCountLabel}</p>
+          <p className="theme-muted truncate text-sm">{subCountLabel}</p>
         )}
 
         {/* Author line for non‑artists */}
         {!isArtist && displayAuthor && (
-          <p className="text-neutral-400 text-sm truncate">{displayAuthor}</p>
+          <p className="theme-muted truncate text-sm">{displayAuthor}</p>
         )}
 
         {!isArtist && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-500">
+          <div className="theme-muted flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
             {durationFormatted && <span>{durationFormatted}</span>}
             {viewsFormatted && (
               <>
-                <span className="w-1 h-1 rounded-full bg-neutral-600" />
+                <span className="h-1 w-1 rounded-full bg-[color:color-mix(in_srgb,var(--foreground)_28%,transparent)]" />
                 <span>{viewsFormatted}</span>
               </>
             )}
             {uploadedLabel && (
               <>
-                <span className="w-1 h-1 rounded-full bg-neutral-600" />
+                <span className="h-1 w-1 rounded-full bg-[color:color-mix(in_srgb,var(--foreground)_28%,transparent)]" />
                 <span>{uploadedLabel}</span>
               </>
             )}

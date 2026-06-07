@@ -6,11 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { SearchResult } from "../../../components/search";
 import { type Song, useAudio } from "../../../contexts/AudioContext";
+import { useSettings } from "../../../contexts/SettingsContext";
 import {
   LOCAL_LIBRARY_UPDATED_EVENT,
   readLocalCollection,
   removeStoredPlaylist,
 } from "../../../lib/local-library";
+import { isLightAppTheme } from "../../../lib/app-settings";
 import {
   readSessionCache,
   writeSessionCache,
@@ -280,6 +282,22 @@ function EqualizerGlyph() {
   );
 }
 
+function LikedCollectionCover({ title }: { title: string }) {
+  return (
+    <div
+      className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-md text-white"
+      style={{
+        background:
+          "linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 84%, white 16%) 0%, color-mix(in srgb, var(--theme-accent) 60%, #7c3aed 40%) 46%, color-mix(in srgb, var(--surface-2) 82%, black 18%) 100%)",
+      }}
+      aria-label={title}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.34),transparent_34%)]" />
+      <HeartGlyph />
+    </div>
+  );
+}
+
 function getCollectionEntries(item: SearchResult | null): CollectionEntry[] {
   if (!item) return [];
 
@@ -322,6 +340,7 @@ export default function CollectionPage() {
   const params = useParams<{ kind: string; id: string }>();
   const searchParams = useSearchParams();
   const { currentSong, isPlaying, resolveAndPlaySong } = useAudio();
+  const { settings } = useSettings();
   const {
     t,
     formatNumber,
@@ -702,6 +721,11 @@ export default function CollectionPage() {
   const canPlayEntries =
     collectionSource.toLowerCase() === "local" ||
     isPlayableSource(collectionSource);
+  const isLikedSongsCollection =
+    source.toLowerCase() === "local" && id === "liked-songs";
+  const useHeroLightText =
+    (Boolean(displayImage) || isLikedSongsCollection) &&
+    !isLightAppTheme(settings.theme);
   const isRemovableLocalPlaylist =
     source.toLowerCase() === "local" &&
     kind === "playlist" &&
@@ -785,7 +809,7 @@ export default function CollectionPage() {
   };
 
   return (
-    <div className="theme-surface-strong min-h-full overflow-hidden rounded-2xl border text-white">
+    <div className="theme-surface-strong min-h-full overflow-hidden rounded-2xl border text-[color:var(--foreground)]">
       <div
         className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm transition ${
           isDeleteModalOpen
@@ -800,20 +824,20 @@ export default function CollectionPage() {
           }`}
           onClick={(event) => event.stopPropagation()}
         >
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:color-mix(in_srgb,var(--foreground)_40%,transparent)]">
             {t("collection.removePlaylist")}
           </p>
-          <h2 className="mt-3 text-2xl font-semibold text-white">
+          <h2 className="mt-3 text-2xl font-semibold text-[color:var(--foreground)]">
             {t("collection.deletePlaylist", { title: displayTitle })}
           </h2>
-          <p className="mt-2 text-sm text-white/60">
+          <p className="mt-2 text-sm text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)]">
             {t("collection.removePlaylistDescription")}
           </p>
           <div className="mt-6 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={() => setIsDeleteModalOpen(false)}
-              className="rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:text-white"
+              className="rounded-full px-4 py-2 text-sm font-semibold text-[color:color-mix(in_srgb,var(--foreground)_65%,transparent)] transition hover:text-[color:var(--foreground)]"
             >
               {t("common.cancel")}
             </button>
@@ -829,48 +853,92 @@ export default function CollectionPage() {
       </div>
 
       <section
-        className="relative overflow-hidden px-4 pb-8 pt-5 sm:px-5 md:px-8 md:pb-10 md:pt-6"
+        className={`relative overflow-hidden px-4 pb-8 pt-5 sm:px-5 md:px-8 md:pb-10 md:pt-6 ${
+          useHeroLightText ? "theme-media-hero" : ""
+        }`}
         style={{
           backgroundImage:
             "linear-gradient(180deg,var(--collection-hero-start) 0%,var(--collection-hero-mid) 42%,var(--collection-hero-end) 70%,var(--surface-2) 100%)",
         }}
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_32%),linear-gradient(180deg,rgba(0,0,0,0)_0%,rgba(0,0,0,0.22)_55%,rgba(0,0,0,0.6)_100%)]" />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 32%), linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--surface-overlay) 38%, transparent) 55%, color-mix(in srgb, var(--surface-overlay) 88%, transparent) 100%)",
+          }}
+        />
         <div className="relative z-10">
           <Link
             href={backHref}
-            className="inline-flex rounded-full bg-black/25 px-3 py-2 text-sm text-white/82 backdrop-blur-sm transition hover:bg-black/35"
+            className={`inline-flex rounded-full px-3 py-2 text-sm backdrop-blur-sm transition ${
+              useHeroLightText
+                ? "bg-black/25 text-white/82 hover:bg-black/35"
+                : "theme-button-soft text-[color:color-mix(in_srgb,var(--foreground)_82%,transparent)] hover:text-[color:var(--foreground)]"
+            }`}
           >
             {t("common.back")}
           </Link>
 
           <div className="mt-7 flex flex-col items-start gap-6 md:flex-row md:items-end">
-            {displayImage ? (
-              <Image
-                src={displayImage}
-                alt={displayTitle}
-                width={224}
-                height={224}
-                className="h-36 w-36 rounded-md bg-black/20 object-cover shadow-[0_24px_60px_rgba(0,0,0,0.4)] sm:h-44 sm:w-44 md:h-56 md:w-56"
-                unoptimized
-              />
-            ) : (
-              <div className="h-36 w-36 rounded-md bg-black/20 shadow-[0_24px_60px_rgba(0,0,0,0.4)] sm:h-44 sm:w-44 md:h-56 md:w-56" />
-            )}
+            <div
+              className={`h-36 w-36 overflow-hidden rounded-md shadow-[0_24px_60px_rgba(0,0,0,0.4)] sm:h-44 sm:w-44 md:h-56 md:w-56 ${
+                useHeroLightText ? "bg-black/20" : "theme-surface-soft"
+              }`}
+            >
+              {isLikedSongsCollection ? (
+                <LikedCollectionCover title={displayTitle} />
+              ) : displayImage ? (
+                <Image
+                  src={displayImage}
+                  alt={displayTitle}
+                  width={224}
+                  height={224}
+                  className="h-full w-full object-cover"
+                  unoptimized
+                />
+              ) : (
+                <div className="h-full w-full" />
+              )}
+            </div>
 
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
+              <p
+                className={`text-xs font-semibold uppercase tracking-[0.18em] ${
+                  useHeroLightText
+                    ? "text-white/80"
+                    : "text-[color:color-mix(in_srgb,var(--foreground)_72%,transparent)]"
+                }`}
+              >
                 {kind}
               </p>
-              <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-6xl lg:text-7xl">
+              <h1
+                className={`mt-3 text-3xl font-black tracking-tight sm:text-6xl lg:text-7xl ${
+                  useHeroLightText
+                    ? "text-white"
+                    : "text-[color:var(--foreground)]"
+                }`}
+              >
                 {displayTitle}
               </h1>
               {displayDescription ? (
-                <p className="mt-4 max-w-3xl text-sm text-white/75 md:text-base">
+                <p
+                  className={`mt-4 max-w-3xl text-sm md:text-base ${
+                    useHeroLightText
+                      ? "text-white/75"
+                      : "text-[color:color-mix(in_srgb,var(--foreground)_68%,transparent)]"
+                  }`}
+                >
                   {displayDescription}
                 </p>
               ) : null}
-              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/85 md:text-base">
+              <div
+                className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm md:text-base ${
+                  useHeroLightText
+                    ? "text-white/78"
+                    : "text-[color:color-mix(in_srgb,var(--foreground)_72%,transparent)]"
+                }`}
+              >
                 {displayAuthor ? (
                   <span className="font-semibold">{displayAuthor}</span>
                 ) : null}
@@ -889,21 +957,21 @@ export default function CollectionPage() {
             type="button"
             onClick={handlePrimaryPlay}
             disabled={!entries[0] || !canPlayEntries}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-[#1ed760] text-black transition hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+            className="theme-button-accent flex h-14 w-14 items-center justify-center rounded-full transition hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             aria-label={t("collection.playCollection")}
           >
             <PlayGlyph className="h-6 w-6" />
           </button>
           <button
             type="button"
-            className="rounded-full p-2.5 text-white/75 transition hover:bg-white/8 hover:text-white"
+            className="theme-button-soft rounded-full p-2.5 text-[color:color-mix(in_srgb,var(--foreground)_75%,transparent)] transition hover:text-[color:var(--foreground)]"
             aria-label={t("collection.likeCollection")}
           >
             <HeartGlyph />
           </button>
           <button
             type="button"
-            className="rounded-full p-2.5 text-white/75 transition hover:bg-white/8 hover:text-white"
+            className="theme-button-soft rounded-full p-2.5 text-[color:color-mix(in_srgb,var(--foreground)_75%,transparent)] transition hover:text-[color:var(--foreground)]"
             aria-label={t("collection.moreActions")}
           >
             <MoreGlyph />
@@ -912,7 +980,7 @@ export default function CollectionPage() {
             <button
               type="button"
               onClick={() => setIsDeleteModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full border border-white/12 px-4 py-2.5 text-sm font-semibold text-white/78 transition hover:border-white/18 hover:bg-white/8 hover:text-white"
+              className="theme-button-soft inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold text-[color:color-mix(in_srgb,var(--foreground)_78%,transparent)] transition hover:text-[color:var(--foreground)]"
               aria-label={t("collection.removePlaylistAction")}
             >
               <TrashGlyph />
@@ -927,7 +995,7 @@ export default function CollectionPage() {
           </div>
         ) : entries.length > 0 ? (
           <div className="mt-8">
-            <div className="grid grid-cols-[32px_minmax(0,1fr)_52px] gap-3 border-b border-white/10 px-3 pb-3 text-[11px] uppercase tracking-[0.18em] text-white/45 sm:grid-cols-[42px_minmax(0,1fr)_64px] md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px]">
+            <div className="grid grid-cols-[32px_minmax(0,1fr)_52px] gap-3 border-b border-[color:var(--border-subtle)] px-3 pb-3 text-[11px] uppercase tracking-[0.18em] text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)] sm:grid-cols-[42px_minmax(0,1fr)_64px] md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px]">
               <div className="text-center">#</div>
               <div>{t("collection.titleColumn")}</div>
               <div className="hidden truncate md:block">
@@ -954,17 +1022,21 @@ export default function CollectionPage() {
                         ? () => void handleEntryPress(entry)
                         : undefined
                     }
-                    className={`group grid w-full grid-cols-[32px_minmax(0,1fr)_52px] items-center gap-3 rounded-md px-3 py-2.5 text-left transition hover:bg-white/10 sm:grid-cols-[42px_minmax(0,1fr)_64px] md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px] ${
-                      isActiveTrack ? "bg-white/8" : ""
+                    className={`group grid w-full grid-cols-[32px_minmax(0,1fr)_52px] items-center gap-3 rounded-md px-3 py-2.5 text-left transition hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_6%)] sm:grid-cols-[42px_minmax(0,1fr)_64px] md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px] ${
+                      isActiveTrack
+                        ? "bg-[color:color-mix(in_srgb,var(--surface-3)_86%,var(--foreground)_4%)]"
+                        : ""
                     }`}
                   >
                     <div
                       className={`flex h-6 items-center justify-center text-sm ${
-                        isActiveTrack ? "text-[#1ed760]" : "text-white/55"
+                        isActiveTrack
+                          ? "text-[color:var(--theme-accent)]"
+                          : "text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]"
                       }`}
                     >
                       {isLoadingTrack ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent" />
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)] border-t-transparent" />
                       ) : isActiveTrack && isPlaying ? (
                         <EqualizerGlyph />
                       ) : (
@@ -972,7 +1044,7 @@ export default function CollectionPage() {
                           <span className="group-hover:hidden">
                             {index + 1}
                           </span>
-                          <span className="hidden text-white group-hover:flex">
+                          <span className="hidden text-[color:var(--foreground)] group-hover:flex">
                             <PlayGlyph className="h-3.5 w-3.5" />
                           </span>
                         </>
@@ -986,22 +1058,24 @@ export default function CollectionPage() {
                           alt=""
                           width={44}
                           height={44}
-                          className="h-11 w-11 rounded object-cover bg-white/10"
+                          className="theme-surface-soft h-11 w-11 rounded object-cover"
                           unoptimized
                         />
                       ) : (
-                        <div className="h-11 w-11 rounded bg-white/10" />
+                        <div className="theme-surface-soft h-11 w-11 rounded" />
                       )}
 
                       <div className="min-w-0">
                         <p
                           className={`truncate text-sm font-medium ${
-                            isActiveTrack ? "text-[#1ed760]" : "text-white"
+                            isActiveTrack
+                              ? "text-[color:var(--theme-accent)]"
+                              : "text-[color:var(--foreground)]"
                           }`}
                         >
                           {entry.title}
                         </p>
-                        <p className="truncate text-xs text-white/60">
+                        <p className="truncate text-xs text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)]">
                           {entry.artist ||
                             entry.subtitle ||
                             displayAuthor ||
@@ -1010,11 +1084,11 @@ export default function CollectionPage() {
                       </div>
                     </div>
 
-                    <p className="hidden truncate text-sm text-white/60 md:block">
+                    <p className="hidden truncate text-sm text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] md:block">
                       {entry.album || displayTitle}
                     </p>
 
-                    <p className="hidden text-sm text-white/45 md:block">
+                    <p className="hidden text-sm text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)] md:block">
                       {entry.addedAt
                         ? (() => {
                             const date = new Date(entry.addedAt);
@@ -1029,14 +1103,14 @@ export default function CollectionPage() {
                         : t("collection.recently")}
                     </p>
 
-                    <div className="flex items-center justify-end gap-3 text-sm text-white/55">
-                      <span className="hidden text-white/60 opacity-0 transition group-hover:opacity-100 lg:flex">
+                    <div className="flex items-center justify-end gap-3 text-sm text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]">
+                      <span className="hidden text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] opacity-0 transition group-hover:opacity-100 lg:flex">
                         <HeartGlyph />
                       </span>
                       <span className="tabular-nums">
                         {formatDuration(entry.duration)}
                       </span>
-                      <span className="hidden text-white/60 opacity-0 transition group-hover:opacity-100 lg:flex">
+                      <span className="hidden text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] opacity-0 transition group-hover:opacity-100 lg:flex">
                         <MoreGlyph />
                       </span>
                     </div>
@@ -1047,10 +1121,10 @@ export default function CollectionPage() {
           </div>
         ) : remoteState.isLoading ? (
           <div className="mt-8 flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[color:var(--foreground)] border-t-transparent" />
           </div>
         ) : (
-          <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white/55">
+          <div className="theme-surface-soft mt-6 rounded-2xl border p-5 text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]">
             {t("collection.noMappedTracks", { kind })}
           </div>
         )}

@@ -46,7 +46,7 @@ export const ArtistCard = memo<ArtistCardProps>(({ item, onPress }) => {
   return (
     <button
       onClick={onPress}
-      className="flex flex-col items-center gap-2 p-3 hover:bg-neutral-800/50 rounded-lg transition-colors min-w-[140px] max-w-[140px]"
+      className="flex min-w-[140px] max-w-[140px] flex-col items-center gap-2 rounded-lg p-3 transition-colors hover:bg-[color:color-mix(in_srgb,var(--foreground)_6%,transparent)]"
     >
       {/* Circular Avatar - 120px */}
       {thumbnail ? (
@@ -59,16 +59,16 @@ export const ArtistCard = memo<ArtistCardProps>(({ item, onPress }) => {
           unoptimized
         />
       ) : (
-        <div className="w-[120px] h-[120px] rounded-full bg-neutral-700" />
+        <div className="theme-surface-soft h-[120px] w-[120px] rounded-full border" />
       )}
 
       {/* Artist Name & Subscribers */}
-      <div className="text-center w-full">
-        <h3 className="text-white text-sm font-medium truncate px-1">
+      <div className="w-full text-center">
+        <h3 className="truncate px-1 text-sm font-medium text-[color:var(--foreground)]">
           {displayName}
         </h3>
         {subCountLabel && (
-          <p className="text-neutral-400 text-xs mt-0.5 truncate px-1">
+          <p className="theme-muted mt-0.5 truncate px-1 text-xs">
             {subCountLabel}
           </p>
         )}

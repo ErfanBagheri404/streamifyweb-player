@@ -7,6 +7,7 @@ import React, {
   useRef,
   useEffect,
   useCallback,
+  useMemo,
   ReactNode,
 } from "react";
 import { useSettings } from "./SettingsContext";
@@ -19,6 +20,11 @@ const DEFAULT_PLAYBACK_ERROR =
   "Couldn't play this track. Try again or choose another one.";
 const AUTO_RETRY_STORAGE_KEY = "streamifyAutoRetryPlayback";
 const AUTO_RETRY_MESSAGE = "Auto retry is enabled and retrying...";
+const PLAYBACK_PROGRESS_UPDATE_MS = 250;
+const PLAYBACK_PROGRESS_MIN_DELTA_SECONDS = 0.2;
+const PLAYBACK_DURATION_MIN_DELTA_SECONDS = 0.5;
+const MEDIA_SESSION_POSITION_UPDATE_MS = 1000;
+const MEDIA_SESSION_POSITION_MIN_DELTA_SECONDS = 1;
 
 export interface Song {
   id: string;
@@ -128,8 +134,11 @@ interface SoundCloudWidgetApi {
 
 let soundCloudWidgetApiPromise: Promise<SoundCloudWidgetApi> | null = null;
 
-const DEBUG_SERVER_URL = "";
-const DEBUG_SESSION_ID = "soundcloud-widget-regression";
+const DEBUG_SERVER_URL =
+  process.env.NEXT_PUBLIC_STREAMIFY_DEBUG_SERVER_URL?.trim() || "";
+const DEBUG_SESSION_ID =
+  process.env.NEXT_PUBLIC_STREAMIFY_DEBUG_SESSION_ID?.trim() ||
+  "chrome-alt-tab-freeze";
 
 function reportDebugEvent(
   runId: string,
@@ -606,11 +615,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const currentSongRef = useRef<Song | null>(null);
   const recentSongsRef = useRef<Song[]>([]);
   const autoRetryPreferenceRef = useRef<AutoRetryPreference>("unknown");
-  const playbackRunIdRef = useRef("post-fix");
+  const playbackRunIdRef = useRef("pre-fix");
   const isRepeatRef = useRef(false);
   const playbackQueueRef = useRef<Song[]>([]);
   const queueIndexRef = useRef(-1);
   const volumeRef = useRef(1);
+  const lastMediaSessionPositionRef = useRef(0);
+  const lastMediaSessionPositionUpdateRef = useRef(0);
   const hlsControllerRef = useRef<{ destroy: () => void } | null>(null);
   const hlsSourceRef = useRef<string | null>(null);
   const shakaPlayerRef = useRef<{
@@ -644,6 +655,29 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       audio.pause();
     } catch {}
   }, []);
+
+  const syncPlaybackStateFromElement = useCallback(
+    (audio: HTMLAudioElement, fallbackDuration?: number) => {
+      const nextTime = Number.isFinite(audio.currentTime)
+        ? Math.max(0, audio.currentTime)
+        : 0;
+      const nextDuration = Number.isFinite(audio.duration)
+        ? Math.max(0, audio.duration)
+        : fallbackDuration || 0;
+
+      setCurrentTime((previous) =>
+        Math.abs(previous - nextTime) >= PLAYBACK_PROGRESS_MIN_DELTA_SECONDS
+          ? nextTime
+          : previous
+      );
+      setDuration((previous) =>
+        Math.abs(previous - nextDuration) >= PLAYBACK_DURATION_MIN_DELTA_SECONDS
+          ? nextDuration
+          : previous
+      );
+    },
+    []
+  );
 
   const setTransientAutoRetryStatus = useCallback((message: string | null) => {
     if (autoRetryStatusTimerRef.current !== null) {
@@ -1050,6 +1084,69 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     if (!playbackError || !currentSong || isSongLoading) return;
     scheduleAutoRetry(currentSong, "playback-error");
   }, [currentSong, isSongLoading, playbackError]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const emitWindowState = (reason: string) => {
+      // #region debug-point H3:window-lifecycle
+      reportDebugEvent(
+        playbackRunIdRef.current,
+        "H3",
+        "app/contexts/AudioContext.tsx:window-lifecycle",
+        "[DEBUG] window lifecycle signal",
+        {
+          reason,
+          songId: currentSongRef.current?.id || null,
+          isPlaying: !audioRef.current?.paused && !audioRef.current?.ended,
+          stateIsPlaying: isPlaying,
+          isSongLoading,
+          isFullscreenOpen,
+          hasFocus:
+            typeof document.hasFocus === "function"
+              ? document.hasFocus()
+              : null,
+          hidden: document.hidden,
+          visibilityState: document.visibilityState,
+          playbackError,
+          showAutoRetryPrompt,
+          autoRetryStatusMessage,
+        }
+      );
+      // #endregion
+    };
+
+    const handleVisibilityChange = () => emitWindowState("visibilitychange");
+    const handleFocus = () => emitWindowState("focus");
+    const handleBlur = () => emitWindowState("blur");
+    const handlePageHide = () => emitWindowState("pagehide");
+    const handlePageShow = () => emitWindowState("pageshow");
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", handlePageShow);
+
+    emitWindowState("effect-mounted");
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, [
+    autoRetryStatusMessage,
+    isFullscreenOpen,
+    isPlaying,
+    isSongLoading,
+    playbackError,
+    showAutoRetryPrompt,
+  ]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -2234,8 +2331,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     if (shouldUseSoundCloudWidget(currentSong)) return;
 
     const syncPlaybackState = () => {
-      setCurrentTime(audio.currentTime || 0);
-      setDuration(audio.duration || currentSong?.duration || 0);
+      syncPlaybackStateFromElement(audio, currentSong.duration || 0);
     };
 
     syncPlaybackState();
@@ -2253,7 +2349,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       audio.removeEventListener("seeking", syncPlaybackState);
       audio.removeEventListener("seeked", syncPlaybackState);
     };
-  }, [currentSong?.duration]);
+  }, [currentSong?.duration, currentSong?.id, syncPlaybackStateFromElement]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -2420,28 +2516,28 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !isPlaying || shouldUseSoundCloudWidget(currentSong)) {
-      if (playbackFrameRef.current !== null) {
-        cancelAnimationFrame(playbackFrameRef.current);
-        playbackFrameRef.current = null;
-      }
       return;
     }
 
-    const syncPlaybackFrame = () => {
-      setCurrentTime(audio.currentTime || 0);
-      setDuration(audio.duration || currentSong?.duration || 0);
-      playbackFrameRef.current = requestAnimationFrame(syncPlaybackFrame);
+    const syncPlaybackProgress = () => {
+      syncPlaybackStateFromElement(audio, currentSong?.duration || 0);
     };
 
-    playbackFrameRef.current = requestAnimationFrame(syncPlaybackFrame);
+    syncPlaybackProgress();
+    const timer = window.setInterval(
+      syncPlaybackProgress,
+      PLAYBACK_PROGRESS_UPDATE_MS
+    );
 
     return () => {
-      if (playbackFrameRef.current !== null) {
-        cancelAnimationFrame(playbackFrameRef.current);
-        playbackFrameRef.current = null;
-      }
+      window.clearInterval(timer);
     };
-  }, [currentSong, currentSong?.duration, isPlaying]);
+  }, [
+    currentSong,
+    currentSong?.duration,
+    isPlaying,
+    syncPlaybackStateFromElement,
+  ]);
 
   const applyPlaybackOptions = (
     song: Song,
@@ -2565,7 +2661,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
 
     const resolvedId =
-      typeof payload.id === "string" && payload.id.trim() ? payload.id : song.id;
+      typeof payload.id === "string" && payload.id.trim()
+        ? payload.id
+        : song.id;
     const resolvedTitle =
       typeof payload.title === "string" && payload.title.trim()
         ? payload.title
@@ -3224,15 +3322,31 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       artwork: buildSongArtwork(currentSong),
     });
 
-    mediaSession.playbackState = isPlaying ? "playing" : "paused";
-
-    try {
-      mediaSession.setPositionState?.({
+    // #region debug-point H1:media-session-update
+    reportDebugEvent(
+      playbackRunIdRef.current,
+      "H1",
+      "app/contexts/AudioContext.tsx:media-session-update",
+      "[DEBUG] media session updated",
+      {
+        songId: currentSong.id,
+        source: currentSong.source || null,
+        isPlaying,
         duration: duration || currentSong.duration || 0,
-        playbackRate: 1,
-        position: currentTime,
-      });
-    } catch {}
+        hasArtwork: buildSongArtwork(currentSong).length > 0,
+        hasFocus:
+          typeof document !== "undefined" &&
+          typeof document.hasFocus === "function"
+            ? document.hasFocus()
+            : null,
+        hidden: typeof document !== "undefined" ? document.hidden : null,
+        visibilityState:
+          typeof document !== "undefined" ? document.visibilityState : null,
+      }
+    );
+    // #endregion
+
+    mediaSession.playbackState = isPlaying ? "playing" : "paused";
 
     const setHandler = (
       action: MediaSessionAction,
@@ -3284,7 +3398,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     };
   }, [
     currentSong,
-    currentTime,
     duration,
     isPlaying,
     pauseSong,
@@ -3297,44 +3410,181 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     settings.seekStepSeconds,
   ]);
 
-  const value: AudioContextType = {
+  useEffect(() => {
+    if (
+      typeof navigator === "undefined" ||
+      !("mediaSession" in navigator) ||
+      !currentSong
+    ) {
+      lastMediaSessionPositionRef.current = 0;
+      lastMediaSessionPositionUpdateRef.current = 0;
+      return;
+    }
+
+    const effectiveDuration = duration || currentSong.duration || 0;
+    if (!Number.isFinite(effectiveDuration) || effectiveDuration <= 0) {
+      return;
+    }
+
+    const safePosition = Math.min(
+      Math.max(currentTime, 0),
+      Math.max(effectiveDuration, 0)
+    );
+    const now = Date.now();
+    const elapsedMs = now - lastMediaSessionPositionUpdateRef.current;
+    const deltaSeconds = Math.abs(
+      safePosition - lastMediaSessionPositionRef.current
+    );
+    const shouldForceUpdate =
+      !isPlaying ||
+      safePosition <= PLAYBACK_PROGRESS_MIN_DELTA_SECONDS ||
+      Math.abs(effectiveDuration - safePosition) <=
+        MEDIA_SESSION_POSITION_MIN_DELTA_SECONDS;
+
+    if (
+      !shouldForceUpdate &&
+      elapsedMs < MEDIA_SESSION_POSITION_UPDATE_MS &&
+      deltaSeconds < MEDIA_SESSION_POSITION_MIN_DELTA_SECONDS
+    ) {
+      return;
+    }
+
+    try {
+      navigator.mediaSession.setPositionState?.({
+        duration: effectiveDuration,
+        playbackRate: 1,
+        position: safePosition,
+      });
+      lastMediaSessionPositionRef.current = safePosition;
+      lastMediaSessionPositionUpdateRef.current = now;
+    } catch (error) {
+      // #region debug-point H1:media-session-position-error
+      reportDebugEvent(
+        playbackRunIdRef.current,
+        "H1",
+        "app/contexts/AudioContext.tsx:media-session-position-error",
+        "[DEBUG] media session setPositionState failed",
+        {
+          songId: currentSong.id,
+          error:
+            error instanceof Error ? error.message : String(error || "unknown"),
+        }
+      );
+      // #endregion
+    }
+  }, [currentSong, currentTime, duration, isPlaying]);
+
+  useEffect(() => {
+    if (!currentSong && !playbackError && !showAutoRetryPrompt) return;
+
+    // #region debug-point H2:playback-ui-state
+    reportDebugEvent(
+      playbackRunIdRef.current,
+      "H2",
+      "app/contexts/AudioContext.tsx:playback-ui-state",
+      "[DEBUG] playback ui state changed",
+      {
+        songId: currentSong?.id || null,
+        isPlaying,
+        isSongLoading,
+        playbackError,
+        showAutoRetryPrompt,
+        autoRetryStatusMessage,
+        hasFocus:
+          typeof document !== "undefined" &&
+          typeof document.hasFocus === "function"
+            ? document.hasFocus()
+            : null,
+        hidden: typeof document !== "undefined" ? document.hidden : null,
+        visibilityState:
+          typeof document !== "undefined" ? document.visibilityState : null,
+      }
+    );
+    // #endregion
+  }, [
+    autoRetryStatusMessage,
     currentSong,
-    recentSongs,
-    playbackQueue,
-    queueIndex,
     isPlaying,
     isSongLoading,
-    currentTime,
-    duration,
-    volume,
-    isRepeat,
-    beginSongLoad,
-    playSong,
-    resolveAndPlaySong,
-    clearSongLoading,
-    pauseSong,
-    resumeSong,
-    seekTo,
-    setVolume,
-    toggleRepeat,
-    playNext,
-    playPrevious,
-    playQueueIndex,
-    isFullscreenOpen,
-    openFullscreen,
-    closeFullscreen,
-    audioRef,
     playbackError,
-    isPlayerVisible: currentSong !== null, // Player is visible if a song is loaded
-    autoRetryPreference,
     showAutoRetryPrompt,
-    isAutoRetrying,
-    autoRetryStatusMessage,
-    enableAutoRetry,
-    disableAutoRetry,
-    resetAutoRetryPreference,
-    dismissAutoRetryPrompt,
-  };
+  ]);
+
+  const value = useMemo<AudioContextType>(
+    () => ({
+      currentSong,
+      recentSongs,
+      playbackQueue,
+      queueIndex,
+      isPlaying,
+      isSongLoading,
+      currentTime,
+      duration,
+      volume,
+      isRepeat,
+      beginSongLoad,
+      playSong,
+      resolveAndPlaySong,
+      clearSongLoading,
+      pauseSong,
+      resumeSong,
+      seekTo,
+      setVolume,
+      toggleRepeat,
+      playNext,
+      playPrevious,
+      playQueueIndex,
+      isFullscreenOpen,
+      openFullscreen,
+      closeFullscreen,
+      audioRef,
+      playbackError,
+      isPlayerVisible: currentSong !== null,
+      autoRetryPreference,
+      showAutoRetryPrompt,
+      isAutoRetrying,
+      autoRetryStatusMessage,
+      enableAutoRetry,
+      disableAutoRetry,
+      resetAutoRetryPreference,
+      dismissAutoRetryPrompt,
+    }),
+    [
+      currentSong,
+      recentSongs,
+      playbackQueue,
+      queueIndex,
+      isPlaying,
+      isSongLoading,
+      currentTime,
+      duration,
+      volume,
+      isRepeat,
+      beginSongLoad,
+      playSong,
+      resolveAndPlaySong,
+      pauseSong,
+      resumeSong,
+      seekTo,
+      setVolume,
+      toggleRepeat,
+      playNext,
+      playPrevious,
+      playQueueIndex,
+      isFullscreenOpen,
+      openFullscreen,
+      closeFullscreen,
+      playbackError,
+      autoRetryPreference,
+      showAutoRetryPrompt,
+      isAutoRetrying,
+      autoRetryStatusMessage,
+      enableAutoRetry,
+      disableAutoRetry,
+      resetAutoRetryPreference,
+      dismissAutoRetryPrompt,
+    ]
+  );
 
   // Browser-console diagnostic so the user can verify the proxy is
   // reachable, that CORS works, and that the upstream license server

@@ -24,7 +24,17 @@ export type AppTheme =
   | "lagoon"
   | "ruby"
   | "olive"
-  | "starlight";
+  | "starlight"
+  | "dawn"
+  | "mist"
+  | "petal"
+  | "meadow"
+  | "daybreak"
+  | "linen"
+  | "sky"
+  | "lavender"
+  | "peach"
+  | "mint";
 
 export type AppLanguage = "en" | "fa";
 
@@ -44,6 +54,18 @@ export interface AppSettings {
 
 export const APP_SETTINGS_STORAGE_KEY = "streamifyAppSettings";
 export const SEEK_STEP_OPTIONS = [5, 10, 15, 30] as const;
+export const LIGHT_APP_THEMES = [
+  "dawn",
+  "mist",
+  "petal",
+  "meadow",
+  "daybreak",
+  "linen",
+  "sky",
+  "lavender",
+  "peach",
+  "mint",
+] as const;
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   autoplayRecommendations: true,
@@ -82,8 +104,22 @@ function isAppTheme(value: unknown): value is AppTheme {
     value === "lagoon" ||
     value === "ruby" ||
     value === "olive" ||
-    value === "starlight"
+    value === "starlight" ||
+    value === "dawn" ||
+    value === "mist" ||
+    value === "petal" ||
+    value === "meadow" ||
+    value === "daybreak" ||
+    value === "linen" ||
+    value === "sky" ||
+    value === "lavender" ||
+    value === "peach" ||
+    value === "mint"
   );
+}
+
+export function isLightAppTheme(theme: AppTheme): boolean {
+  return (LIGHT_APP_THEMES as readonly AppTheme[]).includes(theme);
 }
 
 function isPreferredSearchSource(

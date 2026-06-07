@@ -42,8 +42,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             disabled={source.id === "spotify"}
             className={`h-9 rounded-full border px-5 text-sm font-bold uppercase transition-colors ${
               selectedSource === source.id
-                ? "text-black"
-                : "theme-button-soft text-white/70"
+                ? "text-[color:var(--theme-accent-contrast)]"
+                : "theme-button-soft text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)]"
             } ${source.id === "spotify" ? "opacity-50 cursor-not-allowed" : ""}`}
             style={{
               backgroundColor:

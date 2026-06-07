@@ -307,6 +307,7 @@ export default function FullscreenPlayer() {
     closeFullscreen,
     playQueueIndex,
     resolveAndPlaySong,
+    isPlayerVisible,
   } = useAudio();
   const [relatedPalette, setRelatedPalette] = useState(DEFAULT_PALETTE);
   const [lyricsText, setLyricsText] = useState("");
@@ -809,8 +810,17 @@ export default function FullscreenPlayer() {
     );
   };
 
+  const overlayButtonClass =
+    "inline-flex items-center gap-2 rounded-full border border-white/14 bg-black/30 px-3 py-2 text-xs font-medium text-[rgb(255,255,255)] backdrop-blur-md transition hover:bg-black/40 sm:px-4 sm:text-sm";
+  const accentOverlayButtonClass =
+    "inline-flex items-center gap-2 rounded-full border border-transparent bg-[color:var(--theme-accent)] px-3 py-2 text-xs font-medium text-[color:var(--theme-accent-contrast)] backdrop-blur-md transition hover:brightness-[1.03] sm:px-4 sm:text-sm";
+
   return (
-    <div className="relative h-full w-full min-w-0 overflow-x-hidden overflow-y-auto rounded-xl lg:overflow-hidden">
+    <div
+      className={`relative h-full w-full min-w-0 overflow-x-hidden overflow-y-auto rounded-xl lg:overflow-hidden ${
+        isPlayerVisible ? "lg:h-[calc(100%-5rem)]" : ""
+      }`}
+    >
       <div
         className={`pointer-events-none absolute left-1/2 top-4 z-40 flex -translate-x-1/2 transition-all duration-200 ${
           feedbackMessage
@@ -824,7 +834,7 @@ export default function FullscreenPlayer() {
       </div>
 
       <div
-        className={`absolute inset-0 z-30 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm transition-all duration-200 ${
+        className={`theme-overlay absolute inset-0 z-30 flex items-center justify-center p-4 backdrop-blur-sm transition-all duration-200 ${
           isPlaylistPickerOpen
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0"
@@ -832,27 +842,27 @@ export default function FullscreenPlayer() {
         onClick={() => setIsPlaylistPickerOpen(false)}
       >
         <div
-          className={`w-full max-w-md rounded-[28px] border border-white/10 bg-[#161616]/95 p-5 shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-2xl transition-all duration-200 ${
+          className={`theme-surface w-full max-w-md rounded-[28px] border p-5 shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-2xl transition-all duration-200 ${
             isPlaylistPickerOpen ? "scale-100" : "scale-95"
           }`}
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">
+              <p className="theme-muted text-xs font-semibold uppercase tracking-[0.22em]">
                 {t("fullscreen.addToPlaylist")}
               </p>
-              <h3 className="mt-2 text-2xl font-semibold text-white">
+              <h3 className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
                 {t("fullscreen.choosePlaylist")}
               </h3>
-              <p className="mt-1 text-sm text-white/55">
+              <p className="theme-muted mt-1 text-sm">
                 {t("fullscreen.saveTrackToPlaylist")}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setIsPlaylistPickerOpen(false)}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none text-white/70 transition hover:bg-white/8 hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)] transition hover:bg-[color:color-mix(in_srgb,var(--foreground)_8%,transparent)] hover:text-[color:var(--foreground)]"
               aria-label={t("fullscreen.closePlaylistPicker")}
             >
               ×
@@ -869,9 +879,9 @@ export default function FullscreenPlayer() {
                   key={playlist.id}
                   type="button"
                   onClick={() => handleAddCurrentSongToPlaylist(playlist.id)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.035] px-3 py-3 text-left transition hover:border-white/14 hover:bg-white/[0.06]"
+                  className="theme-button-soft flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition hover:border-[color:color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--surface-3)_70%,var(--foreground)_6%)]"
                 >
-                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white/8">
+                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-[color:color-mix(in_srgb,var(--foreground)_8%,transparent)]">
                     {playlist.songs[0]?.coverUrl ? (
                       <Image
                         src={playlist.songs[0].coverUrl}
@@ -882,20 +892,20 @@ export default function FullscreenPlayer() {
                         unoptimized
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-white/45">
+                      <div className="theme-muted flex h-full w-full items-center justify-center">
                         <PlusGlyph />
                       </div>
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-white">
+                    <p className="truncate text-sm font-semibold text-[color:var(--foreground)]">
                       {playlist.name}
                     </p>
-                    <p className="mt-1 truncate text-xs text-white/55">
+                    <p className="theme-muted mt-1 truncate text-xs">
                       {playlist.description || t("fullscreen.yourPlaylist")}
                     </p>
                   </div>
-                  <span className="text-xs text-white/45">
+                  <span className="theme-muted text-xs">
                     {t("fullscreen.songCount", {
                       count: playlist.songs.length,
                     })}
@@ -904,11 +914,11 @@ export default function FullscreenPlayer() {
               ))}
             </div>
           ) : (
-            <div className="mt-5 rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-5 py-8 text-center">
-              <p className="text-base font-medium text-white">
+            <div className="theme-surface-soft mt-5 rounded-3xl border border-dashed px-5 py-8 text-center">
+              <p className="text-base font-medium text-[color:var(--foreground)]">
                 {t("fullscreen.noPlaylistsYet")}
               </p>
-              <p className="mt-2 text-sm text-white/55">
+              <p className="theme-muted mt-2 text-sm">
                 {t("fullscreen.createOneFromLibrary")}
               </p>
             </div>
@@ -916,7 +926,7 @@ export default function FullscreenPlayer() {
         </div>
       </div>
 
-      <div className="grid min-h-full w-full min-w-0 gap-2 overflow-x-hidden bg-[#070707] lg:h-full lg:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)]">
+      <div className="grid min-h-full w-full min-w-0 gap-2 overflow-x-hidden lg:h-full lg:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)]">
         <section className="relative min-h-[54svh] min-w-0 overflow-hidden rounded-xl bg-[#8a1207] lg:min-h-[320px]">
           {currentSong.coverUrl ? (
             <>
@@ -938,7 +948,7 @@ export default function FullscreenPlayer() {
             <button
               type="button"
               onClick={closeFullscreen}
-              className="inline-flex items-center gap-2 rounded-full bg-black/25 px-3 py-2 text-xs font-medium text-white backdrop-blur-md transition hover:bg-black/35 sm:px-4 sm:text-sm"
+              className={overlayButtonClass}
             >
               {t("fullscreen.minimize")}
               <ChevronDownGlyph />
@@ -946,7 +956,7 @@ export default function FullscreenPlayer() {
             <button
               type="button"
               onClick={() => setIsPlaylistPickerOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full bg-black/25 px-3 py-2 text-xs font-medium text-white backdrop-blur-md transition hover:bg-black/35 sm:px-4 sm:text-sm"
+              className={overlayButtonClass}
             >
               {t("fullscreen.addToPlaylist")}
               <PlusGlyph />
@@ -954,10 +964,10 @@ export default function FullscreenPlayer() {
             <button
               type="button"
               onClick={handleToggleLike}
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium backdrop-blur-md transition sm:px-4 sm:text-sm ${
+              className={`${
                 isCurrentSongLiked
-                  ? "bg-[#1ed760] text-black hover:bg-[#3be477]"
-                  : "bg-black/25 text-white hover:bg-black/35"
+                  ? accentOverlayButtonClass
+                  : overlayButtonClass
               }`}
             >
               {isCurrentSongLiked
@@ -967,15 +977,15 @@ export default function FullscreenPlayer() {
             </button>
           </div>
 
-          <div className="absolute bottom-2 left-2 right-2 rounded-xl bg-black/25 px-4 py-4 backdrop-blur-xl sm:px-6 sm:py-5 md:px-7">
-            <p className="text-xs text-white/70 sm:text-sm">
+          <div className="theme-overlay absolute bottom-2 left-2 right-2 rounded-xl border px-4 py-4 backdrop-blur-xl sm:px-6 sm:py-5 md:px-7">
+            <p className="text-xs text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)] sm:text-sm">
               {t("common.song")}
             </p>
-            <h2 className="mt-1 text-xl font-semibold text-white sm:text-2xl md:text-3xl">
+            <h2 className="mt-1 text-xl font-semibold text-[color:var(--foreground)] sm:text-2xl md:text-3xl">
               {currentSong.title}
             </h2>
             {songMeta ? (
-              <p className="mt-2 text-xs text-white/75 sm:text-sm md:text-base">
+              <p className="mt-2 text-xs text-[color:color-mix(in_srgb,var(--foreground)_75%,transparent)] sm:text-sm md:text-base">
                 {songMeta}
               </p>
             ) : null}
@@ -987,10 +997,10 @@ export default function FullscreenPlayer() {
             <div className="flex min-h-0 flex-1 flex-col rounded-[24px]">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="mt-1 truncate text-base font-semibold text-white sm:text-lg">
+                  <p className="mt-1 truncate text-base font-semibold text-[color:var(--foreground)] sm:text-lg">
                     {currentSong.title}
                   </p>
-                  <p className="text-sm text-white/55">
+                  <p className="theme-muted text-sm">
                     {settings.lyricsEnabled
                       ? settings.autoScrollLyrics
                         ? t("fullscreen.lyrics")
@@ -1001,7 +1011,7 @@ export default function FullscreenPlayer() {
                 <button
                   type="button"
                   onClick={closeFullscreen}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl leading-none text-white/70 transition hover:bg-white/8 hover:text-white"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl leading-none text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)] transition hover:bg-[color:color-mix(in_srgb,var(--foreground)_8%,transparent)] hover:text-[color:var(--foreground)]"
                   aria-label={t("fullscreen.close")}
                 >
                   ×
@@ -1012,13 +1022,13 @@ export default function FullscreenPlayer() {
                 onWheel={markLyricsUserScrollIntent}
                 onTouchStart={markLyricsUserScrollIntent}
                 onScroll={handleLyricsContainerScroll}
-                className="mt-4 max-h-[42svh] flex-1 overflow-y-auto hide-scrollbar text-white/90 lg:mt-5 lg:max-h-none"
+                className="mt-4 max-h-[42svh] flex-1 overflow-y-auto hide-scrollbar text-[color:color-mix(in_srgb,var(--foreground)_90%,transparent)] lg:mt-5 lg:max-h-none"
                 style={{ paddingInlineEnd: "0.25rem" }}
               >
                 <div className="space-y-2 text-base leading-8 sm:text-lg sm:leading-9 md:text-[22px] md:leading-[1.5]">
                   {lyricsState.loading ? (
                     <div className="space-y-3 py-2">
-                      <div className="inline-flex items-center gap-3 rounded-full px-3 py-2 text-white/60">
+                      <div className="theme-muted inline-flex items-center gap-3 rounded-full px-3 py-2">
                         <span className="theme-spinner h-5 w-5" />
                         <span className="loading-dots">
                           {t("common.loadingLyrics")}
@@ -1027,10 +1037,10 @@ export default function FullscreenPlayer() {
                     </div>
                   ) : !settings.lyricsEnabled ? (
                     <div className="theme-surface-soft rounded-xl border p-4">
-                      <p className="font-medium text-white/70">
+                      <p className="font-medium text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)]">
                         {t("fullscreen.lyricsDisabledNow")}
                       </p>
-                      <p className="mt-2 text-sm text-white/50">
+                      <p className="theme-muted mt-2 text-sm">
                         {t("fullscreen.turnLyricsBackOn")}
                       </p>
                     </div>
@@ -1052,12 +1062,12 @@ export default function FullscreenPlayer() {
                             }}
                             className={`block w-full rounded-xl px-2 py-1 text-left transition ${
                               isActive
-                                ? "bg-white/8 font-semibold text-white"
+                                ? "bg-[color:color-mix(in_srgb,var(--foreground)_8%,transparent)] font-semibold text-[color:var(--foreground)]"
                                 : isLyricsManualMode
-                                ? "text-white hover:bg-white/5"
+                                ? "text-[color:var(--foreground)] hover:bg-[color:color-mix(in_srgb,var(--foreground)_5%,transparent)]"
                                 : isPassed
-                                ? "text-white/45"
-                                : "text-white/72 hover:bg-white/5 hover:text-white"
+                                ? "text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)]"
+                                : "text-[color:color-mix(in_srgb,var(--foreground)_72%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--foreground)_5%,transparent)] hover:text-[color:var(--foreground)]"
                             }`}
                             title={`Jump to ${formatTime(line.startTime)}`}
                           >
@@ -1068,21 +1078,21 @@ export default function FullscreenPlayer() {
                     </>
                   ) : plainLyricsText ? (
                     <>
-                      <p className="pb-3 text-sm text-white/40">
+                      <p className="theme-muted pb-3 text-sm">
                         {t("fullscreen.syncedUnavailable")}
                       </p>
-                      <pre className="whitespace-pre-wrap break-words font-sans text-base leading-8 text-white sm:text-lg sm:leading-9 md:text-[22px] md:leading-[1.5]">
+                      <pre className="whitespace-pre-wrap break-words font-sans text-base leading-8 text-[color:var(--foreground)] sm:text-lg sm:leading-9 md:text-[22px] md:leading-[1.5]">
                         {plainLyricsText}
                       </pre>
                     </>
                   ) : (
                     <div className="space-y-3 py-2">
-                      <p className="font-medium text-white/55">
+                      <p className="font-medium text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]">
                         {lyricsState.error ||
                           "Lyrics are not available for this track yet."}
                       </p>
                       <div className="theme-surface-soft rounded-xl border p-4">
-                        <p className="text-sm text-white/70">
+                        <p className="text-sm text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)]">
                           {t("fullscreen.searchLyricsManually")}
                         </p>
                         <div className="mt-3 grid gap-3">
@@ -1093,7 +1103,7 @@ export default function FullscreenPlayer() {
                               setManualLyricsArtist(event.target.value)
                             }
                             placeholder={t("fullscreen.artistName")}
-                            className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-white/25"
+                            className="theme-button-soft rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_25%,transparent)]"
                           />
                           <input
                             type="text"
@@ -1102,7 +1112,7 @@ export default function FullscreenPlayer() {
                               setManualLyricsTitle(event.target.value)
                             }
                             placeholder={t("fullscreen.songTitle")}
-                            className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-white/25"
+                            className="theme-button-soft rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_25%,transparent)]"
                           />
                           <button
                             type="button"
@@ -1114,7 +1124,7 @@ export default function FullscreenPlayer() {
                               (!manualLyricsArtist.trim() &&
                                 !manualLyricsTitle.trim())
                             }
-                            className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+                            className="theme-button-accent inline-flex items-center justify-center rounded-full border border-transparent px-4 py-2 text-sm font-semibold transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
                           >
                             {t("common.tryLyricsSearch")}
                           </button>

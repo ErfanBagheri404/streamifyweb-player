@@ -317,7 +317,7 @@ export default function ArtistPage() {
   };
 
   return (
-    <div className="min-h-full text-white">
+    <div className="min-h-full text-[color:var(--foreground)]">
       <div className="theme-surface-strong relative overflow-hidden rounded-xl border">
         <button
           type="button"
@@ -334,7 +334,7 @@ export default function ArtistPage() {
         </button>
 
         <div
-          className="relative min-h-[220px] bg-neutral-800 sm:min-h-[360px]"
+          className="theme-surface theme-media-hero relative min-h-[220px] sm:min-h-[360px]"
           style={{
             backgroundImage: header.banner
               ? `url(${header.banner})`
@@ -418,12 +418,12 @@ export default function ArtistPage() {
 
         {data ? (
           <div className="relative z-10 -mt-5 px-2 pb-8 sm:-mt-6 sm:px-6">
-            <div className="theme-surface overflow-hidden rounded-xl border border-white/8 shadow-[0_24px_90px_rgba(0,0,0,0.22)]">
+            <div className="theme-surface theme-shadow-strong overflow-hidden rounded-xl border">
               {data.songs.length > 0 ? (
-                <div className="border-b border-white/8 px-3 py-4 sm:px-6 sm:py-6">
+                <div className="border-b border-[color:var(--border-subtle)] px-3 py-4 sm:px-6 sm:py-6">
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h2 className="text-2xl font-bold text-white">
+                      <h2 className="text-2xl font-bold text-[color:var(--foreground)]">
                         {t("artist.popularTracks")}
                       </h2>
                     </div>
@@ -448,9 +448,9 @@ export default function ArtistPage() {
                           type="button"
                           onClick={() => void handleSongPress(song)}
                           disabled={loadingSongId === song.id}
-                          className="group theme-surface-soft grid w-full grid-cols-[24px_40px_minmax(0,1fr)_44px] items-center gap-2 rounded-lg border border-white/8 px-2.5 py-2.5 text-left transition hover:border-white/12 hover:bg-white/[0.05] disabled:cursor-wait disabled:opacity-60 sm:grid-cols-[42px_52px_minmax(0,1fr)_64px] sm:gap-3 sm:px-3 sm:py-3 md:grid-cols-[42px_52px_minmax(0,1fr)_120px_64px]"
+                          className="group theme-surface-soft grid w-full grid-cols-[24px_40px_minmax(0,1fr)_44px] items-center gap-2 rounded-lg border px-2.5 py-2.5 text-left transition hover:border-[color:color-mix(in_srgb,var(--foreground)_12%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_5%)] disabled:cursor-wait disabled:opacity-60 sm:grid-cols-[42px_52px_minmax(0,1fr)_64px] sm:gap-3 sm:px-3 sm:py-3 md:grid-cols-[42px_52px_minmax(0,1fr)_120px_64px]"
                         >
-                          <div className="relative flex h-8 w-8 items-center justify-center text-xs tabular-nums text-white/35 sm:h-10 sm:w-10 sm:text-sm">
+                          <div className="theme-muted relative flex h-8 w-8 items-center justify-center text-xs tabular-nums sm:h-10 sm:w-10 sm:text-sm">
                             <span
                               className={[
                                 "transition-opacity",
@@ -467,7 +467,7 @@ export default function ArtistPage() {
                             </span>
                             {loadingSongId !== song.id ? (
                               <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-                                <PlayGlyph className="h-4 w-4 text-white" />
+                                <PlayGlyph className="h-4 w-4 text-[color:var(--foreground)]" />
                               </span>
                             ) : null}
                           </div>
@@ -482,15 +482,15 @@ export default function ArtistPage() {
                             <div className="theme-surface h-10 w-10 flex-shrink-0 rounded-lg border sm:h-12 sm:w-12 sm:rounded-xl" />
                           )}
                           <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-white sm:text-base">
+                            <div className="truncate text-sm font-medium text-[color:var(--foreground)] sm:text-base">
                               {song.title}
                             </div>
-                            <div className="truncate text-xs text-white/45 sm:text-sm">
+                            <div className="theme-muted truncate text-xs sm:text-sm">
                               {song.artist || header.name}
                             </div>
                           </div>
 
-                          <div className="hidden text-right text-sm tabular-nums text-white/42 md:block">
+                          <div className="hidden text-right text-sm tabular-nums text-[color:color-mix(in_srgb,var(--foreground)_42%,transparent)] md:block">
                             {song.views != null && song.views > 0
                               ? t("artist.views", {
                                   count: formatCount(song.views),
@@ -498,7 +498,7 @@ export default function ArtistPage() {
                               : ""}
                           </div>
 
-                          <div className="text-right text-xs tabular-nums text-white/42 sm:text-sm">
+                          <div className="text-right text-xs tabular-nums text-[color:color-mix(in_srgb,var(--foreground)_42%,transparent)] sm:text-sm">
                             {formatDuration(song.duration)}
                           </div>
                         </button>
@@ -506,8 +506,8 @@ export default function ArtistPage() {
                     </div>
 
                     {featuredSong ? (
-                      <div className="theme-surface-soft flex flex-col self-start overflow-hidden rounded-xl border border-white/8 p-4">
-                        <div className="relative h-[220px] overflow-hidden rounded-lg">
+                      <div className="theme-surface-soft flex flex-col self-start overflow-hidden rounded-xl border p-4">
+                        <div className="theme-media-hero relative h-[220px] overflow-hidden rounded-lg">
                           {featuredSong.thumbnail ? (
                             <img
                               src={featuredSong.thumbnail}
@@ -519,29 +519,29 @@ export default function ArtistPage() {
                           )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
                           <div className="absolute inset-x-0 bottom-0 p-4">
-                            <div className="inline-flex rounded-full border border-white/12 bg-black/35 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/72">
+                            <div className="theme-overlay inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
                               {t("artist.mostPlayed")}
                             </div>
                             <h3 className="mt-3 line-clamp-2 text-2xl font-black tracking-tight text-white">
                               {featuredSong.title}
                             </h3>
-                            <p className="mt-1 text-sm text-white/62">
+                            <p className="mt-1 text-sm text-[color:color-mix(in_srgb,white_62%,transparent)]">
                               {featuredSong.artist || header.name}
                             </p>
                           </div>
                         </div>
 
-                        <div className="mt-4 flex flex-wrap gap-2 text-sm text-white/68">
+                        <div className="mt-4 flex flex-wrap gap-2 text-sm text-[color:color-mix(in_srgb,var(--foreground)_68%,transparent)]">
                           {featuredSong.views != null &&
                           featuredSong.views > 0 ? (
-                            <span className="rounded-full border border-white/10 bg-black/18 px-3 py-1.5">
+                            <span className="theme-surface rounded-full border px-3 py-1.5">
                               {t("artist.views", {
                                 count: formatCount(featuredSong.views),
                               })}
                             </span>
                           ) : null}
                           {featuredSong.duration ? (
-                            <span className="rounded-full border border-white/10 bg-black/18 px-3 py-1.5">
+                            <span className="theme-surface rounded-full border px-3 py-1.5">
                               {formatDuration(featuredSong.duration)}
                             </span>
                           ) : null}
@@ -561,13 +561,13 @@ export default function ArtistPage() {
                   </div>
                 </div>
               ) : (
-                <div className="px-6 py-6 text-white/45">
+                <div className="theme-muted px-6 py-6">
                   {t("artist.noSongs")}
                 </div>
               )}
 
               {data.albums.length > 0 ? (
-                <div className="border-b border-white/8 px-3 py-4 sm:px-6 sm:py-6">
+                <div className="border-b border-[color:var(--border-subtle)] px-3 py-4 sm:px-6 sm:py-6">
                   <h2 className="mb-4 text-2xl font-bold">
                     {t("artist.albums")}
                   </h2>
@@ -580,7 +580,7 @@ export default function ArtistPage() {
                         <Link
                           key={`${album.id}-${idx}`}
                           href={buildAlbumHref(album)}
-                          className="group theme-surface relative min-w-[180px] max-w-[180px] rounded-xl border border-white/8 p-3 transition hover:-translate-y-1 hover:bg-white/[0.06]"
+                          className="group theme-surface relative min-w-[180px] max-w-[180px] rounded-xl border p-3 transition hover:-translate-y-1 hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_6%)]"
                         >
                           <div className="relative overflow-hidden rounded-xl">
                             {album.thumbnail ? (
@@ -593,15 +593,15 @@ export default function ArtistPage() {
                               <div className="theme-surface aspect-square w-full rounded-lg border" />
                             )}
                             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/78 to-transparent p-3">
-                              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-lg">
+                              <div className="theme-button-accent theme-shadow-soft inline-flex h-10 w-10 items-center justify-center rounded-full border">
                                 <PlayGlyph className="ml-0.5 h-4 w-4" />
                               </div>
                             </div>
                           </div>
-                          <div className="mt-3 truncate font-semibold text-white">
+                          <div className="mt-3 truncate font-semibold text-[color:var(--foreground)]">
                             {album.title}
                           </div>
-                          <div className="mt-1 text-sm text-white/45">
+                          <div className="theme-muted mt-1 text-sm">
                             {album.year ||
                               (album.songCount
                                 ? t("artist.songCount", {
@@ -622,7 +622,7 @@ export default function ArtistPage() {
                           }
                           target="_blank"
                           rel="noreferrer"
-                          className="group theme-surface relative min-w-[180px] max-w-[180px] rounded-[22px] border border-white/8 p-3 transition hover:-translate-y-1 hover:bg-white/[0.06]"
+                          className="group theme-surface relative min-w-[180px] max-w-[180px] rounded-[22px] border p-3 transition hover:-translate-y-1 hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_6%)]"
                         >
                           <div className="relative overflow-hidden rounded-[18px]">
                             {album.thumbnail ? (
@@ -635,15 +635,15 @@ export default function ArtistPage() {
                               <div className="theme-surface aspect-square w-full rounded-[18px] border" />
                             )}
                             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/78 to-transparent p-3">
-                              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-lg">
+                              <div className="theme-button-accent theme-shadow-soft inline-flex h-10 w-10 items-center justify-center rounded-full border">
                                 <PlayGlyph className="ml-0.5 h-4 w-4" />
                               </div>
                             </div>
                           </div>
-                          <div className="mt-3 truncate font-semibold text-white">
+                          <div className="mt-3 truncate font-semibold text-[color:var(--foreground)]">
                             {album.title}
                           </div>
-                          <div className="mt-1 text-sm text-white/45">
+                          <div className="theme-muted mt-1 text-sm">
                             {album.year ||
                               (album.songCount
                                 ? t("artist.songCount", {
@@ -668,7 +668,7 @@ export default function ArtistPage() {
                     <h2 className="text-2xl font-bold">
                       {t("artist.playlists")}
                     </h2>
-                    <span className="text-sm text-white/45">
+                    <span className="theme-muted text-sm">
                       {data.playlists.length} {t("artist.playlists")}
                     </span>
                   </div>
@@ -678,10 +678,10 @@ export default function ArtistPage() {
                     contentClassName="flex w-max gap-5"
                   >
                     {data.playlists.map((playlist, idx) => (
-                      <Link
+                        <Link
                         key={`${playlist.id}-${idx}`}
                         href={buildPlaylistHref(playlist)}
-                        className="group relative min-w-[220px] max-w-[220px] overflow-hidden rounded-xl border border-white/8 bg-[#121212] transition hover:-translate-y-1 hover:border-white/14"
+                          className="group theme-surface theme-media-hero relative min-w-[220px] max-w-[220px] overflow-hidden rounded-xl border transition hover:-translate-y-1 hover:border-[color:color-mix(in_srgb,var(--foreground)_14%,transparent)]"
                       >
                         <div className="relative aspect-square overflow-hidden">
                           {playlist.thumbnail ? (
@@ -694,7 +694,7 @@ export default function ArtistPage() {
                             <div className="theme-surface h-full w-full" />
                           )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
-                          <div className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white text-black shadow-[0_14px_24px_rgba(0,0,0,0.26)] opacity-0 transition duration-200 group-hover:opacity-100">
+                          <div className="theme-button-accent theme-shadow-soft absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full border opacity-0 transition duration-200 group-hover:opacity-100">
                             <PlayGlyph className="ml-0.5 h-4 w-4" />
                           </div>
                           <div className="absolute inset-x-0 bottom-0 p-4">

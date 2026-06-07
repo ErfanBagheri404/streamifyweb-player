@@ -93,7 +93,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
                 alt={label}
                 width={300}
                 height={200}
-                className="w-full aspect-[3/2] object-cover bg-neutral-800"
+                className="aspect-[3/2] w-full object-cover theme-surface-strong"
                 unoptimized
               />
               <div className="absolute bottom-4 left-4 text-lg font-bold text-white sm:bottom-5 sm:left-5 sm:text-xl">
@@ -108,7 +108,9 @@ export const ResultsList: React.FC<ResultsListProps> = ({
 
   if (searchQuery.trim() && hasSearched && searchResults.length === 0) {
     return (
-      <p className="mt-8 text-center text-white/48">{t("search.noResults")}</p>
+      <p className="mt-8 text-center text-[color:color-mix(in_srgb,var(--foreground)_48%,transparent)]">
+        {t("search.noResults")}
+      </p>
     );
   }
 
@@ -147,14 +149,14 @@ export const ResultsList: React.FC<ResultsListProps> = ({
 
       {!hasMoreResults ? (
         <div className="py-5 text-center">
-          <span className="text-sm text-white/45">
+          <span className="theme-muted text-sm">
             {t("search.endResults")}
           </span>
         </div>
       ) : (
         <div className="py-5 text-center">
           {isLoadingMore ? (
-            <div className="inline-flex items-center gap-3 rounded-full px-4 py-2 text-sm text-white/65">
+            <div className="theme-muted inline-flex items-center gap-3 rounded-full px-4 py-2 text-sm">
               <span className="theme-spinner h-5 w-5" />
               <span className="loading-dots">{t("common.loadingMore")}</span>
             </div>
