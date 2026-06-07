@@ -63,7 +63,7 @@ export default function PlaylistCreateModal({
 
   return (
     <div
-      className={`fixed inset-0 z-[70] flex items-center justify-center px-4 transition-all duration-200 ${
+      className={`fixed inset-0 z-[70] overflow-y-auto px-4 py-4 transition-all duration-200 sm:flex sm:items-center sm:justify-center sm:py-6 ${
         open
           ? "pointer-events-auto opacity-100"
           : "pointer-events-none opacity-0"
@@ -76,7 +76,7 @@ export default function PlaylistCreateModal({
       aria-hidden={!open}
     >
       <div
-        className={`theme-surface w-full max-w-2xl rounded-3xl border p-6 text-[color:var(--foreground)] shadow-[0_24px_64px_rgba(0,0,0,0.45)] transition-all duration-200 md:p-7 ${
+        className={`theme-surface my-auto w-full max-w-2xl rounded-3xl border p-5 text-[color:var(--foreground)] shadow-[0_24px_64px_rgba(0,0,0,0.45)] transition-all duration-200 max-sm:min-h-fit max-sm:rounded-[28px] sm:max-h-[min(88vh,920px)] sm:overflow-y-auto md:p-7 ${
           open ? "translate-y-0 scale-100" : "translate-y-3 scale-[0.97]"
         }`}
         onClick={(event) => event.stopPropagation()}
@@ -114,7 +114,7 @@ export default function PlaylistCreateModal({
           </button>
         </div>
 
-        <div className="mt-6 grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="mt-5 grid gap-5 md:mt-6 md:grid-cols-[220px_minmax(0,1fr)] md:gap-6">
           <div className="theme-surface-strong rounded-2xl border p-4">
             <div
               className="mx-auto flex aspect-square w-full max-w-[220px] items-center justify-center rounded-2xl shadow-[0_20px_45px_rgba(0,0,0,0.3)]"
@@ -166,14 +166,14 @@ export default function PlaylistCreateModal({
                 value={description}
                 onChange={(event) => onDescriptionChange(event.target.value)}
                 placeholder={t("library.whatIsPlaylistFor")}
-                rows={7}
+                rows={5}
                 className="theme-surface-strong w-full resize-none rounded-xl border px-4 py-3 text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_30%,transparent)]"
               />
             </label>
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-3">
+        <div className="mt-5 flex items-center justify-end gap-3 md:mt-6">
           <button
             type="button"
             onClick={onClose}
