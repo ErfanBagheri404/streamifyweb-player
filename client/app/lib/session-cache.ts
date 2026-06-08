@@ -5,43 +5,64 @@ type SessionCacheEnvelope<T> = {
   cachedAt: number;
 };
 
-export function readSessionCache<T>(key: string, maxAgeMs?: number): T | null {
-  if (typeof window === "undefined") return null;
+function getStorageBackends(): Storage[] {
+  if (typeof window === "undefined") return [];
+
+  const backends: Storage[] = [];
 
   try {
-    const raw = window.sessionStorage.getItem(key);
-    if (!raw) return null;
+    backends.push(window.localStorage);
+  } catch {}
 
-    const parsed = JSON.parse(raw) as SessionCacheEnvelope<T>;
-    if (!parsed || typeof parsed !== "object" || !("value" in parsed)) {
-      return null;
-    }
+  try {
+    backends.push(window.sessionStorage);
+  } catch {}
 
-    if (
-      typeof maxAgeMs === "number" &&
-      Number.isFinite(maxAgeMs) &&
-      maxAgeMs > 0 &&
-      typeof parsed.cachedAt === "number" &&
-      Date.now() - parsed.cachedAt > maxAgeMs
-    ) {
-      window.sessionStorage.removeItem(key);
-      return null;
-    }
+  return backends;
+}
 
-    return parsed.value;
-  } catch {
-    return null;
+export function readSessionCache<T>(key: string, maxAgeMs?: number): T | null {
+  for (const storage of getStorageBackends()) {
+    try {
+      const raw = storage.getItem(key);
+      if (!raw) continue;
+
+      const parsed = JSON.parse(raw) as SessionCacheEnvelope<T>;
+      if (!parsed || typeof parsed !== "object" || !("value" in parsed)) {
+        continue;
+      }
+
+      if (
+        typeof maxAgeMs === "number" &&
+        Number.isFinite(maxAgeMs) &&
+        maxAgeMs > 0 &&
+        typeof parsed.cachedAt === "number" &&
+        Date.now() - parsed.cachedAt > maxAgeMs
+      ) {
+        for (const backend of getStorageBackends()) {
+          try {
+            backend.removeItem(key);
+          } catch {}
+        }
+        return null;
+      }
+
+      return parsed.value;
+    } catch {}
   }
+
+  return null;
 }
 
 export function writeSessionCache<T>(key: string, value: T) {
-  if (typeof window === "undefined") return;
+  const envelope: SessionCacheEnvelope<T> = {
+    value,
+    cachedAt: Date.now(),
+  };
 
-  try {
-    const envelope: SessionCacheEnvelope<T> = {
-      value,
-      cachedAt: Date.now(),
-    };
-    window.sessionStorage.setItem(key, JSON.stringify(envelope));
-  } catch {}
+  for (const storage of getStorageBackends()) {
+    try {
+      storage.setItem(key, JSON.stringify(envelope));
+    } catch {}
+  }
 }

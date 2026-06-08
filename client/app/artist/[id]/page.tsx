@@ -160,12 +160,20 @@ export default function ArtistPage() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
+      if (cachedArtistData) {
+        setArtistState({
+          cacheKey: artistCacheKey,
+          data: cachedArtistData,
+          isLoading: false,
+          error: null,
+        });
+        return;
+      }
+
       try {
         const nextParams = new URLSearchParams({ id });
         if (sourceParam) nextParams.set("source", sourceParam);
-        const res = await fetch(`/api/artist?${nextParams.toString()}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(`/api/artist?${nextParams.toString()}`);
         const json = (await res.json()) as unknown;
         if (!res.ok) {
           const errorPayload =

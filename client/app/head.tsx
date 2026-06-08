@@ -40,10 +40,17 @@ function getFontMimeType(filePath: string): string {
   return "font/ttf";
 }
 
-const iconHrefs = fs
+const iconAssets = fs
   .readdirSync(publicDirectory, { withFileTypes: true })
-  .filter((entry) => entry.isFile() && entry.name.endsWith(".svg"))
-  .map((entry) => `/${entry.name}`);
+  .filter(
+    (entry) =>
+      entry.isFile() &&
+      (entry.name.endsWith(".svg") || entry.name === "favicon.ico")
+  )
+  .map((entry) => ({
+    href: `/${entry.name}`,
+    type: entry.name.endsWith(".svg") ? "image/svg+xml" : "image/x-icon",
+  }));
 
 const fontHrefs = listFiles(fontsDirectory)
   .filter((filePath) => /\.(woff|ttf|eot)$/i.test(filePath))
@@ -55,13 +62,13 @@ const fontHrefs = listFiles(fontsDirectory)
 export default function Head() {
   return (
     <>
-      {iconHrefs.map((href) => (
+      {iconAssets.map(({ href, type }) => (
         <link
           key={href}
           rel="preload"
           href={href}
           as="image"
-          type="image/svg+xml"
+          type={type}
         />
       ))}
       {fontHrefs.map(({ href, type }) => (

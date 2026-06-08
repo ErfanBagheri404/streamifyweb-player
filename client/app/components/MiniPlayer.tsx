@@ -14,6 +14,32 @@ import { spaceMono } from "../fonts";
 
 const STATIC_WAVEFORM_BAR_COUNT = 56;
 
+function PlayControlIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M8.75 6.6c0-1.01 1.11-1.63 1.98-1.1l7.61 4.65a1.3 1.3 0 0 1 0 2.2l-7.61 4.65c-.87.53-1.98-.09-1.98-1.1V6.6Z" />
+    </svg>
+  );
+}
+
+function PauseControlIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M7.75 5.5A1.25 1.25 0 0 1 9 6.75v10.5a1.25 1.25 0 1 1-2.5 0V6.75A1.25 1.25 0 0 1 7.75 5.5Zm8.5 0a1.25 1.25 0 0 1 1.25 1.25v10.5a1.25 1.25 0 1 1-2.5 0V6.75a1.25 1.25 0 0 1 1.25-1.25Z" />
+    </svg>
+  );
+}
+
 function createStaticWaveform(seedInput: string, count: number): number[] {
   let seed = 0;
 
@@ -48,6 +74,7 @@ const MiniPlayer: React.FC = () => {
     currentTime,
     duration,
     volume,
+    repeatMode,
     isRepeat,
     pauseSong,
     resumeSong,
@@ -129,6 +156,18 @@ const MiniPlayer: React.FC = () => {
           current: formatNumber(queueIndex + 1),
           total: formatNumber(playbackQueue.length),
         })
+      : null;
+  const repeatModeLabel =
+    repeatMode === "queue"
+      ? t("miniPlayer.repeatQueue")
+      : repeatMode === "one"
+      ? t("miniPlayer.repeatOne")
+      : t("miniPlayer.repeatOff");
+  const repeatBadgeLabel =
+    repeatMode === "queue"
+      ? t("miniPlayer.repeatAllShort")
+      : repeatMode === "one"
+      ? t("miniPlayer.repeatOneShort")
       : null;
   const toggleMute = () => {
     if (isMuted) {
@@ -409,21 +448,9 @@ const MiniPlayer: React.FC = () => {
               {isSongLoading ? (
                 <div className="theme-spinner h-5 w-5" />
               ) : isPlaying ? (
-                <Image
-                  src="/Pause.svg"
-                  alt="Pause"
-                  width={28}
-                  height={28}
-                  className="theme-asset-icon h-8 w-8 lg:h-8 lg:w-8"
-                />
+                <PauseControlIcon className="theme-asset-icon h-8 w-8 lg:h-8 lg:w-8" />
               ) : (
-                <Image
-                  src="/Play.svg"
-                  alt="Play"
-                  width={28}
-                  height={28}
-                  className="theme-asset-icon h-8 w-8 lg:h-8 lg:w-8"
-                />
+                <PlayControlIcon className="theme-asset-icon h-8 w-8 lg:h-8 lg:w-8" />
               )}
             </button>
 
@@ -446,17 +473,27 @@ const MiniPlayer: React.FC = () => {
             <button
               type="button"
               onClick={toggleRepeat}
-              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors lg:h-auto lg:w-auto ${
-                isRepeat ? "opacity-100" : "opacity-70"
+              aria-label={repeatModeLabel}
+              title={repeatModeLabel}
+              aria-pressed={isRepeat}
+              className={`relative flex h-10 w-10 items-center justify-center rounded-full border transition-all duration-150 lg:h-10 lg:w-10 ${
+                isRepeat
+                  ? "theme-button-accent theme-shadow-soft border-transparent text-white"
+                  : "theme-button-soft border opacity-75 hover:opacity-100"
               }`}
             >
               <Image
                 src="/Repeat.svg"
-                alt="Repeat"
+                alt={repeatModeLabel}
                 width={34}
                 height={34}
                 className="theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
               />
+              {repeatBadgeLabel ? (
+                <span className="absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-black leading-none text-black shadow-sm">
+                  {repeatBadgeLabel}
+                </span>
+              ) : null}
             </button>
 
             <div
@@ -537,10 +574,10 @@ const MiniPlayer: React.FC = () => {
               </button>
             </div>
 
-              <button
-                type="button"
-                onClick={handleFullscreenToggle}
-                className="theme-button-soft flex h-10 w-10 items-center justify-center rounded-full border transition duration-150 hover:scale-[1.03] lg:h-10 lg:w-10"
+            <button
+              type="button"
+              onClick={handleFullscreenToggle}
+              className="theme-button-soft flex h-10 w-10 items-center justify-center rounded-full border transition duration-150 hover:scale-[1.03] lg:h-10 lg:w-10"
               aria-label={
                 isFullscreenOpen
                   ? t("miniPlayer.closeFullscreen")

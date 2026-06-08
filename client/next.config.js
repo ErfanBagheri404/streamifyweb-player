@@ -37,6 +37,29 @@ const nextConfig = {
       },
     ],
   },
+  async headers() {
+    return [
+      {
+        source:
+          "/:icon(Chevrondown|Filter|Fullscreen|Library|Next|Pause|Play|Previous|Repeat|Search|Settings|StreamifyLogo|Volume).svg",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=604800, stale-while-revalidate=2592000",
+          },
+        ],
+      },
+      {
+        source: "/favicon.ico",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=604800, stale-while-revalidate=2592000",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

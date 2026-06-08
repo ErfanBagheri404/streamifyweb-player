@@ -16,6 +16,7 @@ import { formatNumberByLanguage } from "../lib/i18n";
 type AudioType = "file" | "hls" | "soundcloud-drm";
 type PlaybackStrategy = "audio" | "widget";
 export type AutoRetryPreference = "unknown" | "enabled" | "disabled";
+export type RepeatMode = "off" | "queue" | "one";
 const DEFAULT_PLAYBACK_ERROR =
   "Couldn't play this track. Try again or choose another one.";
 const AUTO_RETRY_STORAGE_KEY = "streamifyAutoRetryPlayback";
@@ -66,6 +67,7 @@ interface AudioContextType {
   currentTime: number;
   duration: number;
   volume: number;
+  repeatMode: RepeatMode;
   isRepeat: boolean;
   beginSongLoad: (song: Song, options?: PlaybackOptions) => void;
   playSong: (song: Song, options?: PlaybackOptions) => void;
@@ -593,7 +595,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(1);
-  const [isRepeat, setIsRepeat] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
   const [autoRetryPreference, setAutoRetryPreference] =
     useState<AutoRetryPreference>("unknown");
@@ -616,7 +618,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const recentSongsRef = useRef<Song[]>([]);
   const autoRetryPreferenceRef = useRef<AutoRetryPreference>("unknown");
   const playbackRunIdRef = useRef("pre-fix");
-  const isRepeatRef = useRef(false);
+  const repeatModeRef = useRef<RepeatMode>("off");
   const playbackQueueRef = useRef<Song[]>([]);
   const queueIndexRef = useRef(-1);
   const volumeRef = useRef(1);
@@ -642,6 +644,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const playRecommendedSongRef = useRef<(seedSong: Song) => Promise<boolean>>(
     async () => false
   );
+  const isRepeat = repeatMode !== "off";
 
   const pauseManagedAudio = useCallback((suppressPauseEvent = false) => {
     const audio = audioRef.current;
@@ -985,13 +988,19 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
         if (state.currentSong) {
           const hydratedSong = normalizeSong(state.currentSong as Song);
+          const nextRepeatMode: RepeatMode =
+            state.repeatMode === "queue" || state.repeatMode === "one"
+              ? state.repeatMode
+              : state.isRepeat
+              ? "one"
+              : "off";
           setCurrentSong(hydratedSong);
           setPlaybackQueue([hydratedSong]);
           setQueueIndex(0);
           setCurrentTime(state.currentTime || 0);
           setDuration(state.duration || 0);
           setVolumeState(state.volume || 1);
-          setIsRepeat(state.isRepeat || false);
+          setRepeatMode(nextRepeatMode);
           setIsPlaying(Boolean(state.isPlaying));
         }
       } catch (error) {
@@ -1014,6 +1023,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       currentTime,
       duration,
       volume,
+      repeatMode,
       isRepeat,
       isPlaying,
       isSongLoading: false,
@@ -1025,6 +1035,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     currentTime,
     duration,
     volume,
+    repeatMode,
     isRepeat,
     isPlaying,
   ]);
@@ -1041,8 +1052,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   );
 
   useEffect(() => {
-    isRepeatRef.current = isRepeat;
-  }, [isRepeat]);
+    repeatModeRef.current = repeatMode;
+  }, [repeatMode]);
 
   useEffect(() => {
     playbackQueueRef.current = playbackQueue;
@@ -1194,7 +1205,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     const requestId = playbackRequestIdRef.current;
 
     const handleWidgetFinish = () => {
-      if (isRepeatRef.current) {
+      if (repeatModeRef.current === "one") {
         const widget = soundCloudWidgetRef.current;
         if (widget) {
           try {
@@ -1213,12 +1224,19 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       const queuedSongs = playbackQueueRef.current;
       const activeQueueIndex = queueIndexRef.current;
-      if (
+      const nextQueueIndex =
         queuedSongs.length > 0 &&
         activeQueueIndex >= 0 &&
         activeQueueIndex < queuedSongs.length - 1
+          ? activeQueueIndex + 1
+          : repeatModeRef.current === "queue" && queuedSongs.length > 0
+          ? 0
+          : -1;
+      if (
+        queuedSongs.length > 0 &&
+        nextQueueIndex >= 0 &&
+        nextQueueIndex < queuedSongs.length
       ) {
-        const nextQueueIndex = activeQueueIndex + 1;
         const nextSong = queuedSongs[nextQueueIndex];
         if (!nextSong) return;
 
@@ -2819,17 +2837,22 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     if (shouldUseSoundCloudWidget(currentSong)) return;
 
     const handleEnded = () => {
-      if (isRepeat) {
+      if (repeatMode === "one") {
         audio.currentTime = 0;
         audio.play().catch((error) => {
           console.error("Error repeating audio:", error);
         });
-      } else if (
-        playbackQueue.length > 0 &&
-        queueIndex >= 0 &&
-        queueIndex < playbackQueue.length - 1
-      ) {
-        const nextSong = playbackQueue[queueIndex + 1];
+      } else {
+        const nextQueueIndex =
+          playbackQueue.length > 0 &&
+          queueIndex >= 0 &&
+          queueIndex < playbackQueue.length - 1
+            ? queueIndex + 1
+            : repeatMode === "queue" && playbackQueue.length > 0
+            ? 0
+            : -1;
+        const nextSong =
+          nextQueueIndex >= 0 ? playbackQueue[nextQueueIndex] : undefined;
         if (!nextSong) return;
 
         setIsPlaying(false);
@@ -2841,12 +2864,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             const nextQueue = playbackQueue.map((entry) =>
               normalizeSong(entry)
             );
-            nextQueue[queueIndex + 1] = {
-              ...nextQueue[queueIndex + 1],
+            nextQueue[nextQueueIndex] = {
+              ...nextQueue[nextQueueIndex],
               ...resolvedSong,
             };
             setPlaybackQueue(nextQueue);
-            setQueueIndex(queueIndex + 1);
+            setQueueIndex(nextQueueIndex);
             setCurrentSong(resolvedSong);
             setDuration(resolvedSong.duration || 0);
             setPlaybackError(null);
@@ -2862,21 +2885,22 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             setIsPlaying(false);
             setCurrentTime(0);
           });
-      } else {
-        void playRecommendedSongRef
-          .current(currentSong)
-          .then((didPlayRecommendation) => {
-            if (!didPlayRecommendation) {
-              setIsPlaying(false);
-              setCurrentTime(0);
-            }
-          });
+        return;
       }
+
+      void playRecommendedSongRef
+        .current(currentSong)
+        .then((didPlayRecommendation) => {
+          if (!didPlayRecommendation) {
+            setIsPlaying(false);
+            setCurrentTime(0);
+          }
+        });
     };
 
     audio.addEventListener("ended", handleEnded);
     return () => audio.removeEventListener("ended", handleEnded);
-  }, [currentSong, isRepeat, playbackQueue, queueIndex]);
+  }, [currentSong, repeatMode, playbackQueue, queueIndex]);
 
   const playSong = (
     song: Song,
@@ -3118,7 +3142,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   };
 
   const toggleRepeat = () => {
-    setIsRepeat((prev) => !prev);
+    setRepeatMode((prev) =>
+      prev === "off" ? "queue" : prev === "queue" ? "one" : "off"
+    );
   };
 
   const playQueueIndex = (index: number) => {
@@ -3521,6 +3547,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       currentTime,
       duration,
       volume,
+      repeatMode,
       isRepeat,
       beginSongLoad,
       playSong,
@@ -3559,6 +3586,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       currentTime,
       duration,
       volume,
+      repeatMode,
       isRepeat,
       beginSongLoad,
       playSong,

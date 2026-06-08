@@ -462,6 +462,18 @@ export default function CollectionPage() {
         return;
       }
 
+      if (cachedRemoteCollection) {
+        if (!cancelled) {
+          setRemoteState({
+            collection: cachedRemoteCollection.collection,
+            entries: cachedRemoteCollection.entries,
+            error: null,
+            isLoading: false,
+          });
+        }
+        return;
+      }
+
       setRemoteState((previous) => ({
         ...previous,
         error: null,
@@ -498,9 +510,7 @@ export default function CollectionPage() {
         );
         // #endregion
 
-        const response = await fetch(`/api/collection?${params.toString()}`, {
-          cache: "no-store",
-        });
+        const response = await fetch(`/api/collection?${params.toString()}`);
         const json = (await response.json()) as Record<string, unknown>;
 
         // #region debug-point B:collection-page-fetch-response
@@ -599,6 +609,7 @@ export default function CollectionPage() {
     storedItem?.href,
     storedItem?.url,
     storedEntries.length,
+    cachedRemoteCollection,
   ]);
 
   const entries = useMemo(() => {

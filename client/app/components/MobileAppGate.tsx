@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { LogoIcon } from "./icons/NavIcons";
 
-const MOBILE_GATE_SESSION_KEY = "streamify-mobile-web-entered";
+const MOBILE_GATE_STORAGE_KEY = "streamify-mobile-web-entered";
 const ANDROID_APP_URL = "https://github.com/ErfanBagheri404/Streamify/";
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 1023.98px)";
 
@@ -25,7 +25,7 @@ export default function MobileAppGate() {
 
     try {
       setHasEnteredWebApp(
-        window.sessionStorage.getItem(MOBILE_GATE_SESSION_KEY) === "true"
+        window.localStorage.getItem(MOBILE_GATE_STORAGE_KEY) === "true"
       );
     } catch {}
 
@@ -115,8 +115,8 @@ export default function MobileAppGate() {
                   type="button"
                   onClick={() => {
                     try {
-                      window.sessionStorage.setItem(
-                        MOBILE_GATE_SESSION_KEY,
+                      window.localStorage.setItem(
+                        MOBILE_GATE_STORAGE_KEY,
                         "true"
                       );
                     } catch {}
