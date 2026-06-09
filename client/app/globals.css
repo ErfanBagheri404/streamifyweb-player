@@ -458,6 +458,86 @@ html[data-theme="mint"] {
   --collection-hero-end: #f4fffb;
 }
 
+html[data-theme="butter"] {
+  --background: #fffdf2;
+  --foreground: #2a220f;
+  --surface-1: #ffffff;
+  --surface-2: #fff4c7;
+  --surface-3: rgba(42, 34, 15, 0.055);
+  --surface-overlay: rgba(255, 253, 242, 0.9);
+  --border-subtle: rgba(156, 131, 58, 0.16);
+  --muted-foreground: rgba(42, 34, 15, 0.62);
+  --theme-accent: #f59e0b;
+  --theme-accent-contrast: #ffffff;
+  --collection-hero-start: #ffe59a;
+  --collection-hero-mid: #fff3cc;
+  --collection-hero-end: #fffdf2;
+}
+
+html[data-theme="sage"] {
+  --background: #f7fbf7;
+  --foreground: #182517;
+  --surface-1: #ffffff;
+  --surface-2: #e3f0e2;
+  --surface-3: rgba(24, 37, 23, 0.055);
+  --surface-overlay: rgba(247, 251, 247, 0.9);
+  --border-subtle: rgba(70, 114, 76, 0.16);
+  --muted-foreground: rgba(24, 37, 23, 0.62);
+  --theme-accent: #22c55e;
+  --theme-accent-contrast: #ffffff;
+  --collection-hero-start: #cfe9cf;
+  --collection-hero-mid: #eaf6ea;
+  --collection-hero-end: #f7fbf7;
+}
+
+html[data-theme="ice"] {
+  --background: #f3feff;
+  --foreground: #10262b;
+  --surface-1: #ffffff;
+  --surface-2: #d4f7fb;
+  --surface-3: rgba(16, 38, 43, 0.055);
+  --surface-overlay: rgba(243, 254, 255, 0.9);
+  --border-subtle: rgba(55, 130, 140, 0.16);
+  --muted-foreground: rgba(16, 38, 43, 0.62);
+  --theme-accent: #06b6d4;
+  --theme-accent-contrast: #ffffff;
+  --collection-hero-start: #b7eef6;
+  --collection-hero-mid: #def9fc;
+  --collection-hero-end: #f3feff;
+}
+
+html[data-theme="sand"] {
+  --background: #fffaf3;
+  --foreground: #2a1f14;
+  --surface-1: #ffffff;
+  --surface-2: #f5eadb;
+  --surface-3: rgba(42, 31, 20, 0.055);
+  --surface-overlay: rgba(255, 250, 243, 0.9);
+  --border-subtle: rgba(140, 103, 74, 0.16);
+  --muted-foreground: rgba(42, 31, 20, 0.62);
+  --theme-accent: #d97706;
+  --theme-accent-contrast: #ffffff;
+  --collection-hero-start: #e8d3bb;
+  --collection-hero-mid: #f6ede3;
+  --collection-hero-end: #fffaf3;
+}
+
+html[data-theme="blush"] {
+  --background: #fff6f8;
+  --foreground: #2a141b;
+  --surface-1: #ffffff;
+  --surface-2: #ffe0e8;
+  --surface-3: rgba(42, 20, 27, 0.055);
+  --surface-overlay: rgba(255, 246, 248, 0.9);
+  --border-subtle: rgba(150, 82, 104, 0.16);
+  --muted-foreground: rgba(42, 20, 27, 0.62);
+  --theme-accent: #f43f5e;
+  --theme-accent-contrast: #ffffff;
+  --collection-hero-start: #ffc7d5;
+  --collection-hero-mid: #ffe4ec;
+  --collection-hero-end: #fff6f8;
+}
+
 .theme-shell {
   background: var(--background);
   color: var(--foreground);

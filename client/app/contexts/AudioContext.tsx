@@ -641,10 +641,35 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const resolveSongForPlaybackRef = useRef<(song: Song) => Promise<Song>>(
     async (song) => normalizeSong(song)
   );
+  const resolveAndPlaySongRef = useRef<
+    (song: Song, options?: PlaybackOptions) => Promise<void>
+  >(async () => {});
   const playRecommendedSongRef = useRef<(seedSong: Song) => Promise<boolean>>(
     async () => false
   );
   const isRepeat = repeatMode !== "off";
+  const getNextQueueIndex = useCallback(
+    (
+      mode: RepeatMode,
+      queue = playbackQueueRef.current,
+      activeIndex = queueIndexRef.current
+    ) => {
+      if (queue.length === 0 || activeIndex < 0) {
+        return -1;
+      }
+
+      if (activeIndex < queue.length - 1) {
+        return activeIndex + 1;
+      }
+
+      if (mode === "queue" && queue.length > 0) {
+        return 0;
+      }
+
+      return -1;
+    },
+    []
+  );
 
   const pauseManagedAudio = useCallback((suppressPauseEvent = false) => {
     const audio = audioRef.current;
@@ -702,6 +727,43 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     autoRetryInFlightRef.current = false;
     setIsAutoRetrying(false);
   }, []);
+
+  const startQueueTransition = useCallback(
+    (
+      nextSong: Song,
+      nextQueue: Song[],
+      nextIndex: number,
+      errorLabel: string
+    ) => {
+      const audio = audioRef.current;
+      const activeSong = currentSongRef.current;
+
+      if (audio && !shouldUseSoundCloudWidget(activeSong)) {
+        pauseManagedAudio(true);
+        try {
+          audio.currentTime = 0;
+          audio.removeAttribute("src");
+          audio.load();
+        } catch {}
+      }
+
+      setPlaybackError(null);
+      setCurrentTime(0);
+      setDuration(nextSong.duration || 0);
+      setIsPlaying(false);
+      setIsSongLoading(true);
+
+      void resolveAndPlaySongRef
+        .current(nextSong, {
+          queue: nextQueue,
+          currentIndex: nextIndex,
+        })
+        .catch((error) => {
+          console.error(errorLabel, error);
+        });
+    },
+    [pauseManagedAudio]
+  );
 
   const createPlaybackRequest = () => {
     playbackRequestIdRef.current += 1;
@@ -879,7 +941,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     void player.destroy();
   };
 
-  const destroySoundCloudWidgetPlayback = () => {
+  const destroySoundCloudWidgetPlayback = (hardReset = false) => {
     const widget = soundCloudWidgetRef.current;
     // #region debug-point C:widget-destroy
     reportDebugEvent(
@@ -904,7 +966,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       } catch {}
     }
     const iframe = soundCloudWidgetIframeRef.current;
-    if (iframe) {
+    if (hardReset && iframe) {
       iframe.src = "about:blank";
     }
   };
@@ -1046,7 +1108,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         window.clearTimeout(autoRetryStatusTimerRef.current);
       }
       destroyManagedPlayback();
-      destroySoundCloudWidgetPlayback();
+      destroySoundCloudWidgetPlayback(true);
     },
     []
   );
@@ -1223,60 +1285,20 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       destroySoundCloudWidgetPlayback();
 
       const queuedSongs = playbackQueueRef.current;
-      const activeQueueIndex = queueIndexRef.current;
-      const nextQueueIndex =
-        queuedSongs.length > 0 &&
-        activeQueueIndex >= 0 &&
-        activeQueueIndex < queuedSongs.length - 1
-          ? activeQueueIndex + 1
-          : repeatModeRef.current === "queue" && queuedSongs.length > 0
-          ? 0
-          : -1;
-      if (
-        queuedSongs.length > 0 &&
-        nextQueueIndex >= 0 &&
-        nextQueueIndex < queuedSongs.length
-      ) {
+      const nextQueueIndex = getNextQueueIndex(
+        repeatModeRef.current,
+        queuedSongs,
+        queueIndexRef.current
+      );
+      if (nextQueueIndex >= 0 && nextQueueIndex < queuedSongs.length) {
         const nextSong = queuedSongs[nextQueueIndex];
         if (!nextSong) return;
-
-        setIsPlaying(false);
-        setCurrentTime(0);
-        setIsSongLoading(true);
-
-        void resolveSongForPlayback(nextSong)
-          .then((resolvedSong) => {
-            setPlaybackQueue((previousQueue) => {
-              const nextQueue = previousQueue.map((entry) =>
-                normalizeSong(entry)
-              );
-              if (nextQueue[nextQueueIndex]) {
-                nextQueue[nextQueueIndex] = {
-                  ...nextQueue[nextQueueIndex],
-                  ...resolvedSong,
-                };
-              }
-              return nextQueue;
-            });
-            setQueueIndex(nextQueueIndex);
-            setCurrentSong(resolvedSong);
-            setDuration(resolvedSong.duration || 0);
-            setPlaybackError(null);
-            setIsSongLoading(false);
-            setIsPlaying(true);
-          })
-          .catch((error) => {
-            console.error(
-              "Error resolving next SoundCloud widget song:",
-              error
-            );
-            setPlaybackError(
-              error instanceof Error ? error.message : DEFAULT_PLAYBACK_ERROR
-            );
-            setIsSongLoading(false);
-            setIsPlaying(false);
-            setCurrentTime(0);
-          });
+        startQueueTransition(
+          nextSong,
+          queuedSongs,
+          nextQueueIndex,
+          "Error playing next queued SoundCloud song:"
+        );
         return;
       }
 
@@ -1317,7 +1339,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       const widgetBootstrapUrl = buildSoundCloudWidgetBootstrapUrl(
         soundCloudWidgetTrackUrl as string
       );
-      if (iframe.src !== widgetBootstrapUrl) {
+      const shouldBootstrapIframe =
+        !soundCloudWidgetRef.current && iframe.src === "about:blank";
+      if (shouldBootstrapIframe) {
         iframe.src = widgetBootstrapUrl;
         await new Promise<void>((resolve) => {
           const handleLoad = () => {
@@ -2565,6 +2589,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       const normalizedQueue = options.queue.map((entry) =>
         normalizeSong(entry)
       );
+      const shouldEnableQueueRepeat =
+        normalizedQueue.length > 1 &&
+        playbackQueueRef.current.length <= 1 &&
+        repeatModeRef.current === "off";
       let nextIndex =
         typeof options.currentIndex === "number" ? options.currentIndex : -1;
 
@@ -2583,6 +2611,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       setPlaybackQueue(normalizedQueue);
       setQueueIndex(nextIndex);
+      if (shouldEnableQueueRepeat) {
+        setRepeatMode("queue");
+      }
       return;
     }
 
@@ -2837,70 +2868,48 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     if (shouldUseSoundCloudWidget(currentSong)) return;
 
     const handleEnded = () => {
-      if (repeatMode === "one") {
+      const activeSong = currentSongRef.current;
+      if (!activeSong) return;
+
+      if (repeatModeRef.current === "one") {
         audio.currentTime = 0;
         audio.play().catch((error) => {
           console.error("Error repeating audio:", error);
         });
-      } else {
-        const nextQueueIndex =
-          playbackQueue.length > 0 &&
-          queueIndex >= 0 &&
-          queueIndex < playbackQueue.length - 1
-            ? queueIndex + 1
-            : repeatMode === "queue" && playbackQueue.length > 0
-            ? 0
-            : -1;
-        const nextSong =
-          nextQueueIndex >= 0 ? playbackQueue[nextQueueIndex] : undefined;
-        if (!nextSong) return;
-
-        setIsPlaying(false);
-        setCurrentTime(0);
-        setIsSongLoading(true);
-
-        void resolveSongForPlayback(nextSong)
-          .then((resolvedSong) => {
-            const nextQueue = playbackQueue.map((entry) =>
-              normalizeSong(entry)
-            );
-            nextQueue[nextQueueIndex] = {
-              ...nextQueue[nextQueueIndex],
-              ...resolvedSong,
-            };
-            setPlaybackQueue(nextQueue);
-            setQueueIndex(nextQueueIndex);
-            setCurrentSong(resolvedSong);
-            setDuration(resolvedSong.duration || 0);
-            setPlaybackError(null);
-            setIsSongLoading(false);
-            setIsPlaying(true);
-          })
-          .catch((error) => {
-            console.error("Error playing next queued audio:", error);
-            setPlaybackError(
-              error instanceof Error ? error.message : DEFAULT_PLAYBACK_ERROR
-            );
-            setIsSongLoading(false);
-            setIsPlaying(false);
-            setCurrentTime(0);
-          });
         return;
       }
 
+      const queuedSongs = playbackQueueRef.current;
+      const nextQueueIndex = getNextQueueIndex(
+        repeatModeRef.current,
+        queuedSongs,
+        queueIndexRef.current
+      );
+      const nextSong =
+        nextQueueIndex >= 0 ? queuedSongs[nextQueueIndex] : undefined;
+      if (nextSong) {
+        startQueueTransition(
+          nextSong,
+          queuedSongs,
+          nextQueueIndex,
+          "Error playing next queued audio:"
+        );
+        return;
+      }
+
+      setIsPlaying(false);
+      setCurrentTime(0);
       void playRecommendedSongRef
-        .current(currentSong)
+        .current(activeSong)
         .then((didPlayRecommendation) => {
           if (!didPlayRecommendation) {
-            setIsPlaying(false);
-            setCurrentTime(0);
           }
         });
     };
 
     audio.addEventListener("ended", handleEnded);
     return () => audio.removeEventListener("ended", handleEnded);
-  }, [currentSong, repeatMode, playbackQueue, queueIndex]);
+  }, [currentSong, getNextQueueIndex, startQueueTransition]);
 
   const playSong = (
     song: Song,
@@ -2917,7 +2926,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
 
     destroyManagedPlayback();
-    destroySoundCloudWidgetPlayback();
+    if (!shouldUseSoundCloudWidget(normalizedSong)) {
+      destroySoundCloudWidgetPlayback();
+    }
 
     if (audio) {
       pauseManagedAudio(true);
@@ -2945,7 +2956,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setCurrentTime(0);
     setDuration(normalizedSong.duration || 0);
     setPlaybackError(null);
-    setIsSongLoading(false);
+    setIsSongLoading(true);
     setIsPlaying(true);
     playbackRunIdRef.current = `request-${activeRequestId}`;
     if (settings.openFullscreenOnPlay) {
@@ -2968,7 +2979,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
 
     destroyManagedPlayback();
-    destroySoundCloudWidgetPlayback();
+    if (!shouldUseSoundCloudWidget(normalizedSong)) {
+      destroySoundCloudWidgetPlayback();
+    }
 
     if (audio) {
       pauseManagedAudio(true);
@@ -3069,6 +3082,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
   };
 
+  resolveAndPlaySongRef.current = resolveAndPlaySong;
+
   const clearSongLoading = () => {
     setIsSongLoading(false);
   };
@@ -3143,7 +3158,15 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
   const toggleRepeat = () => {
     setRepeatMode((prev) =>
-      prev === "off" ? "queue" : prev === "queue" ? "one" : "off"
+      playbackQueue.length > 1
+        ? prev === "off"
+          ? "queue"
+          : prev === "queue"
+          ? "one"
+          : "off"
+        : prev === "one"
+        ? "off"
+        : "one"
     );
   };
 
@@ -3168,6 +3191,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const playNext = () => {
     if (queueIndex >= 0 && queueIndex < playbackQueue.length - 1) {
       playQueueIndex(queueIndex + 1);
+      return;
+    }
+
+    if (repeatMode === "queue" && playbackQueue.length > 1) {
+      playQueueIndex(0);
     }
   };
 

@@ -47,6 +47,19 @@ function shiftColor(
   return [clamp(r + amount), clamp(g + amount), clamp(b + amount)];
 }
 
+function getRelativeLuminance([r, g, b]: [number, number, number]): number {
+  const normalize = (value: number) => {
+    const channel = value / 255;
+    return channel <= 0.03928
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  };
+
+  return (
+    0.2126 * normalize(r) + 0.7152 * normalize(g) + 0.0722 * normalize(b)
+  );
+}
+
 function isYouTubeBackedSource(source?: string): boolean {
   const normalized = (source || "").trim().toLowerCase();
   return (
@@ -711,6 +724,23 @@ export default function FullscreenPlayer() {
     : DEFAULT_PALETTE;
   const sectionPrimary = shiftColor(displayPalette.primary, 12);
   const sectionSecondary = shiftColor(displayPalette.primary, -42);
+  const useHeroLightText = getRelativeLuminance(displayPalette.primary) < 0.36;
+  const useSectionLightText =
+    (getRelativeLuminance(sectionPrimary) + getRelativeLuminance(sectionSecondary)) /
+      2 <
+    0.42;
+  const heroPrimaryText = useHeroLightText
+    ? "rgba(255,255,255,0.96)"
+    : "rgba(15,23,42,0.94)";
+  const heroSecondaryText = useHeroLightText
+    ? "rgba(255,255,255,0.78)"
+    : "rgba(15,23,42,0.68)";
+  const sectionPrimaryText = useSectionLightText
+    ? "rgba(255,255,255,0.96)"
+    : "rgba(15,23,42,0.94)";
+  const sectionSecondaryText = useSectionLightText
+    ? "rgba(255,255,255,0.68)"
+    : "rgba(15,23,42,0.62)";
 
   const runManualLyricsSearch = async () => {
     if (!currentSong) return;
@@ -977,15 +1007,31 @@ export default function FullscreenPlayer() {
             </button>
           </div>
 
-          <div className="theme-overlay absolute bottom-2 left-2 right-2 rounded-xl border px-4 py-4 backdrop-blur-xl sm:px-6 sm:py-5 md:px-7">
-            <p className="text-xs text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)] sm:text-sm">
+          <div
+            className="absolute bottom-2 left-2 right-2 rounded-xl border px-4 py-4 backdrop-blur-xl sm:px-6 sm:py-5 md:px-7"
+            style={{
+              backgroundColor: useHeroLightText
+                ? "rgba(9, 12, 18, 0.32)"
+                : "rgba(255, 255, 255, 0.26)",
+              borderColor: useHeroLightText
+                ? "rgba(255,255,255,0.18)"
+                : "rgba(15,23,42,0.12)",
+            }}
+          >
+            <p className="text-xs sm:text-sm" style={{ color: heroSecondaryText }}>
               {t("common.song")}
             </p>
-            <h2 className="mt-1 text-xl font-semibold text-[color:var(--foreground)] sm:text-2xl md:text-3xl">
+            <h2
+              className="mt-1 text-xl font-semibold sm:text-2xl md:text-3xl"
+              style={{ color: heroPrimaryText }}
+            >
               {currentSong.title}
             </h2>
             {songMeta ? (
-              <p className="mt-2 text-xs text-[color:color-mix(in_srgb,var(--foreground)_75%,transparent)] sm:text-sm md:text-base">
+              <p
+                className="mt-2 text-xs sm:text-sm md:text-base"
+                style={{ color: heroSecondaryText }}
+              >
                 {songMeta}
               </p>
             ) : null}
@@ -1148,7 +1194,9 @@ export default function FullscreenPlayer() {
           >
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-white/55">{localizedSectionTitle}</p>
+                <p className="text-sm" style={{ color: sectionSecondaryText }}>
+                  {localizedSectionTitle}
+                </p>
               </div>
             </div>
 
@@ -1191,15 +1239,24 @@ export default function FullscreenPlayer() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium leading-5 text-white">
+                      <p
+                        className="truncate text-sm font-medium leading-5"
+                        style={{ color: sectionPrimaryText }}
+                      >
                         {song.title}
                       </p>
-                      <p className="truncate text-[11px] text-white/60">
+                      <p
+                        className="truncate text-[11px]"
+                        style={{ color: sectionSecondaryText }}
+                      >
                         {song.artist}
                       </p>
                     </div>
                     {upNextSongs.length > 0 ? (
-                      <span className="text-xs text-white/45">
+                      <span
+                        className="text-xs"
+                        style={{ color: sectionSecondaryText }}
+                      >
                         {queueIndex + index + 2}
                       </span>
                     ) : null}
@@ -1208,18 +1265,23 @@ export default function FullscreenPlayer() {
               </div>
             ) : (
               <div
-                className="mt-4 rounded-2xl px-4 py-6 text-sm text-white/60"
+                className="mt-4 rounded-2xl px-4 py-6 text-sm"
                 style={{ backgroundColor: rgbToCss(sectionSecondary, 0.22) }}
               >
                 {isLoadingRelatedSongs ? (
                   <div className="inline-flex items-center gap-3">
                     <span className="theme-spinner h-5 w-5" />
-                    <span className="loading-dots">
+                    <span
+                      className="loading-dots"
+                      style={{ color: sectionSecondaryText }}
+                    >
                       {t("common.loadingRelatedTracks")}
                     </span>
                   </div>
                 ) : (
-                  t("fullscreen.playMoreToSeeRelated")
+                  <span style={{ color: sectionSecondaryText }}>
+                    {t("fullscreen.playMoreToSeeRelated")}
+                  </span>
                 )}
               </div>
             )}

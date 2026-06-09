@@ -34,7 +34,12 @@ export type AppTheme =
   | "sky"
   | "lavender"
   | "peach"
-  | "mint";
+  | "mint"
+  | "butter"
+  | "sage"
+  | "ice"
+  | "sand"
+  | "blush";
 
 export type AppLanguage = "en" | "fa";
 
@@ -65,6 +70,11 @@ export const LIGHT_APP_THEMES = [
   "lavender",
   "peach",
   "mint",
+  "butter",
+  "sage",
+  "ice",
+  "sand",
+  "blush",
 ] as const;
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -114,7 +124,12 @@ function isAppTheme(value: unknown): value is AppTheme {
     value === "sky" ||
     value === "lavender" ||
     value === "peach" ||
-    value === "mint"
+    value === "mint" ||
+    value === "butter" ||
+    value === "sage" ||
+    value === "ice" ||
+    value === "sand" ||
+    value === "blush"
   );
 }
 

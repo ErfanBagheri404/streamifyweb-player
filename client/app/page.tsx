@@ -339,7 +339,7 @@ function ArtistCard({ artist }: { artist: ArtistHistorySummary }) {
 }
 
 export default function Home() {
-  const { recentSongs, resolveAndPlaySong } = useAudio();
+  const { recentSongs, resolveAndPlaySong, currentSong } = useAudio();
   const { t } = useAppLanguage();
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -645,6 +645,14 @@ export default function Home() {
     [mostPlayedYouTubeArtist]
   );
 
+  const heroStartSong = useMemo(() => {
+    if (heroSongs.length === 0) return null;
+    if (!currentSong) return heroSongs[0];
+    const hasCurrentInHero = heroSongs.some((song) => song.id === currentSong.id);
+    if (!hasCurrentInHero) return heroSongs[0];
+    return heroSongs.find((song) => song.id !== currentSong.id) || heroSongs[0];
+  }, [currentSong, heroSongs]);
+
   const playQueue = async (queue: Song[], song: Song) => {
     try {
       const currentIndex = Math.max(
@@ -738,7 +746,9 @@ export default function Home() {
               <div className="flex items-center justify-center">
                 <button
                   type="button"
-                  onClick={() => void playQueue(heroSongs, heroSongs[0])}
+                  onClick={() =>
+                    heroStartSong ? void playQueue(heroSongs, heroStartSong) : undefined
+                  }
                   className="theme-button-accent theme-shadow-strong flex h-14 w-14 items-center justify-center rounded-full border transition hover:scale-[1.03] md:h-20 md:w-20"
                   aria-label={t("home.playSongsBy", {
                     name: mostPlayedYouTubeArtist.name,

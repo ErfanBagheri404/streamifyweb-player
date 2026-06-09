@@ -496,10 +496,7 @@ const MiniPlayer: React.FC = () => {
               ) : null}
             </button>
 
-            <div
-              ref={volumeControlRef}
-              className="relative flex items-center lg:pr-2"
-            >
+            <div ref={volumeControlRef} className="relative flex items-center">
               {isVolumeOpen ? (
                 <div className="theme-overlay theme-shadow-strong absolute bottom-full right-0 mb-3 w-[min(85vw,220px)] rounded-2xl border px-4 py-4 backdrop-blur-xl lg:right-1 lg:w-[220px]">
                   <div className="flex items-center justify-between gap-3">

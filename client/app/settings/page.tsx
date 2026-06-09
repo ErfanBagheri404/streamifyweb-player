@@ -299,6 +299,11 @@ export default function SettingsPage() {
     lavender: getThemeLabel("lavender"),
     peach: getThemeLabel("peach"),
     mint: getThemeLabel("mint"),
+    butter: getThemeLabel("butter"),
+    sage: getThemeLabel("sage"),
+    ice: getThemeLabel("ice"),
+    sand: getThemeLabel("sand"),
+    blush: getThemeLabel("blush"),
   };
   const themeOptions: Array<{
     value: AppTheme;
@@ -444,6 +449,31 @@ export default function SettingsPage() {
       value: "mint",
       label: themeLabels.mint,
       preview: ["#10b981", "#f5fffb", "#d9f7ec"],
+    },
+    {
+      value: "butter",
+      label: themeLabels.butter,
+      preview: ["#f59e0b", "#fffdf2", "#fff4c7"],
+    },
+    {
+      value: "sage",
+      label: themeLabels.sage,
+      preview: ["#22c55e", "#f7fbf7", "#e3f0e2"],
+    },
+    {
+      value: "ice",
+      label: themeLabels.ice,
+      preview: ["#06b6d4", "#f3feff", "#d4f7fb"],
+    },
+    {
+      value: "sand",
+      label: themeLabels.sand,
+      preview: ["#d97706", "#fffaf3", "#f5eadb"],
+    },
+    {
+      value: "blush",
+      label: themeLabels.blush,
+      preview: ["#f43f5e", "#fff6f8", "#ffe0e8"],
     },
   ];
   const languageLabels: Record<AppLanguage, string> = {

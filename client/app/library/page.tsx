@@ -590,7 +590,7 @@ export default function LibraryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { recentSongs, playSong } = useAudio();
-  const { t } = useAppLanguage();
+  const { t, isRtl } = useAppLanguage();
   const [selectedChip, setSelectedChip] = useState<FilterChip | null>(null);
   const [userPlaylists, setUserPlaylists] =
     useState<StoredPlaylist[]>(readStoredPlaylists);
@@ -1128,7 +1128,9 @@ export default function LibraryPage() {
                       <ChevronDownGlyph className="h-3.5 w-3.5" />
                     </button>
                     <div
-                      className={`theme-overlay absolute right-0 top-full z-20 mt-2 w-44 rounded-2xl border p-1 shadow-[0_18px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all duration-150 ${
+                      className={`theme-overlay absolute top-full z-20 mt-2 w-44 rounded-2xl border p-1 shadow-[0_18px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all duration-150 ${
+                        isRtl ? "left-0" : "right-0"
+                      } ${
                         isSortMenuOpen
                           ? "pointer-events-auto translate-y-0 opacity-100"
                           : "pointer-events-none -translate-y-1 opacity-0"

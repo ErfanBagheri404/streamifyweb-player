@@ -86,7 +86,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
               key={fileName}
               type="button"
               onClick={() => onCategorySelect?.(rawLabel)}
-              className="relative w-full overflow-hidden rounded-xl"
+              className="group relative w-full overflow-hidden rounded-xl"
             >
               <Image
                 src={src}
@@ -96,7 +96,14 @@ export const ResultsList: React.FC<ResultsListProps> = ({
                 className="aspect-[3/2] w-full object-cover theme-surface-strong"
                 unoptimized
               />
-              <div className="absolute bottom-4 left-4 text-lg font-bold text-white sm:bottom-5 sm:left-5 sm:text-xl">
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent transition group-hover:from-black/78" />
+              <div
+                className="absolute bottom-4 left-4 right-4 text-lg font-bold sm:bottom-5 sm:left-5 sm:right-5 sm:text-xl"
+                style={{
+                  color: "#ffffff",
+                  textShadow: "0 2px 10px rgba(0,0,0,0.45)",
+                }}
+              >
                 {label}
               </div>
             </button>

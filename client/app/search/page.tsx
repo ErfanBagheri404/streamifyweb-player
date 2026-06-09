@@ -27,6 +27,53 @@ import {
 const DEBUG_SERVER_URL = process.env.NEXT_PUBLIC_DEBUG_SERVER_URL || "";
 const DEBUG_SESSION_ID = "playback-source-500";
 const SEARCH_STATE_UPDATED_EVENT = "streamify-search-state-updated";
+const SEARCH_HISTORY_STORAGE_KEY = "searchHistory";
+
+function readStoredSearchHistory(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SEARCH_HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredSearchHistory(nextHistory: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      SEARCH_HISTORY_STORAGE_KEY,
+      JSON.stringify(nextHistory)
+    );
+  } catch {}
+}
+
+function mergeSearchHistory(history: string[], value: string): string[] {
+  const cleaned = value.trim();
+  if (!cleaned) return history;
+  const lowered = cleaned.toLowerCase();
+  const deduped = [
+    cleaned,
+    ...history.filter((term) => term.toLowerCase() !== lowered),
+  ];
+  return deduped.slice(0, 12);
+}
+
+function filterSearchHistory(history: string[], query: string): string[] {
+  const cleaned = query.trim().toLowerCase();
+  if (!cleaned) return history.slice(0, 8);
+  return history
+    .filter((term) => term.toLowerCase().includes(cleaned))
+    .slice(0, 8);
+}
 
 function reportDebugEvent(
   runId: string,
@@ -243,6 +290,9 @@ function SearchPageInner() {
     const query = searchParams.get("q");
     return query || "";
   });
+  const [searchHistory, setSearchHistory] = useState<string[]>(() =>
+    readStoredSearchHistory()
+  );
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -338,6 +388,15 @@ function SearchPageInner() {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      setSearchHistory(readStoredSearchHistory());
+    };
+    sync();
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
   }, []);
 
   // Handle browser back/forward navigation
@@ -482,6 +541,25 @@ function SearchPageInner() {
     ]
   );
 
+  const addToSearchHistory = useCallback(
+    (term: string) => {
+      if (!settings.rememberLastSearch) return;
+      setSearchHistory((prev) => {
+        const next = mergeSearchHistory(prev, term);
+        writeStoredSearchHistory(next);
+        return next;
+      });
+    },
+    [settings.rememberLastSearch]
+  );
+
+  const showHistorySuggestions = useCallback(
+    (query: string) => {
+      setSuggestions(filterSearchHistory(searchHistory, query));
+    },
+    [searchHistory]
+  );
+
   // ─── API call ────────────────────────────────────────────
   const handleSearch = useCallback(
     async (manualQuery?: string, loadMore = false, overrideFilter?: string) => {
@@ -495,6 +573,9 @@ function SearchPageInner() {
       const sourceToUse = selectedSourceRef.current;
 
       setHasSearched(true);
+      if (!loadMore) {
+        addToSearchHistory(queryToUse);
+      }
 
       if (loadMore) {
         setIsLoadingMore(true);
@@ -579,7 +660,7 @@ function SearchPageInner() {
         else setIsLoading(false);
       }
     },
-    [searchResults.length, currentPage, saveSearchState]
+    [addToSearchHistory, currentPage, saveSearchState, searchResults.length]
   );
 
   // Keep the ref pointed at the latest handleSearch so popstate/mount can call it.
@@ -634,6 +715,8 @@ function SearchPageInner() {
     if (settings.rememberLastSearch) return;
 
     localStorage.removeItem("lastSearch");
+    localStorage.removeItem(SEARCH_HISTORY_STORAGE_KEY);
+    setSearchHistory([]);
     window.dispatchEvent(new CustomEvent(SEARCH_STATE_UPDATED_EVENT));
   }, [settings.rememberLastSearch]);
 
@@ -661,79 +744,82 @@ function SearchPageInner() {
   }, [searchParams]);
 
   // ─── Input change with debounce & suggestions ────────────
-  const handleTextChange = useCallback((text: string) => {
-    setSearchQuery(text);
-    searchQueryRef.current = text;
+  const handleTextChange = useCallback(
+    (text: string) => {
+      setSearchQuery(text);
+      searchQueryRef.current = text;
 
-    // Cancel any pending requests
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-
-    if (text.trim().length < 2) {
-      setSuggestions([]);
-      if (text.length === 0) setHasSearched(false);
-      return;
-    }
-
-    // Fetch suggestions with debounce
-    typingTimeoutRef.current = setTimeout(async () => {
-      const source = selectedSourceRef.current;
-
-      // For YouTube sources, fetch from Piped API
-      if (source === "youtube" || source === "youtubemusic") {
-        try {
-          setIsLoadingSuggestions(true);
-          abortControllerRef.current = new AbortController();
-
-          const response = await fetch(
-            `https://api.piped.private.coffee/opensearch/suggestions?query=${encodeURIComponent(
-              text
-            )}`,
-            { signal: abortControllerRef.current.signal }
-          );
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          const data = await response.json();
-          const suggestionCandidates = Array.isArray(data)
-            ? Array.isArray(data[1])
-              ? data[1]
-              : data.slice(1)
-            : [];
-
-          const normalizedSuggestions = suggestionCandidates
-            .flatMap((value) => (Array.isArray(value) ? value : [value]))
-            .filter((value): value is string => typeof value === "string")
-            .map((value) => value.trim())
-            .filter(Boolean);
-
-          setSuggestions([...new Set(normalizedSuggestions)].slice(0, 8));
-        } catch (error) {
-          if ((error as Error).name !== "AbortError") {
-            console.error("Error fetching suggestions:", error);
-          }
-          setSuggestions([]);
-        } finally {
-          setIsLoadingSuggestions(false);
-        }
-      } else if (source === "soundcloud") {
-        // SoundCloud fallback suggestions
-        const fallbackTerms = ["mix", "remix", "live"];
-        const newSuggestions = [
-          text,
-          ...fallbackTerms.map((term) => `${text} ${term}`),
-        ];
-        setSuggestions(newSuggestions.slice(0, 5));
-      } else {
-        setSuggestions([]);
+      // Cancel any pending requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
-    }, 200);
-  }, []);
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+      if (text.trim().length < 2) {
+        showHistorySuggestions(text);
+        if (text.length === 0) setHasSearched(false);
+        return;
+      }
+
+      // Fetch suggestions with debounce
+      typingTimeoutRef.current = setTimeout(async () => {
+        const source = selectedSourceRef.current;
+
+        // For YouTube sources, fetch from Piped API
+        if (source === "youtube" || source === "youtubemusic") {
+          try {
+            setIsLoadingSuggestions(true);
+            abortControllerRef.current = new AbortController();
+
+            const response = await fetch(
+              `https://api.piped.private.coffee/opensearch/suggestions?query=${encodeURIComponent(
+                text
+              )}`,
+              { signal: abortControllerRef.current.signal }
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const suggestionCandidates = Array.isArray(data)
+              ? Array.isArray(data[1])
+                ? data[1]
+                : data.slice(1)
+              : [];
+
+            const normalizedSuggestions = suggestionCandidates
+              .flatMap((value) => (Array.isArray(value) ? value : [value]))
+              .filter((value): value is string => typeof value === "string")
+              .map((value) => value.trim())
+              .filter(Boolean);
+
+            setSuggestions([...new Set(normalizedSuggestions)].slice(0, 8));
+          } catch (error) {
+            if ((error as Error).name !== "AbortError") {
+              console.error("Error fetching suggestions:", error);
+            }
+            setSuggestions([]);
+          } finally {
+            setIsLoadingSuggestions(false);
+          }
+        } else if (source === "soundcloud") {
+          // SoundCloud fallback suggestions
+          const fallbackTerms = ["mix", "remix", "live"];
+          const newSuggestions = [
+            text,
+            ...fallbackTerms.map((term) => `${text} ${term}`),
+          ];
+          setSuggestions(newSuggestions.slice(0, 5));
+        } else {
+          setSuggestions([]);
+        }
+      }, 200);
+    },
+    [showHistorySuggestions]
+  );
 
   const handleCategorySelect = useCallback(
     (category: string) => {
@@ -1012,7 +1098,7 @@ function SearchPageInner() {
         onChange={handleTextChange}
         onSearch={() => handleSearch()}
         onClear={clearSearch}
-        onFocus={() => {}}
+        onFocus={() => showHistorySuggestions(searchQueryRef.current)}
         onFilterToggle={() => setShowFilters((prev) => !prev)}
         placeholder={t("search.placeholder", {
           source:

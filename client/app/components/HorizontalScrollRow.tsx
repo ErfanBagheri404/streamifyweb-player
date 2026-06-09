@@ -223,7 +223,7 @@ export function HorizontalScrollRow({
         <button
           type="button"
           onClick={handleScrollBackward}
-          className={`absolute top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/65 text-white shadow-lg backdrop-blur-sm transition hover:scale-[1.03] hover:bg-black/80 ${
+          className={`theme-overlay theme-shadow-strong absolute top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border text-[color:var(--foreground)] backdrop-blur-sm transition hover:scale-[1.03] hover:bg-[color:color-mix(in_srgb,var(--surface-overlay)_92%,var(--foreground)_5%)] ${
             isRtl ? "right-0" : "left-0"
           } ${buttonClassName}`.trim()}
           aria-label={
@@ -240,7 +240,7 @@ export function HorizontalScrollRow({
         <button
           type="button"
           onClick={handleScrollForward}
-          className={`absolute top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/65 text-white shadow-lg backdrop-blur-sm transition hover:scale-[1.03] hover:bg-black/80 ${
+          className={`theme-overlay theme-shadow-strong absolute top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border text-[color:var(--foreground)] backdrop-blur-sm transition hover:scale-[1.03] hover:bg-[color:color-mix(in_srgb,var(--surface-overlay)_92%,var(--foreground)_5%)] ${
             isRtl ? "left-0" : "right-0"
           } ${buttonClassName}`.trim()}
           aria-label={

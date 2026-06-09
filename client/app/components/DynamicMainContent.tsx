@@ -90,7 +90,7 @@ export default function DynamicMainContent({
           ? shouldRenderFullscreen
             ? "lg:pb-0"
             : "lg:pb-20 pb-[calc(11rem+env(safe-area-inset-bottom))]"
-          : "lg:pb-20"
+          : "lg:pb-0"
       }`}
     >
       {isFullscreenOpen ? <FullscreenPlayer /> : children}

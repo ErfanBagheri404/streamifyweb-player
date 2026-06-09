@@ -242,7 +242,7 @@
   "settings.recentHidden": "Recent activity hidden",
   "settings.quickHelpShortcuts": "`Space` toggles play/pause, `Left` and `Right` seek, `Up` and `Down` adjust volume, and `F` opens or closes Now Playing.",
   "settings.quickHelpLyrics": "Turning off lyrics stops fullscreen lyric fetches immediately.",
-  "settings.quickHelpThemes": "Themes now change the app shell between Streamify, Ocean, Amethyst, Sunset, Forest, Rose, Frost, Midnight, Ember, Aurora, Sapphire, Violet, Copper, Graphite, Lagoon, Ruby, Olive, Starlight, Dawn, Mist, Petal, Meadow, Daybreak, Linen, Sky, Lavender, Peach, and Mint.",
+  "settings.quickHelpThemes": "Themes now change the app shell between Streamify, Ocean, Amethyst, Sunset, Forest, Rose, Frost, Midnight, Ember, Aurora, Sapphire, Violet, Copper, Graphite, Lagoon, Ruby, Olive, Starlight, Dawn, Mist, Petal, Meadow, Daybreak, Linen, Sky, Lavender, Peach, Mint, Butter, Sage, Ice, Sand, and Blush.",
   "settings.quickHelpReset": "Reset restores playback, lyrics, search, theme, motion, and language preferences to the default Streamify setup.",
   "settings.resetDefaults": "Reset To Defaults",
   "artist.verified": "Verified",
@@ -331,5 +331,10 @@
   "theme.sky": "Sky",
   "theme.lavender": "Lavender",
   "theme.peach": "Peach",
-  "theme.mint": "Mint"
+  "theme.mint": "Mint",
+  "theme.butter": "Butter",
+  "theme.sage": "Sage",
+  "theme.ice": "Ice",
+  "theme.sand": "Sand",
+  "theme.blush": "Blush"
 }
