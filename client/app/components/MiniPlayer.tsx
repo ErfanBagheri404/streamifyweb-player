@@ -8,8 +8,10 @@ import React, {
   useState,
 } from "react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useAudio } from "../contexts/AudioContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
+import { useSidePanel } from "../contexts/SidePanelContext";
 import { spaceMono } from "../fonts";
 
 const STATIC_WAVEFORM_BAR_COUNT = 56;
@@ -62,6 +64,7 @@ function createStaticWaveform(seedInput: string, count: number): number[] {
 }
 
 const MiniPlayer: React.FC = () => {
+  const pathname = usePathname();
   const { t, isRtl, formatNumber } = useAppLanguage();
   const {
     currentSong,
@@ -97,6 +100,10 @@ const MiniPlayer: React.FC = () => {
   const lastNonZeroVolumeRef = useRef(0.8);
   const isDraggingSeekRef = useRef(false);
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
+  const { isOpen: isSidePanelOpen, setIsOpen: setSidePanelOpen } =
+    useSidePanel();
+  const isAuthPage =
+    pathname.startsWith("/signin") || pathname.startsWith("/signup");
 
   const waveformBars = useMemo(() => {
     if (!currentSong) return [];
@@ -260,7 +267,7 @@ const MiniPlayer: React.FC = () => {
     }
   };
 
-  if (!currentSong) {
+  if (!currentSong || isAuthPage) {
     return null;
   }
 
@@ -413,15 +420,21 @@ const MiniPlayer: React.FC = () => {
 
           <div className="flex items-center justify-between gap-1.5 lg:flex-1 lg:justify-end lg:gap-2">
             {queuePositionLabel ? (
-              <span
+              <button
+                type="button"
+                onClick={() => setSidePanelOpen(!isSidePanelOpen)}
                 dir={isRtl ? "rtl" : "ltr"}
-                className={`theme-surface-soft theme-muted hidden rounded-full border px-3 py-1 text-[11px] font-medium xl:inline-flex ${
-                  isRtl ? "" : "uppercase tracking-[0.18em]"
+                className={`theme-surface-soft theme-muted hidden rounded-full border px-3 py-1 xl:inline-flex ${
+                  isRtl
+                    ? "text-sm font-semibold"
+                    : "text-[11px] font-medium uppercase tracking-[0.18em]"
                 }`}
                 style={{ unicodeBidi: "plaintext" }}
+                aria-label={t("miniPlayer.queue")}
+                aria-expanded={isSidePanelOpen}
               >
                 {t("miniPlayer.queue", { position: queuePositionLabel || "" })}
-              </span>
+              </button>
             ) : null}
             <button
               type="button"

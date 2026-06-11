@@ -156,6 +156,8 @@ export default function LeftPanel() {
   const isSearchPage = pathname.startsWith("/search");
   const isLibraryPage = pathname.startsWith("/library");
   const isSettingsPage = pathname.startsWith("/settings");
+  const isAuthPage =
+    pathname.startsWith("/signin") || pathname.startsWith("/signup");
   const getIconClassName = (isActive: boolean) =>
     [
       "h-[30px] w-[30px] cursor-pointer transition-all duration-200 ease-out text-[color:var(--foreground)]",
@@ -166,6 +168,10 @@ export default function LeftPanel() {
       "theme-asset-icon h-[30px] w-[30px] select-none cursor-pointer transition-all duration-200 ease-out",
       isActive ? "opacity-100 scale-100" : "scale-[0.88] opacity-65",
     ].join(" ");
+
+  if (isAuthPage) {
+    return null;
+  }
 
   return (
     <div

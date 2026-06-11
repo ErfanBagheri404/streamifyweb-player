@@ -6,6 +6,8 @@ import { requireStreamifyRequest } from "../_lib/request-guard";
 
 const PIPED_INSTANCES = ["https://api.piped.private.coffee"];
 const INVIDIOUS_INSTANCES = [
+  "https://invidious.kemonomimi.nl",
+  "https://invidious.schenkel.eti.br",
   "https://yt.omada.cafe",
   "https://lekker.gay",
   "https://yt.chocolatemoo53.com",

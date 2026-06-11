@@ -17,6 +17,8 @@ export default function DynamicMainContent({
   const searchParams = useSearchParams();
   const { isFullscreenOpen, closeFullscreen, isPlayerVisible } = useAudio();
   const { settings } = useSettings();
+  const isAuthPage =
+    pathname.startsWith("/signin") || pathname.startsWith("/signup");
   const [shouldRenderFullscreen, setShouldRenderFullscreen] =
     useState(isFullscreenOpen);
   const [isFullscreenVisible, setIsFullscreenVisible] =
@@ -77,16 +79,21 @@ export default function DynamicMainContent({
 
   return (
     <main
-      className={`flex-1 relative ${
+      data-auth-page={isAuthPage ? "true" : undefined}
+      className={`relative min-w-0 flex-1 ${
         shouldRenderFullscreen
           ? "overflow-hidden"
           : "overflow-y-auto overflow-x-hidden hide-scrollbar"
       } min-h-0 ${
         shouldRenderFullscreen
           ? "pb-0"
+          : isAuthPage
+          ? "pb-0"
           : "pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
       } ${
-        isPlayerVisible
+        isAuthPage
+          ? "lg:pb-0"
+          : isPlayerVisible
           ? shouldRenderFullscreen
             ? "lg:pb-0"
             : "lg:pb-20 pb-[calc(11rem+env(safe-area-inset-bottom))]"

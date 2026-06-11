@@ -577,6 +577,8 @@ function shouldRefreshResolvedAudio(song: Song): boolean {
   return (
     audioUrl.includes("videoplayback") ||
     audioUrl.includes("googlevideo.com") ||
+    audioUrl.includes("invidious.kemonomimi.nl") ||
+    audioUrl.includes("invidious.schenkel.eti.br") ||
     audioUrl.includes("yt.omada.cafe") ||
     audioUrl.includes("invidious") ||
     audioUrl.includes("/api/audio-proxy?url=")

@@ -9,6 +9,8 @@ const PIPED_INSTANCES = ["https://api.piped.private.coffee"];
 const YTIFY_INSTANCE = "https://api.ytify.workers.dev";
 
 const INVIDIOUS_INSTANCES = [
+  "https://invidious.kemonomimi.nl",
+  "https://invidious.schenkel.eti.br",
   "https://yt.omada.cafe",
   "https://invidious.tiekoetter.com",
   "https://yt.chocolatemoo53.com",

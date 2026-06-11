@@ -9,6 +9,8 @@ const USER_AGENT =
 const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
 const PIPED_INSTANCES = ["https://api.piped.private.coffee"];
 const INVIDIOUS_INSTANCES = [
+  "https://invidious.kemonomimi.nl",
+  "https://invidious.schenkel.eti.br",
   "https://yt.omada.cafe",
   "https://lekker.gay",
   "https://yt.chocolatemoo53.com",
@@ -232,7 +234,10 @@ function pickSoundCloudCollectionImage(
 
 async function fetchJson(url: string): Promise<unknown> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), COLLECTION_FETCH_TIMEOUT_MS);
+  const timer = setTimeout(
+    () => controller.abort(),
+    COLLECTION_FETCH_TIMEOUT_MS
+  );
 
   try {
     const res = await fetch(url, {

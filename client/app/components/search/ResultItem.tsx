@@ -1,7 +1,6 @@
 import React, { memo } from "react";
 import { SearchResult } from "./types";
 import { formatDuration, shortCount } from "./helpers";
-import Image from "next/image";
 import { useAppLanguage } from "../../hooks/useAppLanguage";
 
 interface ResultItemProps {
@@ -122,17 +121,29 @@ export const ResultItem = memo<ResultItemProps>(({ item, onPress }) => {
         aria-label={t("search.open", { title: displayTitle })}
       >
         {thumbnail ? (
-          <Image
+          <img
             src={thumbnail}
             alt=""
             width={imgWidth}
             height={imgHeight}
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onError={(event) => {
+              const target = event.currentTarget;
+              target.style.display = "none";
+              const fallback = target.nextElementSibling;
+              if (fallback instanceof HTMLElement) {
+                fallback.style.display = "block";
+              }
+            }}
             className={thumbnailClasses}
-            unoptimized
           />
-        ) : (
-          <div className={placeholderClasses} />
-        )}
+        ) : null}
+        <div
+          className={placeholderClasses}
+          style={{ display: thumbnail ? "none" : "block" }}
+        />
       </button>
 
       <div className="min-w-0 flex-1">

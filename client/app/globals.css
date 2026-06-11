@@ -696,6 +696,11 @@ body {
   font-family: var(--font-dm-sans), Arial, Helvetica, sans-serif;
 }
 
+body:has(main[data-auth-page="true"]) {
+  padding: 0 !important;
+  background: #000 !important;
+}
+
 html[data-theme-mode="light"] {
   color-scheme: light;
   --surface-1: color-mix(in srgb, var(--background) 88%, var(--theme-accent) 12%);

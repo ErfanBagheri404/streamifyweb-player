@@ -1,20 +1,39 @@
 import localFont from "next/font/local";
-import { DM_Sans, Space_Mono } from "next/font/google";
 
-export const dmSans = DM_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  display: "swap",
+export const dmSans = localFont({
   variable: "--font-dm-sans",
+  display: "swap",
   preload: true,
+  src: [
+    {
+      path: "../public/fonts/DMSans/DMSans-Regular.ttf",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../public/fonts/DMSans/DMSans-Bold.ttf",
+      weight: "700",
+      style: "normal",
+    },
+    {
+      path: "../public/fonts/DMSans/DMSans-Black.ttf",
+      weight: "900",
+      style: "normal",
+    },
+  ],
 });
 
-export const spaceMono = Space_Mono({
-  subsets: ["latin"],
-  weight: ["400"],
-  display: "swap",
+export const spaceMono = localFont({
   variable: "--font-space-mono",
+  display: "swap",
   preload: true,
+  src: [
+    {
+      path: "../public/fonts/SpaceMono/SpaceMono-Regular.ttf",
+      weight: "400",
+      style: "normal",
+    },
+  ],
 });
 
 export const yekanBakh = localFont({

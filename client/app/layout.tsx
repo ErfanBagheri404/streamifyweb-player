@@ -1,13 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Suspense } from "react";
 import bannerImage from "../public/Banner.png";
 import "./globals.css";
 import LeftPanel from "./components/LeftPanel";
-import MiniPlayer from "./components/MiniPlayer";
-import DynamicMainContent from "./components/DynamicMainContent";
 import MobileAppGate from "./components/MobileAppGate";
+import ShellLayout from "./components/ShellLayout";
 import { AudioProvider } from "./contexts/AudioContext";
 import { SettingsProvider } from "./contexts/SettingsContext";
+import { SidePanelProvider } from "./contexts/SidePanelContext";
 import { dmSans, spaceMono, yekanBakh } from "./fonts";
 
 const siteUrl =
@@ -145,19 +144,18 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-        className={`h-full antialiased ${dmSans.variable} ${spaceMono.variable} ${yekanBakh.variable}`}
+      className={`h-full antialiased ${dmSans.variable} ${spaceMono.variable} ${yekanBakh.variable}`}
     >
       <body
         className={`${dmSans.className} theme-shell flex min-h-full flex-col p-2 sm:p-3 lg:h-full lg:flex-row lg:p-3`}
       >
         <SettingsProvider>
           <AudioProvider>
-            <MobileAppGate />
-            <LeftPanel />
-            <Suspense fallback={null}>
-              <DynamicMainContent>{children}</DynamicMainContent>
-            </Suspense>
-            <MiniPlayer />
+            <SidePanelProvider>
+              <MobileAppGate />
+              <LeftPanel />
+              <ShellLayout>{children}</ShellLayout>
+            </SidePanelProvider>
           </AudioProvider>
         </SettingsProvider>
       </body>

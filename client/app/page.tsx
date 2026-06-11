@@ -698,20 +698,18 @@ export default function Home() {
             {greeting}
           </p>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-            <button
-              type="button"
-              onClick={() => showAuthDisabledNotice("signup")}
+            <Link
+              href="/signup"
               className="theme-button-soft rounded-full border px-4 py-2 text-sm font-semibold transition"
             >
               {t("home.signUp")}
-            </button>
-            <button
-              type="button"
-              onClick={() => showAuthDisabledNotice("signin")}
+            </Link>
+            <Link
+              href="/signin"
               className="theme-button-solid rounded-full px-4 py-2 text-sm font-semibold transition"
             >
               {t("home.signIn")}
-            </button>
+            </Link>
           </div>
         </div>
 
