@@ -20,7 +20,7 @@ const SidePanelContext = createContext<SidePanelState | undefined>(undefined);
 const STORAGE_KEY = "streamifySidePanelOpen";
 
 export function SidePanelProvider({ children }: { children: ReactNode }) {
-  const [isOpen, setIsOpenState] = useState(true);
+  const [isOpen, setIsOpenState] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
