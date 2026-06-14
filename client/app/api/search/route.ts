@@ -1,21 +1,15 @@
 import { readFileSync } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
+import {
+  INVIDIOUS_INSTANCES,
+  PIPED_INSTANCES,
+} from "../../lib/media-providers";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
-const PIPED_INSTANCES = ["https://api.piped.private.coffee"];
 const YTIFY_INSTANCE = "https://api.ytify.workers.dev";
-
-const INVIDIOUS_INSTANCES = [
-  "https://invidious.kemonomimi.nl",
-  "https://invidious.schenkel.eti.br",
-  "https://yt.omada.cafe",
-  "https://invidious.tiekoetter.com",
-  "https://yt.chocolatemoo53.com",
-  "https://inv.nadeko.net",
-];
 
 type SearchResponse = { items: unknown[]; nextpage?: string | null };
 

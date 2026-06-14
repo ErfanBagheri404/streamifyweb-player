@@ -2,10 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HorizontalScrollRow } from "./components/HorizontalScrollRow";
 import { type Song, useAudio } from "./contexts/AudioContext";
 import { useAppLanguage } from "./hooks/useAppLanguage";
+import { getUserAvatarUrl, getUserDisplayName } from "./lib/auth-user";
+import { getSupabaseBrowserClient } from "./lib/supabase/browser";
 import { readSessionCache, writeSessionCache } from "./lib/session-cache";
 
 const HOME_ARTIST_BANNER_CACHE_KEY = "homeArtistBannerCache";
@@ -341,6 +344,7 @@ function ArtistCard({ artist }: { artist: ArtistHistorySummary }) {
 export default function Home() {
   const { recentSongs, resolveAndPlaySong, currentSong } = useAudio();
   const { t } = useAppLanguage();
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
     if (hour < 12) return t("home.greetingMorning");
@@ -364,6 +368,43 @@ export default function Home() {
     title: string;
     body: string;
   } | null>(null);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!supabase) {
+      setAuthUser(null);
+      setIsAuthLoading(false);
+      return;
+    }
+
+    const loadUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!isMounted) return;
+      setAuthUser(user);
+      setIsAuthLoading(false);
+    };
+
+    void loadUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+      setAuthUser(session?.user ?? null);
+      setIsAuthLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   useEffect(() => {
     if (!authNotice) return;
@@ -648,7 +689,9 @@ export default function Home() {
   const heroStartSong = useMemo(() => {
     if (heroSongs.length === 0) return null;
     if (!currentSong) return heroSongs[0];
-    const hasCurrentInHero = heroSongs.some((song) => song.id === currentSong.id);
+    const hasCurrentInHero = heroSongs.some(
+      (song) => song.id === currentSong.id
+    );
     if (!hasCurrentInHero) return heroSongs[0];
     return heroSongs.find((song) => song.id !== currentSong.id) || heroSongs[0];
   }, [currentSong, heroSongs]);
@@ -676,6 +719,12 @@ export default function Home() {
       body: t("home.authDisabledBody"),
     });
   };
+  const displayName = getUserDisplayName(authUser);
+  const avatarUrl = getUserAvatarUrl(authUser);
+  const userInitial =
+    displayName.trim().charAt(0).toUpperCase() ||
+    authUser?.email?.charAt(0).toUpperCase() ||
+    "U";
 
   return (
     <div className="min-h-full text-[color:var(--foreground)]">
@@ -698,18 +747,46 @@ export default function Home() {
             {greeting}
           </p>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-            <Link
-              href="/signup"
-              className="theme-button-soft rounded-full border px-4 py-2 text-sm font-semibold transition"
-            >
-              {t("home.signUp")}
-            </Link>
-            <Link
-              href="/signin"
-              className="theme-button-solid rounded-full px-4 py-2 text-sm font-semibold transition"
-            >
-              {t("home.signIn")}
-            </Link>
+            {authUser ? (
+              <Link
+                href="/settings"
+                className="theme-button-soft flex min-w-0 max-w-full items-center gap-2 rounded-full border px-2.5 py-1.5 text-xs font-medium transition sm:max-w-[240px]"
+              >
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="theme-button-solid flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-bold">
+                    {userInitial}
+                  </div>
+                )}
+                <span className="min-w-0 truncate leading-none">
+                  {displayName}
+                </span>
+              </Link>
+            ) : isAuthLoading ? (
+              <div className="theme-button-soft rounded-full border px-3 py-1.5 text-xs font-medium">
+                {t("settings.accountLoading")}
+              </div>
+            ) : (
+              <>
+                <Link
+                  href="/signup"
+                  className="theme-button-soft rounded-full border px-4 py-2 text-sm font-semibold transition"
+                >
+                  {t("home.signUp")}
+                </Link>
+                <Link
+                  href="/signin"
+                  className="theme-button-solid rounded-full px-4 py-2 text-sm font-semibold transition"
+                >
+                  {t("home.signIn")}
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -745,7 +822,9 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() =>
-                    heroStartSong ? void playQueue(heroSongs, heroStartSong) : undefined
+                    heroStartSong
+                      ? void playQueue(heroSongs, heroStartSong)
+                      : undefined
                   }
                   className="theme-button-accent theme-shadow-strong flex h-14 w-14 items-center justify-center rounded-full border transition hover:scale-[1.03] md:h-20 md:w-20"
                   aria-label={t("home.playSongsBy", {

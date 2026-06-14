@@ -670,14 +670,8 @@ export default function LibraryPage() {
   }, [recentSongs]);
 
   const shownArtists = useMemo(
-    () =>
-      topArtists.length > 0
-        ? topArtists
-        : [
-            { name: t("library.discoverMore"), count: 0 },
-            { name: t("library.yourNextArtist"), count: 0 },
-          ],
-    [t, topArtists]
+    () => topArtists,
+    [topArtists]
   );
 
   const previouslyPlayed = useMemo(
@@ -751,22 +745,8 @@ export default function LibraryPage() {
   );
 
   const recentAlbums = useMemo(
-    () =>
-      recentSongs.length > 0
-        ? recentSongs.slice(0, 10)
-        : [
-            {
-              id: "album-placeholder-1",
-              title: t("library.playSomethingNew"),
-              artist: t("library.album"),
-            },
-            {
-              id: "album-placeholder-2",
-              title: t("library.yourNextReplay"),
-              artist: t("library.album"),
-            },
-          ],
-    [recentSongs, t]
+    () => recentSongs.slice(0, 10),
+    [recentSongs]
   );
 
   const mixedLibraryItems = useMemo<LibraryGridItem[]>(() => {

@@ -81,9 +81,25 @@ export default function LeftPanel() {
   }, []);
 
   useEffect(() => {
-    router.prefetch("/");
-    router.prefetch("/library");
-    router.prefetch("/settings");
+    const schedulePrefetch = (href: string) => {
+      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+        const callbackId = window.requestIdleCallback(() => {
+          router.prefetch(href);
+        });
+
+        return () => {
+          window.cancelIdleCallback(callbackId);
+        };
+      }
+
+      const timeoutId = globalThis.setTimeout(() => {
+        router.prefetch(href);
+      }, 400);
+
+      return () => {
+        globalThis.clearTimeout(timeoutId);
+      };
+    };
 
     if (effectiveLastSearch?.query) {
       const params = new URLSearchParams();
@@ -92,11 +108,10 @@ export default function LeftPanel() {
         params.set("source", effectiveLastSearch.source);
       if (effectiveLastSearch.filter !== "all")
         params.set("filter", effectiveLastSearch.filter);
-      router.prefetch(`/search?${params.toString()}`);
-      return;
+      return schedulePrefetch(`/search?${params.toString()}`);
     }
 
-    router.prefetch(
+    return schedulePrefetch(
       settings.preferredSearchSource === "youtube"
         ? "/search"
         : `/search?source=${settings.preferredSearchSource}`

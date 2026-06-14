@@ -1,12 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import bannerImage from "../public/Banner.png";
 import "./globals.css";
-import LeftPanel from "./components/LeftPanel";
-import MobileAppGate from "./components/MobileAppGate";
-import ShellLayout from "./components/ShellLayout";
-import { AudioProvider } from "./contexts/AudioContext";
-import { SettingsProvider } from "./contexts/SettingsContext";
-import { SidePanelProvider } from "./contexts/SidePanelContext";
+import AppShell from "./components/AppShell";
 import { dmSans, spaceMono, yekanBakh } from "./fonts";
 
 const siteUrl =
@@ -149,15 +144,7 @@ export default function RootLayout({
       <body
         className={`${dmSans.className} theme-shell flex min-h-full flex-col p-2 sm:p-3 lg:h-full lg:flex-row lg:p-3`}
       >
-        <SettingsProvider>
-          <AudioProvider>
-            <SidePanelProvider>
-              <MobileAppGate />
-              <LeftPanel />
-              <ShellLayout>{children}</ShellLayout>
-            </SidePanelProvider>
-          </AudioProvider>
-        </SettingsProvider>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

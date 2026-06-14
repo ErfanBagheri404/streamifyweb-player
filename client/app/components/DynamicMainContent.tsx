@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useAudio } from "../contexts/AudioContext";
 import { useSettings } from "../contexts/SettingsContext";
+import { isStandaloneAuthPath } from "../lib/auth-routes";
 import FullscreenPlayer from "./FullscreenPlayer";
 
 interface DynamicMainContentProps {
@@ -17,8 +18,7 @@ export default function DynamicMainContent({
   const searchParams = useSearchParams();
   const { isFullscreenOpen, closeFullscreen, isPlayerVisible } = useAudio();
   const { settings } = useSettings();
-  const isAuthPage =
-    pathname.startsWith("/signin") || pathname.startsWith("/signup");
+  const isAuthPage = isStandaloneAuthPath(pathname);
   const [shouldRenderFullscreen, setShouldRenderFullscreen] =
     useState(isFullscreenOpen);
   const [isFullscreenVisible, setIsFullscreenVisible] =

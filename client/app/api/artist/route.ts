@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
+import { INVIDIOUS_INSTANCES } from "../../lib/media-providers";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
-const INVIDIOUS_INSTANCES = [
-  "https://invidious.kemonomimi.nl",
-  "https://invidious.schenkel.eti.br",
-  "https://yt.omada.cafe",
-  "https://lekker.gay",
-  "https://yt.chocolatemoo53.com",
-  "https://inv.nadeko.net",
-  "https://invidious.tiekoetter.com",
-];
 const INVIDIOUS_BASE = INVIDIOUS_INSTANCES[0];
 const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
 

@@ -6,5 +6,9 @@ export const metadata: Metadata = {
 };
 
 export default function SignUpPage() {
-  return <AuthScreen mode="signup" />;
+  return (
+    <main data-auth-page="true" className="flex-1">
+      <AuthScreen mode="signup" />
+    </main>
+  );
 }

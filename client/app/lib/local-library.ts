@@ -6,6 +6,24 @@ export const PLAYLISTS_STORAGE_KEY = "libraryUserPlaylists";
 export const LIKED_SONGS_STORAGE_KEY = "libraryLikedSongs";
 export const LOCAL_LIBRARY_UPDATED_EVENT = "streamify-local-library-updated";
 
+export interface CloudTrackRef {
+  id: string;
+  source: string;
+}
+
+export interface CloudPlaylistSnapshot {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: number;
+  songs: CloudTrackRef[];
+}
+
+export interface CloudLibrarySnapshot {
+  playlists: CloudPlaylistSnapshot[];
+  likedSongs: CloudTrackRef[];
+}
+
 export interface StoredPlaylist {
   id: string;
   name: string;
@@ -30,6 +48,10 @@ export interface LocalCollectionData {
 function emitLocalLibraryUpdated() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(LOCAL_LIBRARY_UPDATED_EVENT));
+}
+
+function getSongStorageKey(song: Pick<Song, "id" | "source">): string {
+  return `${song.source?.trim().toLowerCase() || "unknown"}:${song.id}`;
 }
 
 function normalizeSongSnapshot(song: Song): Song {
@@ -62,12 +84,145 @@ function dedupeSongs(songs: Song[]): Song[] {
   const output: Song[] = [];
 
   for (const song of songs) {
-    if (!song?.id || seen.has(song.id)) continue;
-    seen.add(song.id);
+    if (!song?.id) continue;
+    const key = getSongStorageKey(song);
+    if (seen.has(key)) continue;
+    seen.add(key);
     output.push(normalizeSongSnapshot(song));
   }
 
   return output;
+}
+
+function normalizeCloudTrackRef(value: unknown): CloudTrackRef | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  const source = typeof record.source === "string" ? record.source.trim() : "";
+  if (!id || !source) return null;
+
+  return { id, source };
+}
+
+function normalizeCloudTrackRefs(value: unknown): CloudTrackRef[] {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const output: CloudTrackRef[] = [];
+
+  for (const entry of value) {
+    const ref = normalizeCloudTrackRef(entry);
+    if (!ref) continue;
+    const key = `${ref.source}:${ref.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(ref);
+  }
+
+  return output;
+}
+
+function normalizeCloudPlaylist(value: unknown): CloudPlaylistSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  const name = typeof record.name === "string" ? record.name.trim() : "";
+  if (!id || !name) return null;
+
+  return {
+    id,
+    name,
+    description:
+      typeof record.description === "string" ? record.description.trim() : "",
+    createdAt:
+      typeof record.createdAt === "number" && Number.isFinite(record.createdAt)
+        ? record.createdAt
+        : Date.now(),
+    songs: normalizeCloudTrackRefs(record.songs),
+  };
+}
+
+function normalizeCloudLibrarySnapshot(value: unknown): CloudLibrarySnapshot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { playlists: [], likedSongs: [] };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    playlists: Array.isArray(record.playlists)
+      ? record.playlists
+          .map((playlist) => normalizeCloudPlaylist(playlist))
+          .filter(
+            (playlist): playlist is CloudPlaylistSnapshot => Boolean(playlist)
+          )
+      : [],
+    likedSongs: normalizeCloudTrackRefs(record.likedSongs),
+  };
+}
+
+function createCloudTrackRef(song: Pick<Song, "id" | "source">): CloudTrackRef | null {
+  const id = song.id?.trim();
+  const source = song.source?.trim();
+  if (!id || !source) return null;
+  return { id, source };
+}
+
+function createPlaceholderSong(ref: CloudTrackRef): Song {
+  return {
+    id: ref.id,
+    source: ref.source,
+    title: ref.id,
+    artist: ref.source,
+  };
+}
+
+async function resolveCloudTrackRef(ref: CloudTrackRef): Promise<Song> {
+  try {
+    const params = new URLSearchParams();
+    params.set("id", ref.id);
+    params.set("source", ref.source);
+    const response = await fetch(`/api/video?${params.toString()}`);
+    const payload = (await response.json()) as Record<string, unknown>;
+
+    if (!response.ok) {
+      return createPlaceholderSong(ref);
+    }
+
+    return normalizeSongSnapshot({
+      id:
+        typeof payload.id === "string" && payload.id.trim()
+          ? payload.id
+          : ref.id,
+      source:
+        typeof payload.source === "string" && payload.source.trim()
+          ? payload.source
+          : ref.source,
+      title:
+        typeof payload.title === "string" && payload.title.trim()
+          ? payload.title
+          : ref.id,
+      artist:
+        typeof payload.author === "string" && payload.author.trim()
+          ? payload.author
+          : ref.source,
+      coverUrl:
+        typeof payload.thumbnailUrl === "string" && payload.thumbnailUrl.trim()
+          ? payload.thumbnailUrl
+          : undefined,
+      url:
+        typeof payload.url === "string" && payload.url.trim()
+          ? payload.url
+          : undefined,
+      duration:
+        typeof payload.lengthSeconds === "number" ? payload.lengthSeconds : undefined,
+      playbackStrategy:
+        payload.playbackStrategy === "widget" ? "widget" : undefined,
+    });
+  } catch {
+    return createPlaceholderSong(ref);
+  }
 }
 
 function createPlaylistId(): string {
@@ -133,6 +288,26 @@ export function writeStoredPlaylists(playlists: StoredPlaylist[]) {
   emitLocalLibraryUpdated();
 }
 
+export function createCloudLibrarySnapshot(
+  playlists: StoredPlaylist[],
+  likedSongs: Song[]
+): CloudLibrarySnapshot {
+  return {
+    playlists: playlists.map((playlist) => ({
+      id: playlist.id,
+      name: playlist.name,
+      description: playlist.description,
+      createdAt: playlist.createdAt,
+      songs: playlist.songs
+        .map((song) => createCloudTrackRef(song))
+        .filter((song): song is CloudTrackRef => Boolean(song)),
+    })),
+    likedSongs: likedSongs
+      .map((song) => createCloudTrackRef(song))
+      .filter((song): song is CloudTrackRef => Boolean(song)),
+  };
+}
+
 export function createStoredPlaylist(name: string, description: string) {
   const playlist: StoredPlaylist = {
     id: createPlaylistId(),
@@ -177,7 +352,9 @@ export function addSongToPlaylist(playlistId: string, song: Song) {
   const next = playlists.map((playlist) => {
     if (playlist.id !== playlistId) return playlist;
 
-    alreadyExists = playlist.songs.some((entry) => entry.id === song.id);
+    alreadyExists = playlist.songs.some(
+      (entry) => getSongStorageKey(entry) === getSongStorageKey(song)
+    );
     updatedPlaylist = {
       ...playlist,
       songs: alreadyExists
@@ -211,7 +388,7 @@ export function readLikedSongs(): Song[] {
   }
 }
 
-function writeLikedSongs(songs: Song[]) {
+export function writeLikedSongs(songs: Song[]) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(
     LIKED_SONGS_STORAGE_KEY,
@@ -220,17 +397,25 @@ function writeLikedSongs(songs: Song[]) {
   emitLocalLibraryUpdated();
 }
 
-export function isSongLiked(songId?: string): boolean {
+export function isSongLiked(songId?: string, source?: string): boolean {
   if (!songId) return false;
-  return readLikedSongs().some((song) => song.id === songId);
+  return readLikedSongs().some(
+    (song) =>
+      song.id === songId &&
+      (source ? (song.source || "") === source : true)
+  );
 }
 
 export function toggleLikedSong(song: Song) {
   const likedSongs = readLikedSongs();
-  const exists = likedSongs.some((entry) => entry.id === song.id);
+  const exists = likedSongs.some(
+    (entry) => getSongStorageKey(entry) === getSongStorageKey(song)
+  );
 
   const next = exists
-    ? likedSongs.filter((entry) => entry.id !== song.id)
+    ? likedSongs.filter(
+        (entry) => getSongStorageKey(entry) !== getSongStorageKey(song)
+      )
     : [normalizeSongSnapshot(song), ...likedSongs];
 
   writeLikedSongs(next);
@@ -239,6 +424,25 @@ export function toggleLikedSong(song: Song) {
     liked: !exists,
     songs: next,
   };
+}
+
+export async function restoreCloudLibrary(snapshot: unknown) {
+  const normalized = normalizeCloudLibrarySnapshot(snapshot);
+  const restoredPlaylists = await Promise.all(
+    normalized.playlists.map(async (playlist) => ({
+      id: playlist.id,
+      name: playlist.name,
+      description: playlist.description,
+      createdAt: playlist.createdAt,
+      songs: await Promise.all(playlist.songs.map(resolveCloudTrackRef)),
+    }))
+  );
+  const restoredLikedSongs = await Promise.all(
+    normalized.likedSongs.map(resolveCloudTrackRef)
+  );
+
+  writeStoredPlaylists(restoredPlaylists);
+  writeLikedSongs(restoredLikedSongs);
 }
 
 function readRecentSongsFromAudioState(): Song[] {

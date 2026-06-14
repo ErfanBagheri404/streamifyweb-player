@@ -1,6 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAudio, type AutoRetryPreference } from "../contexts/AudioContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import { useSettings } from "../contexts/SettingsContext";
@@ -10,6 +12,17 @@ import {
   type AppTheme,
   type PreferredSearchSource,
 } from "../lib/app-settings";
+import {
+  createCloudLibrarySnapshot,
+  readLikedSongs,
+  readStoredPlaylists,
+} from "../lib/local-library";
+import {
+  getUserAvatarUrl,
+  getUserDisplayName,
+  hasUserProvider,
+} from "../lib/auth-user";
+import { getSupabaseBrowserClient } from "../lib/supabase/browser";
 
 function SparkGlyph() {
   return (
@@ -245,12 +258,56 @@ function AutoRetryValue({
 export default function SettingsPage() {
   const { settings, updateSettings, resetSettings } = useSettings();
   const { t, getSourceLabel, getThemeLabel } = useAppLanguage();
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const isCloudSyncAvailable = Boolean(supabase);
+  const cloudSyncUnavailableMessage =
+    "Cloud sync is unavailable until Supabase environment variables are configured.";
   const {
     autoRetryPreference,
     enableAutoRetry,
     disableAutoRetry,
     resetAutoRetryPreference,
   } = useAudio();
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!supabase) {
+      setAuthUser(null);
+      setIsAuthLoading(false);
+      return;
+    }
+
+    const loadUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!isMounted) return;
+      setAuthUser(user);
+      setIsAuthLoading(false);
+    };
+
+    void loadUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+      setAuthUser(session?.user ?? null);
+      setIsAuthLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   const handleAutoRetryChange = (value: AutoRetryPreference) => {
     if (value === "enabled") {
@@ -493,6 +550,84 @@ export default function SettingsPage() {
   const searchMemoryLabel = settings.rememberLastSearch
     ? t("settings.searchMemoryOn")
     : t("settings.searchMemoryOff");
+  const accountAvatarUrl = getUserAvatarUrl(authUser);
+  const accountDisplayName = getUserDisplayName(authUser);
+  const accountProviderLabel = authUser
+    ? hasUserProvider(authUser, "google")
+      ? t("settings.googleAccount")
+      : t("settings.emailAccount")
+    : t("settings.accountGuest");
+
+  const handleSignOut = async () => {
+    setSyncMessage(null);
+    setSyncError(null);
+
+    if (!supabase) {
+      setSyncError(cloudSyncUnavailableMessage);
+      return;
+    }
+
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setSyncError(error.message);
+      return;
+    }
+
+    setSyncMessage(t("settings.accountSignedOut"));
+  };
+
+  const handleSyncLibrary = async () => {
+    setSyncMessage(null);
+    setSyncError(null);
+
+    if (!supabase) {
+      setSyncError(cloudSyncUnavailableMessage);
+      return;
+    }
+
+    const playlists = readStoredPlaylists();
+    const likedSongs = readLikedSongs();
+    const snapshot = createCloudLibrarySnapshot(playlists, likedSongs);
+
+    if (playlists.length === 0 && likedSongs.length === 0) {
+      setSyncError(t("settings.syncEmpty"));
+      return;
+    }
+
+    setIsSyncing(true);
+
+    try {
+      const response = await fetch("/api/library/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(snapshot),
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        syncedPlaylists?: number;
+        syncedLikes?: number;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || t("settings.syncFailed"));
+      }
+
+      setSyncMessage(
+        t("settings.syncSuccess", {
+          playlists: payload.syncedPlaylists ?? 0,
+          likes: payload.syncedLikes ?? 0,
+        })
+      );
+    } catch (error) {
+      setSyncError(
+        error instanceof Error ? error.message : t("settings.syncFailed")
+      );
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   return (
     <div className="relative h-full overflow-y-auto hide-scrollbar rounded-xl bg-transparent text-[color:var(--foreground)]">
@@ -763,6 +898,122 @@ export default function SettingsPage() {
           </div>
 
           <aside className="space-y-5 xl:sticky xl:top-0 xl:self-start">
+            <section className="theme-surface-strong rounded-xl border p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:color-mix(in_srgb,var(--foreground)_42%,transparent)]">
+                {t("settings.account")}
+              </p>
+              <div className="mt-4 space-y-4">
+                <div className="theme-surface-soft rounded-xl border p-4">
+                  <p className="text-sm text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)]">
+                    {t("settings.accountDescription")}
+                  </p>
+                  <div className="mt-3 flex items-center gap-3">
+                    {accountAvatarUrl ? (
+                      <img
+                        src={accountAvatarUrl}
+                        alt=""
+                        className="h-11 w-11 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="theme-button-soft flex h-11 w-11 items-center justify-center rounded-full border text-sm font-semibold">
+                        {accountDisplayName.slice(0, 1).toUpperCase() ||
+                          authUser?.email?.slice(0, 1).toUpperCase() ||
+                          "G"}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-semibold text-[color:var(--foreground)]">
+                        {isAuthLoading
+                          ? t("settings.accountLoading")
+                          : accountDisplayName || t("settings.accountGuest")}
+                      </p>
+                      <p className="theme-muted mt-1 text-sm">
+                        {accountProviderLabel}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="theme-surface-soft rounded-xl border p-4">
+                  <p className="text-sm text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)]">
+                    {t("settings.cloudSync")}
+                  </p>
+                  <p className="theme-muted mt-1 text-sm">
+                    {isCloudSyncAvailable
+                      ? t("settings.cloudSyncDescription")
+                      : cloudSyncUnavailableMessage}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {!isCloudSyncAvailable ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled
+                          className="theme-button-solid rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {t("settings.syncLibrary")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled
+                          className="theme-button-soft rounded-full border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {t("settings.signOut")}
+                        </button>
+                      </>
+                    ) : authUser ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleSyncLibrary();
+                          }}
+                          disabled={isSyncing}
+                          className="theme-button-solid rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isSyncing
+                            ? t("settings.syncInProgress")
+                            : t("settings.syncLibrary")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleSignOut();
+                          }}
+                          className="theme-button-soft rounded-full border px-4 py-2 text-sm font-semibold transition"
+                        >
+                          {t("settings.signOut")}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href="/signin"
+                          className="theme-button-solid rounded-full px-4 py-2 text-sm font-semibold transition"
+                        >
+                          {t("settings.continueToSignIn")}
+                        </Link>
+                        <Link
+                          href="/signup"
+                          className="theme-button-soft rounded-full border px-4 py-2 text-sm font-semibold transition"
+                        >
+                          {t("settings.continueToSignUp")}
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                  {syncError ? (
+                    <p className="mt-3 text-sm text-red-300">{syncError}</p>
+                  ) : null}
+                  {syncMessage ? (
+                    <p className="mt-3 text-sm text-emerald-300">
+                      {syncMessage}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+
             <section className="theme-surface-strong rounded-xl border p-5">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:color-mix(in_srgb,var(--foreground)_42%,transparent)]">
                 {t("settings.activeSetup")}

@@ -3,17 +3,11 @@ import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { requireStreamifyRequest } from "../_lib/request-guard";
+import {
+  INVIDIOUS_INSTANCES,
+  PIPED_INSTANCES,
+} from "../../lib/media-providers";
 
-const PIPED_INSTANCES = ["https://api.piped.private.coffee"];
-const INVIDIOUS_INSTANCES = [
-  "https://invidious.kemonomimi.nl",
-  "https://invidious.schenkel.eti.br",
-  "https://yt.omada.cafe",
-  "https://lekker.gay",
-  "https://yt.chocolatemoo53.com",
-  "https://inv.nadeko.net",
-  "https://invidious.tiekoetter.com",
-];
 const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
 
 const USER_AGENT =

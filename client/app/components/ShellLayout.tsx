@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { usePathname } from "next/navigation";
 import { useAudio } from "../contexts/AudioContext";
 import { useSidePanel } from "../contexts/SidePanelContext";
+import { isStandaloneAuthPath } from "../lib/auth-routes";
 import MiniPlayer from "./MiniPlayer";
 import NowPlayingSidePanel from "./NowPlayingSidePanel";
 import DynamicMainContent from "./DynamicMainContent";
@@ -16,8 +17,7 @@ export default function ShellLayout({ children }: ShellLayoutProps) {
   const pathname = usePathname();
   const { isOpen } = useSidePanel();
   const { isFullscreenOpen } = useAudio();
-  const isAuthPage =
-    pathname.startsWith("/signin") || pathname.startsWith("/signup");
+  const isAuthPage = isStandaloneAuthPath(pathname);
   const shouldShowPanelSlot = isOpen && !isFullscreenOpen && !isAuthPage;
 
   return (

@@ -12,6 +12,7 @@ import React, {
 } from "react";
 import { useSettings } from "./SettingsContext";
 import { formatNumberByLanguage } from "../lib/i18n";
+import { isManagedRemoteAudioUrl } from "../lib/media-providers";
 
 type AudioType = "file" | "hls" | "soundcloud-drm";
 type PlaybackStrategy = "audio" | "widget";
@@ -573,16 +574,7 @@ function shouldRefreshResolvedAudio(song: Song): boolean {
     return false;
   }
 
-  const audioUrl = song.audioUrl || "";
-  return (
-    audioUrl.includes("videoplayback") ||
-    audioUrl.includes("googlevideo.com") ||
-    audioUrl.includes("invidious.kemonomimi.nl") ||
-    audioUrl.includes("invidious.schenkel.eti.br") ||
-    audioUrl.includes("yt.omada.cafe") ||
-    audioUrl.includes("invidious") ||
-    audioUrl.includes("/api/audio-proxy?url=")
-  );
+  return isManagedRemoteAudioUrl(song.audioUrl || "");
 }
 
 export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
@@ -626,6 +618,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const volumeRef = useRef(1);
   const lastMediaSessionPositionRef = useRef(0);
   const lastMediaSessionPositionUpdateRef = useRef(0);
+  const lastPersistedSongIdRef = useRef<string | null>(null);
+  const lastPersistedProgressRef = useRef(0);
   const hlsControllerRef = useRef<{ destroy: () => void } | null>(null);
   const hlsSourceRef = useRef<string | null>(null);
   const shakaPlayerRef = useRef<{
@@ -1081,6 +1075,15 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   useEffect(() => {
     if (!hasHydratedRef.current) return;
 
+    const hasSongChanged = currentSong?.id !== lastPersistedSongIdRef.current;
+    const shouldPersistProgress =
+      !isPlaying ||
+      Math.abs(currentTime - lastPersistedProgressRef.current) >= 15;
+
+    if (!hasSongChanged && !shouldPersistProgress) {
+      return;
+    }
+
     const state = {
       currentSong,
       recentSongs,
@@ -1093,6 +1096,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       isSongLoading: false,
     };
     localStorage.setItem("audioPlayerState", JSON.stringify(state));
+    lastPersistedSongIdRef.current = currentSong?.id || null;
+    lastPersistedProgressRef.current = currentTime;
   }, [
     currentSong,
     recentSongs,

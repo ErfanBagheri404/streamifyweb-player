@@ -13,6 +13,7 @@ import { useAudio } from "../contexts/AudioContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import { useSidePanel } from "../contexts/SidePanelContext";
 import { spaceMono } from "../fonts";
+import { isStandaloneAuthPath } from "../lib/auth-routes";
 
 const STATIC_WAVEFORM_BAR_COUNT = 56;
 
@@ -102,8 +103,7 @@ const MiniPlayer: React.FC = () => {
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
   const { isOpen: isSidePanelOpen, setIsOpen: setSidePanelOpen } =
     useSidePanel();
-  const isAuthPage =
-    pathname.startsWith("/signin") || pathname.startsWith("/signup");
+  const isAuthPage = isStandaloneAuthPath(pathname);
 
   const waveformBars = useMemo(() => {
     if (!currentSong) return [];

@@ -3,20 +3,14 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
+import {
+  INVIDIOUS_INSTANCES,
+  PIPED_INSTANCES,
+} from "../../lib/media-providers";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
-const PIPED_INSTANCES = ["https://api.piped.private.coffee"];
-const INVIDIOUS_INSTANCES = [
-  "https://invidious.kemonomimi.nl",
-  "https://invidious.schenkel.eti.br",
-  "https://yt.omada.cafe",
-  "https://lekker.gay",
-  "https://yt.chocolatemoo53.com",
-  "https://inv.nadeko.net",
-  "https://invidious.tiekoetter.com",
-];
 const BEATSEEK_API_BASE = "https://beatseek.io/api";
 const DEBUG_ENV_PATH = ".dbg/soundcloud-collection-bug.env";
 const DEBUG_SERVER_URL_FALLBACK = "";

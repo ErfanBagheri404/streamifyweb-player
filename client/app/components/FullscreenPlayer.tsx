@@ -648,7 +648,9 @@ export default function FullscreenPlayer() {
 
     const syncLocalLibrary = () => {
       setOwnedPlaylists(readStoredPlaylists());
-      setIsCurrentSongLiked(currentSong ? isSongLiked(currentSong.id) : false);
+      setIsCurrentSongLiked(
+        currentSong ? isSongLiked(currentSong.id, currentSong.source) : false
+      );
     };
 
     syncLocalLibrary();

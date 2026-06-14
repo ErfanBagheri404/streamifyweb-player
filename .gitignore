@@ -36,9 +36,17 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.envrc
+*.local
 
 # vercel
 .vercel
+.netlify
+
+# local tooling
+.turbo
+.idea
+.vscode
 
 # typescript
 *.tsbuildinfo
