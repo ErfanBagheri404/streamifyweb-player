@@ -28,8 +28,9 @@ function getEnvInstanceList(
 
 const defaultPipedInstances = ["https://api.piped.private.coffee"];
 const defaultInvidiousInstances = [
-  "https://invidious.kemonomimi.nl",
+  "https://yt.omada.cafe",
   "https://invidious.schenkel.eti.br",
+  "https://invidious.kemonomimi.nl",
   "https://invidious.tiekoetter.com",
   "https://yt.chocolatemoo53.com",
   "https://inv.nadeko.net",
