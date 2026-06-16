@@ -1,6 +1,10 @@
 import React from "react";
 import Image from "next/image";
 import { useAppLanguage } from "../../hooks/useAppLanguage";
+import {
+  SEARCH_CATEGORY_PLAYLISTS,
+  type SearchCategoryPlaylist,
+} from "../../lib/search-category-playlists";
 import { SearchResult, SourceType } from "./types";
 import { SearchSection } from "./SearchSection";
 import { SkeletonItem } from "./SkeletonItem";
@@ -25,7 +29,7 @@ interface ResultsListProps {
   onArtistPress: (item: SearchResult) => void;
   onAlbumPress: (item: SearchResult) => void;
   onSongPress: (item: SearchResult) => void;
-  onCategorySelect?: (category: string) => void;
+  onCategorySelect?: (category: SearchCategoryPlaylist) => void;
 }
 
 export const ResultsList: React.FC<ResultsListProps> = ({
@@ -57,35 +61,16 @@ export const ResultsList: React.FC<ResultsListProps> = ({
   }
 
   if (!searchQuery.trim()) {
-    const categories = [
-      "Alternative.jpg",
-      "Electronic.jpg",
-      "Heavy Metal.jpg",
-      "Hip-Hop.jpg",
-      "Jazz.jpg",
-      "K-Pop.jpg",
-      "LO-FI.jpg",
-      "Metal.jpg",
-      "OST.jpg",
-      "Persian.jpg",
-      "Phonk.jpg",
-      "Pop.jpg",
-      "R&B.jpg",
-      "Rock.jpg",
-      "Synthwave.jpg",
-    ];
-
     return (
       <div className="grid grid-cols-2 gap-2 px-1 py-4 sm:grid-cols-3">
-        {categories.map((fileName) => {
-          const rawLabel = fileName.replace(/\.jpg$/i, "");
-          const label = getCategoryLabel(rawLabel);
-          const src = `/categories/${encodeURIComponent(fileName)}`;
+        {SEARCH_CATEGORY_PLAYLISTS.map((category) => {
+          const label = getCategoryLabel(category.category);
+          const src = `/categories/${encodeURIComponent(category.imageFileName)}`;
           return (
             <button
-              key={fileName}
+              key={category.category}
               type="button"
-              onClick={() => onCategorySelect?.(rawLabel)}
+              onClick={() => onCategorySelect?.(category)}
               className="group relative w-full overflow-hidden rounded-xl"
             >
               <Image

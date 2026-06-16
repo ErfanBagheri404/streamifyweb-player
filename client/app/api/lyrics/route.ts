@@ -14,7 +14,14 @@ type LrcLibResponse = {
   artistName?: unknown;
 };
 
-function buildLrcLibUrl(candidate: { artist: string; title: string }, durationSeconds?: number): string {
+const LYRICS_UPSTREAM_TIMEOUT_MS = 2500;
+const MAX_LRCLIB_CANDIDATES = 3;
+const MAX_LYRICS_OVH_CANDIDATES = 1;
+
+function buildLrcLibUrl(
+  candidate: { artist: string; title: string },
+  durationSeconds?: number
+): string {
   const url = new URL("https://lrclib.net/api/get");
   url.searchParams.set("artist_name", candidate.artist);
   url.searchParams.set("track_name", candidate.title);
@@ -30,10 +37,32 @@ function buildLrcLibUrl(candidate: { artist: string; title: string }, durationSe
   return url.toString();
 }
 
-function buildLyricsOvhUrl(candidate: { artist: string; title: string }): string {
+function buildLyricsOvhUrl(candidate: {
+  artist: string;
+  title: string;
+}): string {
   return `https://api.lyrics.ovh/v1/${encodeURIComponent(
     candidate.artist
   )}/${encodeURIComponent(candidate.title)}`;
+}
+
+async function fetchWithTimeout(url: string): Promise<Response | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    LYRICS_UPSTREAM_TIMEOUT_MS
+  );
+
+  try {
+    return await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function fetchLrcLibLyrics(
@@ -41,8 +70,8 @@ async function fetchLrcLibLyrics(
   durationSeconds?: number
 ): Promise<LyricsCacheEntry | null> {
   const url = buildLrcLibUrl(candidate, durationSeconds);
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) return null;
+  const response = await fetchWithTimeout(url);
+  if (!response || !response.ok) return null;
 
   const json = (await response.json()) as LrcLibResponse;
   const syncedLyrics =
@@ -70,12 +99,13 @@ async function fetchLrcLibLyrics(
   };
 }
 
-async function fetchLyricsOvhLyrics(
-  candidate: { artist: string; title: string }
-): Promise<LyricsCacheEntry | null> {
+async function fetchLyricsOvhLyrics(candidate: {
+  artist: string;
+  title: string;
+}): Promise<LyricsCacheEntry | null> {
   const url = buildLyricsOvhUrl(candidate);
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) return null;
+  const response = await fetchWithTimeout(url);
+  if (!response || !response.ok) return null;
 
   const json = (await response.json()) as { lyrics?: unknown };
   const lyrics = typeof json.lyrics === "string" ? json.lyrics.trim() : "";
@@ -124,7 +154,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    for (const candidate of candidates) {
+    for (const candidate of candidates.slice(0, MAX_LRCLIB_CANDIDATES)) {
       const payload = await fetchLrcLibLyrics(candidate, track.duration);
       if (!payload) continue;
 
@@ -137,7 +167,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    for (const candidate of candidates) {
+    for (const candidate of candidates.slice(0, MAX_LYRICS_OVH_CANDIDATES)) {
       const payload = await fetchLyricsOvhLyrics(candidate);
       if (!payload) continue;
 

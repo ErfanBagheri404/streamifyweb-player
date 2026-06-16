@@ -154,15 +154,17 @@ function normalizeCloudLibrarySnapshot(value: unknown): CloudLibrarySnapshot {
     playlists: Array.isArray(record.playlists)
       ? record.playlists
           .map((playlist) => normalizeCloudPlaylist(playlist))
-          .filter(
-            (playlist): playlist is CloudPlaylistSnapshot => Boolean(playlist)
+          .filter((playlist): playlist is CloudPlaylistSnapshot =>
+            Boolean(playlist)
           )
       : [],
     likedSongs: normalizeCloudTrackRefs(record.likedSongs),
   };
 }
 
-function createCloudTrackRef(song: Pick<Song, "id" | "source">): CloudTrackRef | null {
+function createCloudTrackRef(
+  song: Pick<Song, "id" | "source">
+): CloudTrackRef | null {
   const id = song.id?.trim();
   const source = song.source?.trim();
   if (!id || !source) return null;
@@ -216,7 +218,9 @@ async function resolveCloudTrackRef(ref: CloudTrackRef): Promise<Song> {
           ? payload.url
           : undefined,
       duration:
-        typeof payload.lengthSeconds === "number" ? payload.lengthSeconds : undefined,
+        typeof payload.lengthSeconds === "number"
+          ? payload.lengthSeconds
+          : undefined,
       playbackStrategy:
         payload.playbackStrategy === "widget" ? "widget" : undefined,
     });
@@ -359,7 +363,7 @@ export function addSongToPlaylist(playlistId: string, song: Song) {
       ...playlist,
       songs: alreadyExists
         ? playlist.songs
-        : [normalizeSongSnapshot(song), ...playlist.songs],
+        : [...playlist.songs, normalizeSongSnapshot(song)],
     };
     return updatedPlaylist;
   });
@@ -372,6 +376,49 @@ export function addSongToPlaylist(playlistId: string, song: Song) {
     playlist: updatedPlaylist,
     alreadyExists,
   };
+}
+
+export function moveSongInStoredPlaylist(
+  playlistId: string,
+  fromIndex: number,
+  toIndex: number
+) {
+  const playlists = readStoredPlaylists();
+  let updatedPlaylist: StoredPlaylist | null = null;
+
+  const next = playlists.map((playlist) => {
+    if (playlist.id !== playlistId) return playlist;
+    if (
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= playlist.songs.length ||
+      toIndex >= playlist.songs.length ||
+      fromIndex === toIndex
+    ) {
+      updatedPlaylist = playlist;
+      return playlist;
+    }
+
+    const songs = [...playlist.songs];
+    const [movedSong] = songs.splice(fromIndex, 1);
+    if (!movedSong) {
+      updatedPlaylist = playlist;
+      return playlist;
+    }
+
+    songs.splice(toIndex, 0, movedSong);
+    updatedPlaylist = {
+      ...playlist,
+      songs,
+    };
+    return updatedPlaylist;
+  });
+
+  if (updatedPlaylist) {
+    writeStoredPlaylists(next);
+  }
+
+  return updatedPlaylist;
 }
 
 export function readLikedSongs(): Song[] {
@@ -401,8 +448,7 @@ export function isSongLiked(songId?: string, source?: string): boolean {
   if (!songId) return false;
   return readLikedSongs().some(
     (song) =>
-      song.id === songId &&
-      (source ? (song.source || "") === source : true)
+      song.id === songId && (source ? (song.source || "") === source : true)
   );
 }
 
@@ -416,7 +462,7 @@ export function toggleLikedSong(song: Song) {
     ? likedSongs.filter(
         (entry) => getSongStorageKey(entry) !== getSongStorageKey(song)
       )
-    : [normalizeSongSnapshot(song), ...likedSongs];
+    : [...likedSongs, normalizeSongSnapshot(song)];
 
   writeLikedSongs(next);
 

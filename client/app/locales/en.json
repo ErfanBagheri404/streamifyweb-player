@@ -382,6 +382,8 @@
   "collection.itemsCount": "{count} items",
   "collection.deletePlaylist": "Delete {title}?",
   "collection.noMappedTracks": "No mapped tracks were available for this {kind} yet.",
+  "collection.searchInCollection": "Search tracks or artists",
+  "collection.noSearchResults": "No tracks or artists match this search.",
   "source.youtube": "YouTube",
   "source.youtubemusic": "YouTube Music",
   "source.soundcloud": "SoundCloud",

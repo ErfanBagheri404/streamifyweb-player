@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { type Song, useAudio } from "../../contexts/AudioContext";
+import { useSettings } from "../../contexts/SettingsContext";
 import { useAppLanguage } from "../../hooks/useAppLanguage";
 import { HorizontalScrollRow } from "../../components/HorizontalScrollRow";
+import { isLightAppTheme } from "../../lib/app-settings";
 import { findSavedArtistRouteContext } from "../../lib/navigation-state";
 import { readSessionCache, writeSessionCache } from "../../lib/session-cache";
 
@@ -70,6 +72,22 @@ function formatDuration(value?: number): string {
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
 }
 
+function shortenDescription(value?: string, maxLength = 260): string {
+  const normalized = value?.replace(/\s+/g, " ").trim() || "";
+  if (!normalized || normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  const truncated = normalized.slice(0, maxLength);
+  const lastSpaceIndex = truncated.lastIndexOf(" ");
+  const safeText =
+    lastSpaceIndex > Math.floor(maxLength * 0.6)
+      ? truncated.slice(0, lastSpaceIndex)
+      : truncated;
+
+  return `${safeText.trimEnd()}...`;
+}
+
 function PlayGlyph({ className = "h-5 w-5" }: { className?: string }) {
   return (
     <svg
@@ -108,7 +126,8 @@ export default function ArtistPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const { resolveAndPlaySong } = useAudio();
-  const { t } = useAppLanguage();
+  const { settings } = useSettings();
+  const { t, isRtl } = useAppLanguage();
 
   const id = params.id;
   const savedRouteContext = useMemo(
@@ -219,12 +238,23 @@ export default function ArtistPage() {
     const banner = data?.artist.banner || "";
     const subscribers = data?.artist.subscribers;
     const verified = Boolean(data?.artist.verified);
-    const description = data?.artist.description || "";
+    const description = shortenDescription(data?.artist.description);
     return { name, image, banner, subscribers, verified, description };
   }, [data, initialImage, initialName]);
 
   const pageSource = data?.artist.source || sourceParam || "youtube";
   const isJioSaavnArtist = pageSource === "jiosaavn";
+  const isLightTheme = isLightAppTheme(settings.theme);
+  const smallLabelClass = isRtl
+    ? "tracking-normal"
+    : "uppercase tracking-[0.16em]";
+  const featuredBadgeClass = [
+    "inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold",
+    smallLabelClass,
+    isLightTheme
+      ? "border-black/8 bg-white/82 text-[color:var(--foreground)]"
+      : "theme-overlay text-white",
+  ].join(" ");
 
   const featuredSong = useMemo(() => {
     if (!songs.length) return null;
@@ -367,12 +397,22 @@ export default function ArtistPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   {header.verified ? (
-                    <span className="rounded-full border border-emerald-400/30 bg-emerald-400/14 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                    <span
+                      className={[
+                        "rounded-full border border-emerald-400/30 bg-emerald-400/14 px-3 py-1 text-xs font-semibold text-emerald-200",
+                        smallLabelClass,
+                      ].join(" ")}
+                    >
                       {t("artist.verified")}
                     </span>
                   ) : null}
                   {pageSource ? (
-                    <span className="rounded-full border border-white/12 bg-black/25 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-white/72">
+                    <span
+                      className={[
+                        "rounded-full border border-white/12 bg-black/25 px-3 py-1 text-xs font-semibold text-white/72",
+                        smallLabelClass,
+                      ].join(" ")}
+                    >
                       {pageSource}
                     </span>
                   ) : null}
@@ -403,7 +443,15 @@ export default function ArtistPage() {
                 </div>
 
                 {header.description ? (
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-white/62 sm:mt-4 sm:text-base">
+                  <p
+                    className="mt-3 max-w-3xl text-sm leading-6 text-white/62 sm:mt-4 sm:text-base"
+                    style={{
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
                     {header.description}
                   </p>
                 ) : null}
@@ -527,7 +575,7 @@ export default function ArtistPage() {
                           )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
                           <div className="absolute inset-x-0 bottom-0 p-4">
-                            <div className="theme-overlay inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
+                            <div className={featuredBadgeClass}>
                               {t("artist.mostPlayed")}
                             </div>
                             <h3 className="mt-3 line-clamp-2 text-2xl font-black tracking-tight text-white">
@@ -686,10 +734,10 @@ export default function ArtistPage() {
                     contentClassName="flex w-max gap-5"
                   >
                     {data.playlists.map((playlist, idx) => (
-                        <Link
+                      <Link
                         key={`${playlist.id}-${idx}`}
                         href={buildPlaylistHref(playlist)}
-                          className="group theme-surface theme-media-hero relative min-w-[220px] max-w-[220px] overflow-hidden rounded-xl border transition hover:-translate-y-1 hover:border-[color:color-mix(in_srgb,var(--foreground)_14%,transparent)]"
+                        className="group theme-surface theme-media-hero relative min-w-[220px] max-w-[220px] overflow-hidden rounded-xl border transition hover:-translate-y-1 hover:border-[color:color-mix(in_srgb,var(--foreground)_14%,transparent)]"
                       >
                         <div className="relative aspect-square overflow-hidden">
                           {playlist.thumbnail ? (
@@ -706,7 +754,12 @@ export default function ArtistPage() {
                             <PlayGlyph className="ml-0.5 h-4 w-4" />
                           </div>
                           <div className="absolute inset-x-0 bottom-0 p-4">
-                            <div className="inline-flex rounded-full border border-white/12 bg-black/38 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72">
+                            <div
+                              className={[
+                                "inline-flex rounded-full border border-white/12 bg-black/38 px-3 py-1 text-[11px] font-semibold text-white/72",
+                                smallLabelClass,
+                              ].join(" ")}
+                            >
                               {t("artist.playlists")}
                             </div>
                             <div className="mt-3 line-clamp-2 text-lg font-bold text-white">

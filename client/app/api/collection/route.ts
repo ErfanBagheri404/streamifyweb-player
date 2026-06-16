@@ -610,6 +610,8 @@ export async function GET(request: NextRequest) {
   try {
     let response: CollectionResponse | null = null;
     const normalizedYouTubePlaylistId = extractYouTubePlaylistId(id || url);
+    const normalizedSoundCloudUrl =
+      source === "soundcloud" ? (url || id || "").trim() : "";
 
     if (source === "jiosaavn") {
       response = await fetchJioSaavnCollection(id, kind);
@@ -629,8 +631,8 @@ export async function GET(request: NextRequest) {
       response = isYouTubeMixId(normalizedYouTubePlaylistId)
         ? await fetchInvidiousMix(normalizedYouTubePlaylistId, "youtubemusic")
         : await fetchPipedPlaylist(normalizedYouTubePlaylistId, "youtubemusic");
-    } else if (source === "soundcloud" && url) {
-      response = await fetchSoundCloudCollection(url, runId);
+    } else if (source === "soundcloud" && normalizedSoundCloudUrl) {
+      response = await fetchSoundCloudCollection(normalizedSoundCloudUrl, runId);
     }
 
     if (!response) {

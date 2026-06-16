@@ -14,6 +14,10 @@ import { useSettings } from "../contexts/SettingsContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import type { PreferredSearchSource } from "../lib/app-settings";
 import {
+  getSearchCategoryPlaylistHref,
+  type SearchCategoryPlaylist,
+} from "../lib/search-category-playlists";
+import {
   SearchInput,
   FilterBar,
   SuggestionsDropdown,
@@ -28,6 +32,7 @@ const DEBUG_SERVER_URL = process.env.NEXT_PUBLIC_DEBUG_SERVER_URL || "";
 const DEBUG_SESSION_ID = "playback-source-500";
 const SEARCH_STATE_UPDATED_EVENT = "streamify-search-state-updated";
 const SEARCH_HISTORY_STORAGE_KEY = "searchHistory";
+const SEARCH_PAGE_SESSION_STATE_KEY = "streamify-search-page-session-state";
 
 function readStoredSearchHistory(): string[] {
   if (typeof window === "undefined") return [];
@@ -148,6 +153,49 @@ interface SavedSearchState {
   filter: string;
   results?: SearchResult[];
   timestamp?: number;
+}
+
+interface SearchPageSessionState extends SavedSearchState {
+  hasSearched?: boolean;
+  currentPage?: number;
+  hasMoreResults?: boolean;
+  nextpage?: string | null;
+  scrollTop?: number;
+}
+
+function readStoredSearchPageSessionState(): SearchPageSessionState | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(SEARCH_PAGE_SESSION_STATE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as SearchPageSessionState;
+    if (!parsed || typeof parsed !== "object") return null;
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSearchPageSessionState(state: SearchPageSessionState) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.setItem(
+      SEARCH_PAGE_SESSION_STATE_KEY,
+      JSON.stringify(state)
+    );
+  } catch {}
+}
+
+function clearStoredSearchPageSessionState() {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.removeItem(SEARCH_PAGE_SESSION_STATE_KEY);
+  } catch {}
 }
 
 function scoreImageQuality(
@@ -322,6 +370,13 @@ function SearchPageInner() {
   const searchQueryRef = useRef(searchQuery);
   const abortControllerRef = useRef<AbortController | null>(null);
   const didRestoreInitialStateRef = useRef(false);
+  const searchResultsRef = useRef<SearchResult[]>([]);
+  const hasSearchedRef = useRef(hasSearched);
+  const currentPageRef = useRef(currentPage);
+  const hasMoreResultsRef = useRef(hasMoreResults);
+  const sessionPersistenceReadyRef = useRef(false);
+  const pendingScrollRestoreRef = useRef<number | null>(null);
+  const scrollPersistTimerRef = useRef<number | null>(null);
   const handleSearchRef = useRef<
     (
       manualQuery?: string,
@@ -355,6 +410,18 @@ function SearchPageInner() {
   useEffect(() => {
     searchQueryRef.current = searchQuery;
   }, [searchQuery]);
+  useEffect(() => {
+    searchResultsRef.current = searchResults;
+  }, [searchResults]);
+  useEffect(() => {
+    hasSearchedRef.current = hasSearched;
+  }, [hasSearched]);
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+  useEffect(() => {
+    hasMoreResultsRef.current = hasMoreResults;
+  }, [hasMoreResults]);
 
   // Update URL parameters when search state changes
   useEffect(() => {
@@ -541,6 +608,44 @@ function SearchPageInner() {
     ]
   );
 
+  const persistSearchPageSessionState = useCallback(
+    (override?: Partial<SearchPageSessionState>) => {
+      const query = override?.query ?? searchQueryRef.current;
+      const source = override?.source ?? selectedSourceRef.current;
+      const filter = override?.filter ?? selectedFilterRef.current;
+      const results = override?.results ?? searchResultsRef.current;
+      const hasSearchedValue = override?.hasSearched ?? hasSearchedRef.current;
+
+      if (!query.trim() && !hasSearchedValue && results.length === 0) {
+        clearStoredSearchPageSessionState();
+        return;
+      }
+
+      writeStoredSearchPageSessionState({
+        query,
+        source,
+        filter,
+        results,
+        hasSearched: hasSearchedValue,
+        currentPage: override?.currentPage ?? currentPageRef.current,
+        hasMoreResults: override?.hasMoreResults ?? hasMoreResultsRef.current,
+        nextpage:
+          override?.nextpage !== undefined
+            ? override.nextpage
+            : paginationRef.current.nextpage,
+        scrollTop:
+          override?.scrollTop ?? scrollContainerRef.current?.scrollTop ?? 0,
+        timestamp: Date.now(),
+      });
+    },
+    []
+  );
+
+  const persistCurrentSearchContext = useCallback(() => {
+    persistSearchPageSessionState();
+    saveSearchState();
+  }, [persistSearchPageSessionState, saveSearchState]);
+
   const addToSearchHistory = useCallback(
     (term: string) => {
       if (!settings.rememberLastSearch) return;
@@ -573,6 +678,7 @@ function SearchPageInner() {
       const sourceToUse = selectedSourceRef.current;
 
       setHasSearched(true);
+      hasSearchedRef.current = true;
       if (!loadMore) {
         addToSearchHistory(queryToUse);
       }
@@ -582,7 +688,9 @@ function SearchPageInner() {
       } else {
         setIsLoading(true);
         setCurrentPage(1);
+        currentPageRef.current = 1;
         setHasMoreResults(true);
+        hasMoreResultsRef.current = true;
         paginationRef.current = {
           page: 1,
           hasMore: true,
@@ -590,6 +698,7 @@ function SearchPageInner() {
           nextpage: null,
         };
         setSearchResults([]);
+        searchResultsRef.current = [];
       }
 
       try {
@@ -614,6 +723,10 @@ function SearchPageInner() {
         paginationRef.current.nextpage = data.nextpage || null;
 
         const formatted: SearchResult[] = rawResults.map(mapToSearchResult);
+        const hasMore =
+          sourceToUse === "youtube" || sourceToUse === "youtubemusic"
+            ? !!paginationRef.current.nextpage
+            : formatted.length >= 20;
 
         if (loadMore) {
           setSearchResults((prev) => {
@@ -621,19 +734,53 @@ function SearchPageInner() {
             const newItems = formatted.filter(
               (item) => !existingIds.has(item.id)
             );
-            return [...prev, ...newItems];
+            const mergedResults = [...prev, ...newItems];
+            saveSearchState({
+              query: queryToUse,
+              source: sourceToUse,
+              filter: filterToUse,
+              results: mergedResults,
+            });
+            persistSearchPageSessionState({
+              query: queryToUse,
+              source: sourceToUse,
+              filter: filterToUse,
+              results: mergedResults,
+              hasSearched: true,
+              currentPage: page,
+              hasMoreResults: hasMore,
+              nextpage: paginationRef.current.nextpage,
+            });
+            return mergedResults;
           });
           setCurrentPage(page);
+          currentPageRef.current = page;
         } else {
           setSearchResults(formatted);
+          searchResultsRef.current = formatted;
           setCurrentPage(1);
+          currentPageRef.current = 1;
+          saveSearchState({
+            query: queryToUse,
+            source: sourceToUse,
+            filter: filterToUse,
+            results: formatted,
+          });
+          persistSearchPageSessionState({
+            query: queryToUse,
+            source: sourceToUse,
+            filter: filterToUse,
+            results: formatted,
+            hasSearched: true,
+            currentPage: 1,
+            hasMoreResults: hasMore,
+            nextpage: paginationRef.current.nextpage,
+          });
         }
 
-        const hasMore =
-          sourceToUse === "youtube" || sourceToUse === "youtubemusic"
-            ? !!paginationRef.current.nextpage
-            : formatted.length >= 20;
         setHasMoreResults(hasMore);
+        hasMoreResultsRef.current = hasMore;
+        paginationRef.current.page = page;
         paginationRef.current.hasMore = hasMore;
 
         lastSearchRef.current = {
@@ -641,19 +788,14 @@ function SearchPageInner() {
           source: sourceToUse,
           filter: filterToUse,
         };
-
-        if (!loadMore) {
-          saveSearchState({
-            query: queryToUse,
-            source: sourceToUse,
-            filter: filterToUse,
-            results: formatted,
-          });
-        }
       } catch (error) {
         console.error("Search error:", error);
-        if (!loadMore) setSearchResults([]);
+        if (!loadMore) {
+          setSearchResults([]);
+          searchResultsRef.current = [];
+        }
         setHasMoreResults(false);
+        hasMoreResultsRef.current = false;
         paginationRef.current.hasMore = false;
       } finally {
         if (loadMore) setIsLoadingMore(false);
@@ -721,6 +863,45 @@ function SearchPageInner() {
   }, [settings.rememberLastSearch]);
 
   useEffect(() => {
+    if (!sessionPersistenceReadyRef.current) return;
+
+    persistSearchPageSessionState();
+  }, [
+    currentPage,
+    hasMoreResults,
+    hasSearched,
+    persistSearchPageSessionState,
+    searchResults,
+  ]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !sessionPersistenceReadyRef.current) return;
+
+    const handleScroll = () => {
+      if (scrollPersistTimerRef.current !== null) {
+        window.clearTimeout(scrollPersistTimerRef.current);
+      }
+
+      scrollPersistTimerRef.current = window.setTimeout(() => {
+        persistSearchPageSessionState({
+          scrollTop: container.scrollTop,
+        });
+      }, 120);
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      if (scrollPersistTimerRef.current !== null) {
+        window.clearTimeout(scrollPersistTimerRef.current);
+        scrollPersistTimerRef.current = null;
+      }
+    };
+  }, [persistSearchPageSessionState, searchResults.length]);
+
+  useEffect(() => {
     if (didRestoreInitialStateRef.current) return;
     didRestoreInitialStateRef.current = true;
 
@@ -728,20 +909,90 @@ function SearchPageInner() {
     const sourceFromUrl =
       (searchParams.get("source") as SourceType) || "youtube";
     const filterFromUrl = searchParams.get("filter") || "all";
+    const savedSessionState = readStoredSearchPageSessionState();
+    const savedSessionSource =
+      (savedSessionState?.source as SourceType | undefined) || "youtube";
+    const savedSessionFilter = savedSessionState?.filter || "all";
+    const hasSavedSessionQuery = Boolean(savedSessionState?.query?.trim());
+    const matchesSavedSession =
+      Boolean(savedSessionState) &&
+      savedSessionState?.query === queryFromUrl &&
+      savedSessionSource === sourceFromUrl &&
+      savedSessionFilter === filterFromUrl;
+    const shouldRestoreSavedSession =
+      Boolean(savedSessionState) &&
+      (matchesSavedSession || (!queryFromUrl && hasSavedSessionQuery));
+    const initialQuery = queryFromUrl || savedSessionState?.query?.trim() || "";
+    const initialSource = queryFromUrl ? sourceFromUrl : savedSessionSource;
+    const initialFilter = queryFromUrl ? filterFromUrl : savedSessionFilter;
 
-    if (queryFromUrl) {
+    if (initialQuery) {
       setTimeout(() => {
-        setSearchQuery(queryFromUrl);
-        searchQueryRef.current = queryFromUrl;
-        setSelectedSource(sourceFromUrl);
-        selectedSourceRef.current = sourceFromUrl;
-        setSelectedFilter(filterFromUrl);
-        selectedFilterRef.current = filterFromUrl;
-        setHasSearched(true);
-        void handleSearchRef.current(queryFromUrl, false, filterFromUrl);
+        setSearchQuery(initialQuery);
+        searchQueryRef.current = initialQuery;
+        setSelectedSource(initialSource);
+        selectedSourceRef.current = initialSource;
+        setSelectedFilter(initialFilter);
+        selectedFilterRef.current = initialFilter;
+        if (shouldRestoreSavedSession && savedSessionState?.results) {
+          setHasSearched(savedSessionState.hasSearched ?? true);
+          hasSearchedRef.current = savedSessionState.hasSearched ?? true;
+          setSearchResults(savedSessionState.results);
+          searchResultsRef.current = savedSessionState.results;
+          setCurrentPage(savedSessionState.currentPage || 1);
+          currentPageRef.current = savedSessionState.currentPage || 1;
+          setHasMoreResults(Boolean(savedSessionState.hasMoreResults));
+          hasMoreResultsRef.current = Boolean(savedSessionState.hasMoreResults);
+          paginationRef.current = {
+            page: savedSessionState.currentPage || 1,
+            hasMore: Boolean(savedSessionState.hasMoreResults),
+            isLoadingMore: false,
+            nextpage: savedSessionState.nextpage || null,
+          };
+          pendingScrollRestoreRef.current = savedSessionState.scrollTop ?? 0;
+        } else {
+          setHasSearched(true);
+          hasSearchedRef.current = true;
+          void handleSearchRef.current(initialQuery, false, initialFilter);
+        }
+
+        sessionPersistenceReadyRef.current = true;
       }, 0);
+    } else {
+      sessionPersistenceReadyRef.current = true;
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (pendingScrollRestoreRef.current == null) return;
+    if (searchResults.length === 0) return;
+
+    const scrollTop = pendingScrollRestoreRef.current;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      container.scrollTop = scrollTop;
+      pendingScrollRestoreRef.current = null;
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [searchResults.length]);
+
+  useEffect(
+    () => () => {
+      if (scrollPersistTimerRef.current !== null) {
+        window.clearTimeout(scrollPersistTimerRef.current);
+      }
+
+      if (sessionPersistenceReadyRef.current) {
+        persistSearchPageSessionState();
+      }
+    },
+    [persistSearchPageSessionState]
+  );
 
   // ─── Input change with debounce & suggestions ────────────
   const handleTextChange = useCallback(
@@ -822,13 +1073,15 @@ function SearchPageInner() {
   );
 
   const handleCategorySelect = useCallback(
-    (category: string) => {
-      setSearchQuery(category);
-      searchQueryRef.current = category;
+    (category: SearchCategoryPlaylist) => {
+      const href = getSearchCategoryPlaylistHref(category);
+      if (!href) return;
+
       setSuggestions([]);
-      handleSearch(category);
+      persistCurrentSearchContext();
+      router.push(href);
     },
-    [handleSearch]
+    [persistCurrentSearchContext, router]
   );
 
   // ─── Source selection ────────────────────────────────────
@@ -885,11 +1138,18 @@ function SearchPageInner() {
     searchQueryRef.current = "";
     setSuggestions([]);
     setSearchResults([]);
+    searchResultsRef.current = [];
     setHasSearched(false);
+    hasSearchedRef.current = false;
+    setCurrentPage(1);
+    currentPageRef.current = 1;
+    setHasMoreResults(true);
+    hasMoreResultsRef.current = true;
     // Clear URL parameters
     router.push("/search");
     // Clear saved search state
     localStorage.removeItem("lastSearch");
+    clearStoredSearchPageSessionState();
     window.dispatchEvent(new CustomEvent(SEARCH_STATE_UPDATED_EVENT));
   };
 
@@ -914,14 +1174,14 @@ function SearchPageInner() {
 
   const handleTopResultPress = (item: SearchResult) => {
     if (item.source === "youtube_channel" || item.type === "artist") {
-      saveSearchState();
+      persistCurrentSearchContext();
       router.push(buildArtistUrl(item));
     } else {
       console.log("Play:", item.title);
     }
   };
   const handleArtistPress = (item: SearchResult) => {
-    saveSearchState();
+    persistCurrentSearchContext();
     router.push(buildArtistUrl(item));
   };
   const handleAlbumPress = (item: SearchResult) => {
@@ -955,7 +1215,7 @@ function SearchPageInner() {
       }
     );
     // #endregion
-    saveSearchState();
+    persistCurrentSearchContext();
     router.push(
       `/collection/${kind}/${encodeURIComponent(
         collectionId
@@ -966,6 +1226,7 @@ function SearchPageInner() {
     if (loadingSongId === item.id) return;
 
     // Save search state before navigation
+    persistSearchPageSessionState();
     saveSearchState();
     setLoadingSongId(item.id);
 

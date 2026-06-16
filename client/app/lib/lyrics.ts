@@ -13,6 +13,7 @@ import {
 const LYRICS_CACHE_KEY = "streamifyweb_lyrics_cache";
 const CACHE_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 const MISS_CACHE_EXPIRY_MS = 6 * 60 * 60 * 1000;
+const LYRICS_REQUEST_TIMEOUT_MS = 4500;
 const memoryCache = new Map<string, LyricsCacheEntry>();
 const missCache = new Map<string, number>();
 const pendingRequests = new Map<string, Promise<LyricsCacheEntry | null>>();
@@ -81,6 +82,12 @@ export async function fetchLyrics(
   if (pending) return pending;
 
   const request = (async () => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      LYRICS_REQUEST_TIMEOUT_MS
+    );
+
     try {
       const url = new URL("/api/lyrics", window.location.origin);
       url.searchParams.set("id", track.id);
@@ -92,7 +99,10 @@ export async function fetchLyrics(
         url.searchParams.set("duration", Math.round(track.duration).toString());
       }
 
-      const response = await fetch(url.toString(), { cache: "no-store" });
+      const response = await fetch(url.toString(), {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       if (!response.ok) {
         missCache.set(cacheKey, Date.now());
         return null;
@@ -117,6 +127,7 @@ export async function fetchLyrics(
       missCache.set(cacheKey, Date.now());
       return null;
     } finally {
+      window.clearTimeout(timeoutId);
       pendingRequests.delete(cacheKey);
     }
   })();

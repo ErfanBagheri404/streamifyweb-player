@@ -13,10 +13,9 @@ import {
   type PreferredSearchSource,
 } from "../lib/app-settings";
 import {
-  createCloudLibrarySnapshot,
-  readLikedSongs,
-  readStoredPlaylists,
-} from "../lib/local-library";
+  buildCurrentLocalLibrarySyncSource,
+  pushCloudLibrarySnapshot,
+} from "../lib/cloud-library-sync";
 import {
   getUserAvatarUrl,
   getUserDisplayName,
@@ -585,9 +584,8 @@ export default function SettingsPage() {
       return;
     }
 
-    const playlists = readStoredPlaylists();
-    const likedSongs = readLikedSongs();
-    const snapshot = createCloudLibrarySnapshot(playlists, likedSongs);
+    const { playlists, likedSongs, snapshot } =
+      buildCurrentLocalLibrarySyncSource();
 
     if (playlists.length === 0 && likedSongs.length === 0) {
       setSyncError(t("settings.syncEmpty"));
@@ -597,22 +595,7 @@ export default function SettingsPage() {
     setIsSyncing(true);
 
     try {
-      const response = await fetch("/api/library/sync", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(snapshot),
-      });
-      const payload = (await response.json()) as {
-        error?: string;
-        syncedPlaylists?: number;
-        syncedLikes?: number;
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error || t("settings.syncFailed"));
-      }
+      const payload = await pushCloudLibrarySnapshot(snapshot);
 
       setSyncMessage(
         t("settings.syncSuccess", {
@@ -1003,10 +986,12 @@ export default function SettingsPage() {
                     )}
                   </div>
                   {syncError ? (
-                    <p className="mt-3 text-sm text-red-300">{syncError}</p>
+                    <p className="theme-overlay mt-3 rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)]">
+                      {syncError}
+                    </p>
                   ) : null}
                   {syncMessage ? (
-                    <p className="mt-3 text-sm text-emerald-300">
+                    <p className="theme-accent-soft mt-3 rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)]">
                       {syncMessage}
                     </p>
                   ) : null}

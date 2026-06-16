@@ -1,7 +1,15 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type Song, useAudio } from "../contexts/AudioContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
@@ -14,6 +22,15 @@ import {
   readStoredPlaylists,
   type StoredPlaylist,
 } from "../lib/local-library";
+import {
+  buildArtistRouteHref,
+  canOpenArtistRoute,
+} from "../lib/artist-routing";
+import {
+  buildCurrentLocalLibrarySyncSource,
+  pushCloudLibrarySnapshot,
+} from "../lib/cloud-library-sync";
+import { getSupabaseBrowserClient } from "../lib/supabase/browser";
 
 type FilterChip =
   | "Playlists"
@@ -29,6 +46,9 @@ interface ArtistSummary {
   name: string;
   count: number;
   image?: string;
+  artistId?: string;
+  source?: string;
+  href?: string | null;
 }
 
 type LibraryGridItem =
@@ -44,8 +64,10 @@ type LibraryGridItem =
       title: string;
       subtitle: string;
       meta: string;
+      searchText?: string;
       artwork: React.ReactNode;
-      onClick?: () => void;
+      onOpen?: () => void;
+      onPlay?: () => void;
       priority?: boolean;
     };
 
@@ -79,6 +101,13 @@ function formatTrackDuration(seconds?: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+function buildSongSearchText(songs: Song[]): string {
+  return songs
+    .flatMap((song) => [song.title, song.artist])
+    .filter(Boolean)
+    .join(" ");
 }
 
 function interleaveItems<T>(left: T[], right: T[]): T[] {
@@ -122,6 +151,31 @@ function SearchGlyph() {
         fillRule="evenodd"
         d="M9 3.5a5.5 5.5 0 1 0 3.473 9.766l2.63 2.63a.75.75 0 1 0 1.06-1.06l-2.629-2.63A5.5 5.5 0 0 0 9 3.5ZM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0Z"
         clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+function SyncGlyph({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.5 8.25h3.75V4.5M7.5 15.75H3.75v3.75"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M19.5 8.25a7.5 7.5 0 0 0-12.78-2.03L3.75 9.25M4.5 15.75a7.5 7.5 0 0 0 12.78 2.03l2.97-3.03"
       />
     </svg>
   );
@@ -448,29 +502,50 @@ function PlaylistCard({
   subtitle,
   meta,
   artwork,
-  onClick,
+  onOpen,
+  onPlay,
 }: {
   title: string;
   subtitle: string;
   meta: string;
   artwork: React.ReactNode;
-  onClick?: () => void;
+  onOpen?: () => void;
+  onPlay?: () => void;
 }) {
-  const Component = onClick ? "button" : "div";
+  const isOpenable = Boolean(onOpen);
 
   return (
-    <Component
-      type={onClick ? "button" : undefined}
-      onClick={onClick}
-      className="group text-left"
+    <div
+      className={`group text-left ${isOpenable ? "cursor-pointer" : ""}`}
+      onClick={onOpen}
+      onKeyDown={
+        isOpenable
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpen?.();
+              }
+            }
+          : undefined
+      }
+      role={isOpenable ? "button" : undefined}
+      tabIndex={isOpenable ? 0 : undefined}
     >
       <div className="theme-surface relative overflow-hidden rounded-xl transition duration-200 group-hover:bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--foreground)_6%)]">
         {artwork}
-        {onClick && (
-          <div className="theme-button-accent pointer-events-none absolute bottom-3 right-3 flex h-12 w-12 translate-y-2 items-center justify-center rounded-full opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.35)] transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+        {onPlay ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void onPlay();
+            }}
+            className="theme-button-accent absolute bottom-3 right-3 flex h-12 w-12 translate-y-2 items-center justify-center rounded-full opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.35)] transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100"
+            aria-label={title}
+          >
             <PlayGlyph />
-          </div>
-        )}
+          </button>
+        ) : null}
       </div>
       <div className="px-1 pt-3">
         <p className="truncate text-[15px] font-semibold text-[color:var(--foreground)]">
@@ -481,7 +556,7 @@ function PlaylistCard({
           {meta}
         </p>
       </div>
-    </Component>
+    </div>
   );
 }
 
@@ -493,9 +568,8 @@ function ArtistCard({
   priority?: boolean;
 }) {
   const { t } = useAppLanguage();
-
-  return (
-    <div className="group text-left">
+  const content = (
+    <>
       <div className="theme-surface relative aspect-square overflow-hidden rounded-full transition duration-200 group-hover:bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--foreground)_6%)]">
         {artist.image ? (
           <Image
@@ -519,22 +593,28 @@ function ArtistCard({
         </p>
         <p className="theme-muted mt-1 text-sm">{t("library.artist")}</p>
       </div>
-    </div>
+    </>
+  );
+
+  if (!artist.href) {
+    return <div className="group text-left">{content}</div>;
+  }
+
+  return (
+    <Link href={artist.href} className="group block text-left">
+      {content}
+    </Link>
   );
 }
 
 function LibraryListRow({ item }: { item: LibraryGridItem }) {
   const { t } = useAppLanguage();
   const isArtist = item.kind === "artist";
-  const onClick = !isArtist ? item.onClick : undefined;
-  const Component = onClick ? "button" : "div";
+  const artistHref = isArtist ? item.artist.href : null;
+  const onOpen = !isArtist ? item.onOpen : undefined;
 
-  return (
-    <Component
-      type={onClick ? "button" : undefined}
-      onClick={onClick}
-      className="group flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_5%)]"
-    >
+  const content = (
+    <>
       <div
         className={`theme-surface relative h-14 w-14 shrink-0 overflow-hidden ${
           isArtist ? "rounded-full" : "rounded-xl"
@@ -576,25 +656,56 @@ function LibraryListRow({ item }: { item: LibraryGridItem }) {
             ? formatSongCount(item.artist.count, "play")
             : item.meta || t("library.open")}
         </p>
-        {!isArtist && item.onClick ? (
+        {!isArtist && item.onOpen ? (
           <p className="mt-1 text-xs font-medium text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] transition group-hover:text-[color:var(--foreground)]">
             {t("library.open")}
           </p>
         ) : null}
       </div>
-    </Component>
+    </>
+  );
+
+  if (artistHref) {
+    return (
+      <Link
+        href={artistHref}
+        className="group flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_5%)]"
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  if (onOpen) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="group flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_5%)]"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className="group flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_5%)]">
+      {content}
+    </div>
   );
 }
 
 export default function LibraryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { recentSongs, playSong } = useAudio();
+  const { recentSongs, playSong, resolveAndPlaySong } = useAudio();
   const { t, isRtl } = useAppLanguage();
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [selectedChip, setSelectedChip] = useState<FilterChip | null>(null);
   const [userPlaylists, setUserPlaylists] =
     useState<StoredPlaylist[]>(readStoredPlaylists);
   const [likedSongs, setLikedSongs] = useState<Song[]>(readLikedSongs);
+  const [authUser, setAuthUser] = useState<User | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
   const [playlistDescription, setPlaylistDescription] = useState("");
@@ -606,6 +717,11 @@ export default function LibraryPage() {
   const [createdPlaylistToast, setCreatedPlaylistToast] = useState<{
     id: string;
     name: string;
+  } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<{
+    tone: "success" | "error";
+    message: string;
   } | null>(null);
 
   useEffect(() => {
@@ -627,6 +743,38 @@ export default function LibraryPage() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    if (!supabase) {
+      setAuthUser(null);
+      return;
+    }
+
+    const loadUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!isMounted) return;
+      setAuthUser(user);
+    };
+
+    void loadUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+      setAuthUser(session?.user ?? null);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  useEffect(() => {
     if (!createdPlaylistToast) return;
 
     const timer = window.setTimeout(() => {
@@ -637,6 +785,18 @@ export default function LibraryPage() {
       window.clearTimeout(timer);
     };
   }, [createdPlaylistToast]);
+
+  useEffect(() => {
+    if (!syncFeedback) return;
+
+    const timer = window.setTimeout(() => {
+      setSyncFeedback(null);
+    }, 3200);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [syncFeedback]);
 
   useEffect(() => {
     if (!isSortMenuOpen) return;
@@ -659,24 +819,62 @@ export default function LibraryPage() {
     for (const song of recentSongs) {
       const key = song.artist?.trim() || "Unknown Artist";
       const existing = map.get(key);
+      const nextArtistId = song.artistId?.trim();
+      const nextSource = song.artistSource || song.source;
       map.set(key, {
         name: key,
         count: (existing?.count ?? 0) + 1,
         image: existing?.image || song.coverUrl,
+        artistId: existing?.artistId || nextArtistId,
+        source: existing?.source || nextSource,
+        href:
+          existing?.href ||
+          buildArtistRouteHref({
+            artistId: existing?.artistId || nextArtistId,
+            source: existing?.source || nextSource,
+          }),
       });
     }
 
-    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 12);
+    return [...map.values()]
+      .filter((artist) =>
+        canOpenArtistRoute({
+          artistId: artist.artistId,
+          source: artist.source,
+        })
+      )
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12);
   }, [recentSongs]);
 
-  const shownArtists = useMemo(
-    () => topArtists,
-    [topArtists]
-  );
+  const shownArtists = useMemo(() => topArtists, [topArtists]);
 
   const previouslyPlayed = useMemo(
     () => recentSongs.slice(0, 20),
     [recentSongs]
+  );
+
+  const playLocalCollection = useCallback(
+    async (collectionId: string) => {
+      const queue =
+        collectionId === "liked-songs"
+          ? likedSongs.map((song) => ({ ...song }))
+          : collectionId === "previously-played"
+          ? previouslyPlayed.map((song) => ({ ...song }))
+          : (
+              userPlaylists.find((playlist) => playlist.id === collectionId)
+                ?.songs || []
+            ).map((song) => ({ ...song }));
+
+      const selectedSong = queue[0];
+      if (!selectedSong) return;
+
+      await resolveAndPlaySong(selectedSong, {
+        queue,
+        currentIndex: 0,
+      });
+    },
+    [likedSongs, previouslyPlayed, resolveAndPlaySong, userPlaylists]
   );
 
   const visiblePlaylistCards = useMemo(() => {
@@ -688,6 +886,7 @@ export default function LibraryPage() {
         meta: t("library.savedSongs", {
           count: Math.max(likedSongs.length, 1),
         }),
+        searchText: buildSongSearchText(likedSongs),
         artwork: (
           <SmartPlaylistArtwork
             variant="liked"
@@ -696,7 +895,13 @@ export default function LibraryPage() {
             priority
           />
         ),
-        onClick: () => router.push(getLocalCollectionPath("liked-songs")),
+        onOpen: () => router.push(getLocalCollectionPath("liked-songs")),
+        onPlay:
+          likedSongs.length > 0
+            ? () => {
+                void playLocalCollection("liked-songs");
+              }
+            : undefined,
       },
       {
         id: "previously-played",
@@ -705,6 +910,7 @@ export default function LibraryPage() {
         meta: t("library.fromHistory", {
           count: previouslyPlayed.length,
         }),
+        searchText: buildSongSearchText(previouslyPlayed),
         artwork: (
           <SmartPlaylistArtwork
             variant="history"
@@ -713,13 +919,20 @@ export default function LibraryPage() {
             priority
           />
         ),
-        onClick: () => router.push(getLocalCollectionPath("previously-played")),
+        onOpen: () => router.push(getLocalCollectionPath("previously-played")),
+        onPlay:
+          previouslyPlayed.length > 0
+            ? () => {
+                void playLocalCollection("previously-played");
+              }
+            : undefined,
       },
       ...userPlaylists.map((playlist) => ({
         id: playlist.id,
         title: playlist.name,
         subtitle: playlist.description || t("common.playlist"),
         meta: t("library.savedSongs", { count: playlist.songs.length }),
+        searchText: buildSongSearchText(playlist.songs),
         artwork: (
           <SmartPlaylistArtwork
             variant="playlist"
@@ -727,12 +940,25 @@ export default function LibraryPage() {
             label={playlist.name}
           />
         ),
-        onClick: () => router.push(getLocalCollectionPath(playlist.id)),
+        onOpen: () => router.push(getLocalCollectionPath(playlist.id)),
+        onPlay:
+          playlist.songs.length > 0
+            ? () => {
+                void playLocalCollection(playlist.id);
+              }
+            : undefined,
       })),
     ];
 
     return baseCards;
-  }, [likedSongs, previouslyPlayed, router, t, userPlaylists]);
+  }, [
+    likedSongs,
+    playLocalCollection,
+    previouslyPlayed,
+    router,
+    t,
+    userPlaylists,
+  ]);
 
   const pinnedPlaylistCards = useMemo(
     () => [
@@ -744,10 +970,7 @@ export default function LibraryPage() {
     [visiblePlaylistCards]
   );
 
-  const recentAlbums = useMemo(
-    () => recentSongs.slice(0, 10),
-    [recentSongs]
-  );
+  const recentAlbums = useMemo(() => recentSongs.slice(0, 10), [recentSongs]);
 
   const mixedLibraryItems = useMemo<LibraryGridItem[]>(() => {
     const artistItems = shownArtists.slice(0, 8).map((artist, index) => ({
@@ -763,6 +986,7 @@ export default function LibraryPage() {
       title: item.title,
       subtitle: item.artist || "Track",
       meta: formatTrackDuration(item.duration),
+      searchText: [item.title, item.artist].filter(Boolean).join(" "),
       artwork: (
         <SmartPlaylistArtwork
           variant="playlist"
@@ -771,8 +995,7 @@ export default function LibraryPage() {
           priority={index < 4}
         />
       ),
-      onClick:
-        item.audioUrl || item.coverUrl ? () => playSong(item) : undefined,
+      onOpen: item.audioUrl || item.coverUrl ? () => playSong(item) : undefined,
       priority: index < 4,
     }));
 
@@ -787,8 +1010,10 @@ export default function LibraryPage() {
         title: card.title,
         subtitle: card.subtitle,
         meta: card.meta,
+        searchText: card.searchText,
         artwork: card.artwork,
-        onClick: card.onClick,
+        onOpen: card.onOpen,
+        onPlay: card.onPlay,
         priority: index < 4,
       })),
     [visiblePlaylistCards]
@@ -802,8 +1027,10 @@ export default function LibraryPage() {
         title: card.title,
         subtitle: card.subtitle,
         meta: card.meta,
+        searchText: card.searchText,
         artwork: card.artwork,
-        onClick: card.onClick,
+        onOpen: card.onOpen,
+        onPlay: card.onPlay,
         priority: index < 4,
       })),
     [pinnedPlaylistCards]
@@ -817,6 +1044,7 @@ export default function LibraryPage() {
         title: item.title,
         subtitle: item.artist || "Album",
         meta: formatTrackDuration(item.duration),
+        searchText: [item.title, item.artist].filter(Boolean).join(" "),
         artwork: (
           <SmartPlaylistArtwork
             variant="playlist"
@@ -825,7 +1053,7 @@ export default function LibraryPage() {
             priority={index < 4}
           />
         ),
-        onClick:
+        onOpen:
           item.audioUrl || item.coverUrl ? () => playSong(item) : undefined,
         priority: index < 4,
       })),
@@ -874,7 +1102,7 @@ export default function LibraryPage() {
             return item.artist.name.toLowerCase().includes(query);
           }
 
-          return [item.title, item.subtitle, item.meta]
+          return [item.title, item.subtitle, item.meta, item.searchText]
             .filter(Boolean)
             .join(" ")
             .toLowerCase()
@@ -955,6 +1183,42 @@ export default function LibraryPage() {
     });
   };
 
+  const handleSyncLibrary = async () => {
+    setSyncFeedback(null);
+
+    const { playlists, likedSongs, snapshot } =
+      buildCurrentLocalLibrarySyncSource();
+
+    if (playlists.length === 0 && likedSongs.length === 0) {
+      setSyncFeedback({
+        tone: "error",
+        message: t("settings.syncEmpty"),
+      });
+      return;
+    }
+
+    setIsSyncing(true);
+
+    try {
+      const result = await pushCloudLibrarySnapshot(snapshot);
+      setSyncFeedback({
+        tone: "success",
+        message: t("settings.syncSuccess", {
+          playlists: result.syncedPlaylists,
+          likes: result.syncedLikes,
+        }),
+      });
+    } catch (error) {
+      setSyncFeedback({
+        tone: "error",
+        message:
+          error instanceof Error ? error.message : t("settings.syncFailed"),
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <>
       <div className="theme-surface relative h-full overflow-hidden rounded-xl border text-[color:var(--foreground)]">
@@ -1006,6 +1270,26 @@ export default function LibraryPage() {
                     <PlusGlyph />
                     {t("library.create")}
                   </button>
+                  {authUser ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleSyncLibrary();
+                      }}
+                      disabled={isSyncing}
+                      className="theme-button-soft inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm"
+                      aria-label={t("settings.syncLibrary")}
+                    >
+                      {isSyncing ? (
+                        <span className="theme-spinner h-3.5 w-3.5" />
+                      ) : (
+                        <SyncGlyph />
+                      )}
+                      {isSyncing
+                        ? t("settings.syncInProgress")
+                        : t("settings.syncLibrary")}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() =>
@@ -1029,6 +1313,21 @@ export default function LibraryPage() {
                   </button>
                 </div>
               </div>
+
+              {syncFeedback ? (
+                <div
+                  className={`inline-flex max-w-full items-center gap-2 rounded-2xl border px-3 py-2 text-sm ${
+                    syncFeedback.tone === "success"
+                      ? "theme-accent-soft"
+                      : "theme-overlay"
+                  }`}
+                >
+                  {syncFeedback.tone === "success" ? <SyncGlyph /> : null}
+                  <span className="min-w-0 truncate text-[color:var(--foreground)]">
+                    {syncFeedback.message}
+                  </span>
+                </div>
+              ) : null}
 
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                 <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 hide-scrollbar sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 sm:gap-2">
@@ -1177,7 +1476,8 @@ export default function LibraryPage() {
                         subtitle={item.subtitle}
                         meta={item.meta}
                         artwork={item.artwork}
-                        onClick={item.onClick}
+                        onOpen={item.onOpen}
+                        onPlay={item.onPlay}
                       />
                     )
                   )}

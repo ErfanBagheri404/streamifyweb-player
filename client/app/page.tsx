@@ -8,6 +8,7 @@ import { HorizontalScrollRow } from "./components/HorizontalScrollRow";
 import { type Song, useAudio } from "./contexts/AudioContext";
 import { useAppLanguage } from "./hooks/useAppLanguage";
 import { getUserAvatarUrl, getUserDisplayName } from "./lib/auth-user";
+import { buildArtistRouteHref, canOpenArtistRoute } from "./lib/artist-routing";
 import { getSupabaseBrowserClient } from "./lib/supabase/browser";
 import { readSessionCache, writeSessionCache } from "./lib/session-cache";
 
@@ -232,25 +233,6 @@ function rankMadeForYouCandidates(songs: Song[]): Song[] {
   });
 }
 
-function buildArtistHref(artist: {
-  artistId?: string;
-  name: string;
-  image?: string;
-  source?: string;
-}): string | null {
-  if (!artist.artistId) return null;
-
-  if (artist.source && artist.source !== "youtube") {
-    const params = new URLSearchParams();
-    params.set("source", artist.source);
-    return `/artist/${encodeURIComponent(
-      artist.artistId
-    )}?${params.toString()}`;
-  }
-
-  return `/artist/${encodeURIComponent(artist.artistId)}`;
-}
-
 function SongCard({ song, onPlay }: { song: Song; onPlay: () => void }) {
   const { t } = useAppLanguage();
   return (
@@ -297,7 +279,7 @@ function SongCard({ song, onPlay }: { song: Song; onPlay: () => void }) {
 
 function ArtistCard({ artist }: { artist: ArtistHistorySummary }) {
   const { t } = useAppLanguage();
-  const href = buildArtistHref(artist);
+  const href = buildArtistRouteHref(artist);
   const content = (
     <>
       <div className="theme-surface theme-shadow-soft relative aspect-square overflow-hidden rounded-full">
@@ -469,6 +451,7 @@ export default function Home() {
     }
 
     return [...artistMap.values()]
+      .filter((artist) => canOpenArtistRoute(artist))
       .sort((a, b) => b.count - a.count)
       .slice(0, 12);
   }, [recentSongs]);
@@ -686,15 +669,7 @@ export default function Home() {
     [mostPlayedYouTubeArtist]
   );
 
-  const heroStartSong = useMemo(() => {
-    if (heroSongs.length === 0) return null;
-    if (!currentSong) return heroSongs[0];
-    const hasCurrentInHero = heroSongs.some(
-      (song) => song.id === currentSong.id
-    );
-    if (!hasCurrentInHero) return heroSongs[0];
-    return heroSongs.find((song) => song.id !== currentSong.id) || heroSongs[0];
-  }, [currentSong, heroSongs]);
+  const heroStartSong = heroSongs[0] || null;
 
   const playQueue = async (queue: Song[], song: Song) => {
     try {

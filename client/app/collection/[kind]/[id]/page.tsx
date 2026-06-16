@@ -2,13 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { SearchResult } from "../../../components/search";
 import { type Song, useAudio } from "../../../contexts/AudioContext";
 import { useSettings } from "../../../contexts/SettingsContext";
 import {
   LOCAL_LIBRARY_UPDATED_EVENT,
+  moveSongInStoredPlaylist,
   readLocalCollection,
   removeStoredPlaylist,
 } from "../../../lib/local-library";
@@ -158,6 +159,22 @@ function formatDateAdded(value?: string): string {
   return value;
 }
 
+function shortenDescription(value?: string, maxLength = 160): string {
+  const normalized = value?.replace(/\s+/g, " ").trim() || "";
+  if (!normalized || normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  const truncated = normalized.slice(0, maxLength);
+  const lastSpaceIndex = truncated.lastIndexOf(" ");
+  const safeText =
+    lastSpaceIndex > Math.floor(maxLength * 0.6)
+      ? truncated.slice(0, lastSpaceIndex)
+      : truncated;
+
+  return `${safeText.trimEnd()}...`;
+}
+
 function getSourceLabel(source?: string): string {
   switch ((source || "").toLowerCase()) {
     case "local":
@@ -272,28 +289,72 @@ function ClockGlyph() {
   );
 }
 
+function SearchGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="6.5" />
+      <path strokeLinecap="round" d="m16 16 4 4" />
+    </svg>
+  );
+}
+
 function EqualizerGlyph() {
   return (
     <div className="flex h-4 items-end gap-[2px]" aria-hidden="true">
-      <span className="h-2 w-[3px] animate-pulse rounded-full bg-[#1ed760]" />
-      <span className="h-4 w-[3px] animate-pulse rounded-full bg-[#1ed760] [animation-delay:120ms]" />
-      <span className="h-3 w-[3px] animate-pulse rounded-full bg-[#1ed760] [animation-delay:240ms]" />
+      <span className="h-2 w-[3px] animate-pulse rounded-full bg-[color:var(--theme-accent)]" />
+      <span className="h-4 w-[3px] animate-pulse rounded-full bg-[color:var(--theme-accent)] [animation-delay:120ms]" />
+      <span className="h-3 w-[3px] animate-pulse rounded-full bg-[color:var(--theme-accent)] [animation-delay:240ms]" />
     </div>
+  );
+}
+
+function DragHandleGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="6.5" r="1.3" />
+      <circle cx="15" cy="6.5" r="1.3" />
+      <circle cx="9" cy="12" r="1.3" />
+      <circle cx="15" cy="12" r="1.3" />
+      <circle cx="9" cy="17.5" r="1.3" />
+      <circle cx="15" cy="17.5" r="1.3" />
+    </svg>
   );
 }
 
 function LikedCollectionCover({ title }: { title: string }) {
   return (
     <div
-      className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-md text-white"
+      className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-md text-white shadow-[0_18px_40px_rgba(95,75,255,0.35)]"
       style={{
         background:
-          "linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 84%, white 16%) 0%, color-mix(in srgb, var(--theme-accent) 60%, #7c3aed 40%) 46%, color-mix(in srgb, var(--surface-2) 82%, black 18%) 100%)",
+          "linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 86%, white 14%) 0%, color-mix(in srgb, var(--theme-accent) 62%, #7c3aed 38%) 48%, color-mix(in srgb, var(--surface-2) 80%, black 20%) 100%)",
       }}
       aria-label={title}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.34),transparent_34%)]" />
-      <HeartGlyph />
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className="h-10 w-10"
+        aria-hidden="true"
+      >
+        <path d="M12 21.35 10.55 20C5.4 15.24 2 12.09 2 8.22 2 5.07 4.42 2.65 7.57 2.65c1.78 0 3.49.82 4.43 2.12.94-1.3 2.65-2.12 4.43-2.12C19.58 2.65 22 5.07 22 8.22c0 3.87-3.4 7.02-8.55 11.78L12 21.35Z" />
+      </svg>
     </div>
   );
 }
@@ -355,6 +416,7 @@ export default function CollectionPage() {
     [id, kind]
   );
   const source = searchParams.get("source") || savedRouteContext?.source || "";
+  const sourceUrl = searchParams.get("url") || "";
   const title = savedRouteContext?.title || "Untitled";
   const author = savedRouteContext?.author || "";
   const image = savedRouteContext?.image || "";
@@ -397,6 +459,14 @@ export default function CollectionPage() {
   const [loadingSongId, setLoadingSongId] = useState<string | null>(null);
   const [localLibraryVersion, setLocalLibraryVersion] = useState(0);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [collectionQuery, setCollectionQuery] = useState("");
+  const [draggedEntryIndex, setDraggedEntryIndex] = useState<number | null>(
+    null
+  );
+  const [dragOverEntryIndex, setDragOverEntryIndex] = useState<number | null>(
+    null
+  );
+  const suppressRowClickRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -488,8 +558,14 @@ export default function CollectionPage() {
         params.set("id", id);
         params.set("kind", kind);
         params.set("source", source);
-        if (href || storedItem?.href || storedItem?.url) {
-          params.set("url", href || storedItem?.href || storedItem?.url || "");
+        const resolvedCollectionUrl =
+          sourceUrl ||
+          href ||
+          storedItem?.href ||
+          storedItem?.url ||
+          (source.toLowerCase() === "soundcloud" ? id : "");
+        if (resolvedCollectionUrl) {
+          params.set("url", resolvedCollectionUrl);
         }
 
         // #region debug-point A:collection-page-fetch-start
@@ -502,6 +578,7 @@ export default function CollectionPage() {
             id,
             kind,
             source,
+            sourceUrl,
             href,
             storedHref: storedItem?.href || null,
             storedUrl: storedItem?.url || null,
@@ -604,6 +681,7 @@ export default function CollectionPage() {
     href,
     id,
     kind,
+    sourceUrl,
     shouldFetchRemote,
     source,
     storedItem?.href,
@@ -653,12 +731,13 @@ export default function CollectionPage() {
     remoteState.collection?.author ||
     storedItem?.author ||
     author;
-  const displayDescription =
+  const displayDescription = shortenDescription(
     localCollection?.collection.description ||
-    remoteState.collection?.description ||
-    (storedItem as (SearchResult & { description?: string }) | null)
-      ?.description ||
-    "";
+      remoteState.collection?.description ||
+      (storedItem as (SearchResult & { description?: string }) | null)
+        ?.description ||
+      ""
+  );
   const displayImage =
     localCollection?.collection.thumbnailUrl ||
     remoteState.collection?.thumbnailUrl ||
@@ -680,6 +759,18 @@ export default function CollectionPage() {
       ),
     [entries]
   );
+  const normalizedCollectionQuery = collectionQuery.trim().toLowerCase();
+  const filteredEntries = useMemo(() => {
+    if (!normalizedCollectionQuery) return entries;
+
+    return entries.filter((entry) =>
+      [entry.title, entry.artist, entry.subtitle, entry.album]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedCollectionQuery)
+    );
+  }, [entries, normalizedCollectionQuery]);
 
   const displayCountText =
     entries.length > 0
@@ -743,6 +834,12 @@ export default function CollectionPage() {
     id !== "liked-songs" &&
     id !== "previously-played" &&
     Boolean(localCollection);
+  const canReorderLocalPlaylist = isRemovableLocalPlaylist;
+
+  useEffect(() => {
+    setDraggedEntryIndex(null);
+    setDragOverEntryIndex(null);
+  }, [entries.length]);
 
   const handleEntryPress = async (entry: CollectionEntry) => {
     if (!canPlayEntries || loadingSongId === entry.id) return;
@@ -804,8 +901,8 @@ export default function CollectionPage() {
   };
 
   const handlePrimaryPlay = () => {
-    if (!entries[0]) return;
-    void handleEntryPress(entries[0]);
+    if (!filteredEntries[0]) return;
+    void handleEntryPress(filteredEntries[0]);
   };
 
   const handleDeletePlaylist = () => {
@@ -819,8 +916,20 @@ export default function CollectionPage() {
     router.replace("/library");
   };
 
+  const handleReorderEntry = (fromIndex: number, toIndex: number) => {
+    if (!canReorderLocalPlaylist || fromIndex === toIndex) return;
+    moveSongInStoredPlaylist(id, fromIndex, toIndex);
+  };
+
+  const headerGridClass = canReorderLocalPlaylist
+    ? "grid grid-cols-[24px_32px_minmax(0,1fr)_52px] gap-3 border-b border-[color:var(--border-subtle)] px-3 pb-3 text-[11px] uppercase tracking-[0.18em] text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)] sm:grid-cols-[24px_42px_minmax(0,1fr)_64px] md:grid-cols-[24px_42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px]"
+    : "grid grid-cols-[32px_minmax(0,1fr)_52px] gap-3 border-b border-[color:var(--border-subtle)] px-3 pb-3 text-[11px] uppercase tracking-[0.18em] text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)] sm:grid-cols-[42px_minmax(0,1fr)_64px] md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px]";
+  const rowGridClass = canReorderLocalPlaylist
+    ? "grid w-full grid-cols-[24px_32px_minmax(0,1fr)_52px] items-center gap-3 rounded-md px-3 py-2.5 text-left transition sm:grid-cols-[24px_42px_minmax(0,1fr)_64px] md:grid-cols-[24px_42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px]"
+    : "grid w-full grid-cols-[32px_minmax(0,1fr)_52px] items-center gap-3 rounded-md px-3 py-2.5 text-left transition sm:grid-cols-[42px_minmax(0,1fr)_64px] md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px]";
+
   return (
-    <div className="theme-surface-strong min-h-full overflow-hidden rounded-2xl border text-[color:var(--foreground)]">
+    <div className="theme-surface-strong relative h-full overflow-y-auto hide-scrollbar rounded-2xl border text-[color:var(--foreground)]">
       <div
         className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm transition ${
           isDeleteModalOpen
@@ -864,7 +973,7 @@ export default function CollectionPage() {
       </div>
 
       <section
-        className={`relative overflow-hidden px-4 pb-8 pt-5 sm:px-5 md:px-8 md:pb-10 md:pt-6 ${
+        className={`relative shrink-0 overflow-hidden px-4 pb-8 pt-5 sm:px-5 md:px-8 md:pb-10 md:pt-6 ${
           useHeroLightText ? "theme-media-hero" : ""
         }`}
         style={{
@@ -939,6 +1048,12 @@ export default function CollectionPage() {
                       ? "text-white/75"
                       : "text-[color:color-mix(in_srgb,var(--foreground)_68%,transparent)]"
                   }`}
+                  style={{
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
                 >
                   {displayDescription}
                 </p>
@@ -998,147 +1113,249 @@ export default function CollectionPage() {
               {t("collection.removePlaylistAction")}
             </button>
           ) : null}
-        </div>
-
-        {remoteState.error && entries.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-red-200">
-            {remoteState.error}
-          </div>
-        ) : entries.length > 0 ? (
-          <div className="mt-8">
-            <div className="grid grid-cols-[32px_minmax(0,1fr)_52px] gap-3 border-b border-[color:var(--border-subtle)] px-3 pb-3 text-[11px] uppercase tracking-[0.18em] text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)] sm:grid-cols-[42px_minmax(0,1fr)_64px] md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px]">
-              <div className="text-center">#</div>
-              <div>{t("collection.titleColumn")}</div>
-              <div className="hidden truncate md:block">
-                {t("collection.albumColumn")}
-              </div>
-              <div className="hidden md:block">{t("collection.dateAdded")}</div>
-              <div className="flex justify-end">
-                <ClockGlyph />
-              </div>
-            </div>
-
-            <div className="mt-2 space-y-1">
-              {entries.map((entry, index) => {
-                const isActiveTrack = currentSong?.id === entry.id;
-                const isLoadingTrack = loadingSongId === entry.id;
-                const RowComponent = canPlayEntries ? "button" : "div";
-
-                return (
-                  <RowComponent
-                    key={`${entry.id}-${index}`}
-                    type={canPlayEntries ? "button" : undefined}
-                    onClick={
-                      canPlayEntries
-                        ? () => void handleEntryPress(entry)
-                        : undefined
-                    }
-                    className={`group grid w-full grid-cols-[32px_minmax(0,1fr)_52px] items-center gap-3 rounded-md px-3 py-2.5 text-left transition hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_6%)] sm:grid-cols-[42px_minmax(0,1fr)_64px] md:grid-cols-[42px_minmax(0,1.7fr)_minmax(0,1.05fr)_120px_64px] ${
-                      isActiveTrack
-                        ? "bg-[color:color-mix(in_srgb,var(--surface-3)_86%,var(--foreground)_4%)]"
-                        : ""
-                    }`}
+          {entries.length > 0 ? (
+            <label
+              className="theme-button-soft inline-flex w-full min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-within:border-[color:color-mix(in_srgb,var(--foreground)_16%,transparent)] focus-within:text-[color:var(--foreground)] sm:max-w-sm"
+              style={{ marginInlineStart: "auto" }}
+            >
+              <SearchGlyph />
+              <input
+                type="search"
+                value={collectionQuery}
+                onChange={(event) => setCollectionQuery(event.target.value)}
+                placeholder={t("collection.searchInCollection")}
+                className="w-full min-w-0 flex-1 bg-transparent text-sm text-[color:var(--foreground)] outline-none placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)]"
+                aria-label={t("collection.searchInCollection")}
+              />
+              {collectionQuery ? (
+                <button
+                  type="button"
+                  onClick={() => setCollectionQuery("")}
+                  className="rounded-full p-1 text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)] transition hover:bg-[color:color-mix(in_srgb,var(--foreground)_8%,transparent)] hover:text-[color:var(--foreground)]"
+                  aria-label={t("search.clear")}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    className="h-3.5 w-3.5"
+                    aria-hidden="true"
                   >
-                    <div
-                      className={`flex h-6 items-center justify-center text-sm ${
+                    <path strokeLinecap="round" d="m7 7 10 10M17 7 7 17" />
+                  </svg>
+                </button>
+              ) : null}
+            </label>
+          ) : null}
+        </div>
+        <div className="mt-6" style={{ paddingInlineEnd: "0.25rem" }}>
+          {remoteState.error && entries.length === 0 ? (
+            <div className="theme-overlay rounded-2xl border p-5 text-[color:var(--foreground)]">
+              {remoteState.error}
+            </div>
+          ) : entries.length > 0 && filteredEntries.length === 0 ? (
+            <div className="theme-surface-soft rounded-2xl border p-5 text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)]">
+              {t("collection.noSearchResults")}
+            </div>
+          ) : entries.length > 0 ? (
+            <div>
+              <div className={headerGridClass}>
+                {canReorderLocalPlaylist ? <div /> : null}
+                <div className="text-center">#</div>
+                <div>{t("collection.titleColumn")}</div>
+                <div className="hidden truncate md:block">
+                  {t("collection.albumColumn")}
+                </div>
+                <div className="hidden md:block">
+                  {t("collection.dateAdded")}
+                </div>
+                <div className="flex justify-end">
+                  <ClockGlyph />
+                </div>
+              </div>
+
+              <div className="mt-2 space-y-1">
+                {filteredEntries.map((entry, index) => {
+                  const isActiveTrack = currentSong?.id === entry.id;
+                  const isLoadingTrack = loadingSongId === entry.id;
+                  const RowComponent = canPlayEntries ? "button" : "div";
+
+                  return (
+                    <RowComponent
+                      key={`${entry.id}-${index}`}
+                      type={canPlayEntries ? "button" : undefined}
+                      onClick={
+                        canPlayEntries
+                          ? () => {
+                              if (suppressRowClickRef.current) {
+                                suppressRowClickRef.current = false;
+                                return;
+                              }
+
+                              void handleEntryPress(entry);
+                            }
+                          : undefined
+                      }
+                      draggable={canReorderLocalPlaylist}
+                      onDragStart={
+                        canReorderLocalPlaylist
+                          ? (event) => {
+                              setDraggedEntryIndex(index);
+                              setDragOverEntryIndex(index);
+                              suppressRowClickRef.current = true;
+                              event.dataTransfer.effectAllowed = "move";
+                            }
+                          : undefined
+                      }
+                      onDragOver={
+                        canReorderLocalPlaylist
+                          ? (event) => {
+                              event.preventDefault();
+                              if (dragOverEntryIndex !== index) {
+                                setDragOverEntryIndex(index);
+                              }
+                            }
+                          : undefined
+                      }
+                      onDrop={
+                        canReorderLocalPlaylist
+                          ? (event) => {
+                              event.preventDefault();
+                              if (draggedEntryIndex != null) {
+                                handleReorderEntry(draggedEntryIndex, index);
+                              }
+                              setDraggedEntryIndex(null);
+                              setDragOverEntryIndex(null);
+                            }
+                          : undefined
+                      }
+                      onDragEnd={
+                        canReorderLocalPlaylist
+                          ? () => {
+                              setDraggedEntryIndex(null);
+                              setDragOverEntryIndex(null);
+                            }
+                          : undefined
+                      }
+                      className={`group ${rowGridClass} hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_6%)] ${
                         isActiveTrack
-                          ? "text-[color:var(--theme-accent)]"
-                          : "text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]"
+                          ? "bg-[color:color-mix(in_srgb,var(--surface-3)_86%,var(--foreground)_4%)]"
+                          : ""
+                      } ${
+                        dragOverEntryIndex === index &&
+                        draggedEntryIndex !== index
+                          ? "border border-[color:color-mix(in_srgb,var(--theme-accent)_34%,transparent)]"
+                          : ""
                       }`}
                     >
-                      {isLoadingTrack ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)] border-t-transparent" />
-                      ) : isActiveTrack && isPlaying ? (
-                        <EqualizerGlyph />
-                      ) : (
-                        <>
-                          <span className="group-hover:hidden">
-                            {index + 1}
-                          </span>
-                          <span className="hidden text-[color:var(--foreground)] group-hover:flex">
-                            <PlayGlyph className="h-3.5 w-3.5" />
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="flex min-w-0 items-center gap-3">
-                      {entry.thumbnailUrl || displayImage ? (
-                        <Image
-                          src={entry.thumbnailUrl || displayImage}
-                          alt=""
-                          width={44}
-                          height={44}
-                          className="theme-surface-soft h-11 w-11 rounded object-cover"
-                          unoptimized
-                        />
-                      ) : (
-                        <div className="theme-surface-soft h-11 w-11 rounded" />
-                      )}
-
-                      <div className="min-w-0">
-                        <p
-                          className={`truncate text-sm font-medium ${
-                            isActiveTrack
-                              ? "text-[color:var(--theme-accent)]"
-                              : "text-[color:var(--foreground)]"
-                          }`}
-                        >
-                          {entry.title}
-                        </p>
-                        <p className="truncate text-xs text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)]">
-                          {entry.artist ||
-                            entry.subtitle ||
-                            displayAuthor ||
-                            getSourceLabel(collectionSource)}
-                        </p>
+                      {canReorderLocalPlaylist ? (
+                        <div className="theme-muted flex items-center justify-center">
+                          <DragHandleGlyph />
+                        </div>
+                      ) : null}
+                      <div
+                        className={`flex h-6 items-center justify-center text-sm ${
+                          isActiveTrack
+                            ? "text-[color:var(--theme-accent)]"
+                            : "text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]"
+                        }`}
+                      >
+                        {isLoadingTrack ? (
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)] border-t-transparent" />
+                        ) : isActiveTrack && isPlaying ? (
+                          <EqualizerGlyph />
+                        ) : (
+                          <>
+                            <span className="group-hover:hidden">
+                              {index + 1}
+                            </span>
+                            <span className="hidden text-[color:var(--foreground)] group-hover:flex">
+                              <PlayGlyph className="h-3.5 w-3.5" />
+                            </span>
+                          </>
+                        )}
                       </div>
-                    </div>
 
-                    <p className="hidden truncate text-sm text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] md:block">
-                      {entry.album || displayTitle}
-                    </p>
+                      <div className="flex min-w-0 items-center gap-3">
+                        {entry.thumbnailUrl || displayImage ? (
+                          <Image
+                            src={entry.thumbnailUrl || displayImage}
+                            alt=""
+                            width={44}
+                            height={44}
+                            className="theme-surface-soft h-11 w-11 rounded object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="theme-surface-soft h-11 w-11 rounded" />
+                        )}
 
-                    <p className="hidden text-sm text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)] md:block">
-                      {entry.addedAt
-                        ? (() => {
-                            const date = new Date(entry.addedAt);
-                            return Number.isNaN(date.getTime())
-                              ? entry.addedAt
-                              : formatDate(date, {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                });
-                          })()
-                        : t("collection.recently")}
-                    </p>
+                        <div className="min-w-0">
+                          <p
+                            className={`truncate text-sm font-medium ${
+                              isActiveTrack
+                                ? "text-[color:var(--theme-accent)]"
+                                : "text-[color:var(--foreground)]"
+                            }`}
+                          >
+                            {entry.title}
+                          </p>
+                          <p className="truncate text-xs text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)]">
+                            {entry.artist ||
+                              entry.subtitle ||
+                              displayAuthor ||
+                              getSourceLabel(collectionSource)}
+                          </p>
+                        </div>
+                      </div>
 
-                    <div className="flex items-center justify-end gap-3 text-sm text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]">
-                      <span className="hidden text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] opacity-0 transition group-hover:opacity-100 lg:flex">
-                        <HeartGlyph />
-                      </span>
-                      <span className="tabular-nums">
-                        {formatDuration(entry.duration)}
-                      </span>
-                      <span className="hidden text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] opacity-0 transition group-hover:opacity-100 lg:flex">
-                        <MoreGlyph />
-                      </span>
-                    </div>
-                  </RowComponent>
-                );
-              })}
+                      <p className="hidden truncate text-sm text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] md:block">
+                        {entry.album || displayTitle}
+                      </p>
+
+                      <p className="hidden text-sm text-[color:color-mix(in_srgb,var(--foreground)_45%,transparent)] md:block">
+                        {entry.addedAt
+                          ? (() => {
+                              const date = new Date(entry.addedAt);
+                              return Number.isNaN(date.getTime())
+                                ? entry.addedAt
+                                : formatDate(date, {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  });
+                            })()
+                          : t("collection.recently")}
+                      </p>
+
+                      <div className="flex items-center justify-end gap-3 text-sm text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]">
+                        <span className="hidden text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] opacity-0 transition group-hover:opacity-100 lg:flex">
+                          <HeartGlyph />
+                        </span>
+                        <span className="tabular-nums">
+                          {formatDuration(entry.duration)}
+                        </span>
+                        <span className="hidden text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] opacity-0 transition group-hover:opacity-100 lg:flex">
+                          <MoreGlyph />
+                        </span>
+                      </div>
+                    </RowComponent>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ) : remoteState.isLoading ? (
-          <div className="mt-8 flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[color:var(--foreground)] border-t-transparent" />
-          </div>
-        ) : (
-          <div className="theme-surface-soft mt-6 rounded-2xl border p-5 text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]">
-            {t("collection.noMappedTracks", { kind })}
-          </div>
-        )}
+          ) : remoteState.isLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[color:var(--foreground)] border-t-transparent" />
+            </div>
+          ) : (
+            <div className="theme-surface-soft rounded-2xl border p-5 text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]">
+              {t("collection.noMappedTracks", { kind })}
+            </div>
+          )}
+        </div>
       </section>
     </div>
   );

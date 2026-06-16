@@ -100,6 +100,11 @@ const MiniPlayer: React.FC = () => {
   const volumeControlRef = useRef<HTMLDivElement>(null);
   const lastNonZeroVolumeRef = useRef(0.8);
   const isDraggingSeekRef = useRef(false);
+  const seekDragPlaybackStateRef = useRef<{
+    isPlaying: boolean;
+    isSongLoading: boolean;
+  } | null>(null);
+  const [isSeekDragging, setIsSeekDragging] = useState(false);
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
   const { isOpen: isSidePanelOpen, setIsOpen: setSidePanelOpen } =
     useSidePanel();
@@ -204,6 +209,7 @@ const MiniPlayer: React.FC = () => {
   useEffect(() => {
     return () => {
       isDraggingSeekRef.current = false;
+      seekDragPlaybackStateRef.current = null;
     };
   }, []);
 
@@ -243,6 +249,11 @@ const MiniPlayer: React.FC = () => {
     if (!duration) return;
 
     isDraggingSeekRef.current = true;
+    seekDragPlaybackStateRef.current = {
+      isPlaying,
+      isSongLoading,
+    };
+    setIsSeekDragging(true);
     event.currentTarget.setPointerCapture(event.pointerId);
     seekFromClientX(event.clientX);
   };
@@ -261,6 +272,8 @@ const MiniPlayer: React.FC = () => {
 
     seekFromClientX(event.clientX);
     isDraggingSeekRef.current = false;
+    setIsSeekDragging(false);
+    seekDragPlaybackStateRef.current = null;
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -276,6 +289,14 @@ const MiniPlayer: React.FC = () => {
     : playbackError
     ? playbackError
     : null;
+  const displayedIsSongLoading =
+    isSeekDragging && seekDragPlaybackStateRef.current
+      ? seekDragPlaybackStateRef.current.isSongLoading
+      : isSongLoading;
+  const displayedIsPlaying =
+    isSeekDragging && seekDragPlaybackStateRef.current
+      ? seekDragPlaybackStateRef.current.isPlaying
+      : isPlaying;
 
   return (
     <div
@@ -360,7 +381,7 @@ const MiniPlayer: React.FC = () => {
                   statusText
                     ? isSongLoading
                       ? "theme-muted"
-                      : "text-red-400"
+                      : "text-[color:color-mix(in_srgb,var(--theme-accent)_86%,var(--foreground)_14%)]"
                     : "theme-muted"
                 }`}
               >
@@ -454,13 +475,13 @@ const MiniPlayer: React.FC = () => {
 
             <button
               type="button"
-              disabled={isSongLoading}
+              disabled={displayedIsSongLoading}
               onClick={handlePlayPause}
               className="flex h-10 w-10 items-center justify-center transition duration-150 hover:scale-[1.03] disabled:hover:scale-100 lg:h-10 lg:w-10"
             >
-              {isSongLoading ? (
+              {displayedIsSongLoading ? (
                 <div className="theme-spinner h-5 w-5" />
-              ) : isPlaying ? (
+              ) : displayedIsPlaying ? (
                 <PauseControlIcon className="theme-asset-icon h-8 w-8 lg:h-8 lg:w-8" />
               ) : (
                 <PlayControlIcon className="theme-asset-icon h-8 w-8 lg:h-8 lg:w-8" />
@@ -503,7 +524,7 @@ const MiniPlayer: React.FC = () => {
                 className="theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
               />
               {repeatBadgeLabel ? (
-                <span className="absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-black leading-none text-black shadow-sm">
+                <span className="theme-surface absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full border px-1 text-[9px] font-black leading-none text-[color:var(--foreground)] shadow-sm">
                   {repeatBadgeLabel}
                 </span>
               ) : null}
