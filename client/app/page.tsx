@@ -3,17 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { HorizontalScrollRow } from "./components/HorizontalScrollRow";
 import { type Song, useAudio } from "./contexts/AudioContext";
 import { useAppLanguage } from "./hooks/useAppLanguage";
 import { getUserAvatarUrl, getUserDisplayName } from "./lib/auth-user";
 import { buildArtistRouteHref, canOpenArtistRoute } from "./lib/artist-routing";
 import { getSupabaseBrowserClient } from "./lib/supabase/browser";
-import { readSessionCache, writeSessionCache } from "./lib/session-cache";
 
 const HOME_ARTIST_BANNER_CACHE_KEY = "homeArtistBannerCache";
-const HOME_MADE_FOR_YOU_CACHE_KEY = "homeMadeForYouCache";
 
 type ArtistHistorySummary = {
   key: string;
@@ -32,11 +30,6 @@ type RemoteArtistPayload = {
     banner?: string;
     source?: string;
   };
-};
-
-type HomeMadeForYouCache = {
-  seedSong: Song | null;
-  songs: Song[];
 };
 
 function normalizeMadeForYouSongs(
@@ -194,6 +187,20 @@ function dedupeSongsById(songs: Song[]): Song[] {
   return output;
 }
 
+function shuffleSongs(songs: Song[]): Song[] {
+  const shuffled = [...songs];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [
+      shuffled[swapIndex],
+      shuffled[index],
+    ];
+  }
+
+  return shuffled;
+}
+
 function rankMadeForYouCandidates(songs: Song[]): Song[] {
   if (songs.length === 0) return [];
 
@@ -333,19 +340,12 @@ export default function Home() {
     if (hour < 18) return t("home.greetingAfternoon");
     return t("home.greetingEvening");
   }, [t]);
-  const initialMadeForYouCache =
-    typeof window === "undefined"
-      ? null
-      : readSessionCache<HomeMadeForYouCache>(HOME_MADE_FOR_YOU_CACHE_KEY);
   const [heroBanner, setHeroBanner] = useState("");
   const [madeForYouSeedSong, setMadeForYouSeedSong] = useState<Song | null>(
-    initialMadeForYouCache?.seedSong || null
+    null
   );
-  const [madeForYouSongs, setMadeForYouSongs] = useState<Song[]>(
-    initialMadeForYouCache?.songs || []
-  );
+  const [madeForYouSongs, setMadeForYouSongs] = useState<Song[]>([]);
   const [isLoadingMadeForYou, setIsLoadingMadeForYou] = useState(false);
-  const lastMadeForYouRequestKeyRef = useRef<string | null>(null);
   const [authNotice, setAuthNotice] = useState<{
     title: string;
     body: string;
@@ -547,47 +547,20 @@ export default function Home() {
   }, [mostPlayedYouTubeArtist?.artistId]);
 
   useEffect(() => {
-    writeSessionCache<HomeMadeForYouCache>(HOME_MADE_FOR_YOU_CACHE_KEY, {
-      seedSong: madeForYouSeedSong,
-      songs: madeForYouSongs,
-    });
-  }, [madeForYouSeedSong, madeForYouSongs]);
-
-  useEffect(() => {
     let cancelled = false;
 
     const loadMadeForYou = async () => {
       if (madeForYouSeedCandidates.length === 0) {
-        lastMadeForYouRequestKeyRef.current = null;
         setMadeForYouSeedSong(null);
         setMadeForYouSongs([]);
         setIsLoadingMadeForYou(false);
         return;
       }
 
-      if (
-        madeForYouSeedSong &&
-        madeForYouSongs.length > 0 &&
-        madeForYouSeedCandidates.some(
-          (song) => song.id === madeForYouSeedSong.id
-        )
-      ) {
-        lastMadeForYouRequestKeyRef.current = madeForYouCandidateKey;
-        setIsLoadingMadeForYou(false);
-        return;
-      }
-
-      if (lastMadeForYouRequestKeyRef.current === madeForYouCandidateKey) {
-        setIsLoadingMadeForYou(false);
-        return;
-      }
-
-      lastMadeForYouRequestKeyRef.current = madeForYouCandidateKey;
-
       setIsLoadingMadeForYou(true);
 
       try {
-        for (const candidate of madeForYouSeedCandidates) {
+        for (const candidate of shuffleSongs(madeForYouSeedCandidates)) {
           const seededSongs = dedupeSongsById(
             candidate.relatedSongs || []
           ).filter((song) => song.id !== candidate.id);
@@ -657,12 +630,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [
-    madeForYouCandidateKey,
-    madeForYouSeedCandidates,
-    madeForYouSeedSong,
-    madeForYouSongs.length,
-  ]);
+  }, [madeForYouCandidateKey, madeForYouSeedCandidates]);
 
   const heroSongs = useMemo(
     () => dedupeSongsById(mostPlayedYouTubeArtist?.songs || []),

@@ -1120,7 +1120,7 @@ export default function CollectionPage() {
             >
               <SearchGlyph />
               <input
-                type="search"
+                type="text"
                 value={collectionQuery}
                 onChange={(event) => setCollectionQuery(event.target.value)}
                 placeholder={t("collection.searchInCollection")}

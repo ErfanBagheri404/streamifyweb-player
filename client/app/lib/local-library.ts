@@ -94,6 +94,137 @@ function dedupeSongs(songs: Song[]): Song[] {
   return output;
 }
 
+function chooseNonEmptyString(
+  ...values: Array<string | null | undefined>
+): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function chooseFiniteNumber(
+  ...values: Array<number | null | undefined>
+): number | undefined {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function chooseAudioType(
+  ...values: Array<Song["audioType"] | null | undefined>
+): Song["audioType"] {
+  for (const value of values) {
+    if (value === "file" || value === "hls" || value === "soundcloud-drm") {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function mergeSongSnapshots(primary: Song, secondary?: Song | null): Song {
+  const merged: Song = {
+    id:
+      chooseNonEmptyString(primary.id, secondary?.id) ||
+      primary.id ||
+      secondary?.id ||
+      "",
+    title:
+      chooseNonEmptyString(primary.title, secondary?.title, primary.id) ||
+      secondary?.id ||
+      "Unknown Track",
+    artist:
+      chooseNonEmptyString(primary.artist, secondary?.artist) ||
+      "Unknown Artist",
+    artistId: chooseNonEmptyString(primary.artistId, secondary?.artistId),
+    artistImage: chooseNonEmptyString(
+      primary.artistImage,
+      secondary?.artistImage
+    ),
+    artistSource: chooseNonEmptyString(
+      primary.artistSource,
+      secondary?.artistSource
+    ),
+    coverUrl: chooseNonEmptyString(primary.coverUrl, secondary?.coverUrl),
+    audioUrl: chooseNonEmptyString(primary.audioUrl, secondary?.audioUrl),
+    audioUrls:
+      Array.isArray(primary.audioUrls) && primary.audioUrls.length > 0
+        ? primary.audioUrls
+        : Array.isArray(secondary?.audioUrls) && secondary.audioUrls.length > 0
+        ? secondary.audioUrls
+        : undefined,
+    audioType: chooseAudioType(primary.audioType, secondary?.audioType),
+    drmLicenseUrl: chooseNonEmptyString(
+      primary.drmLicenseUrl,
+      secondary?.drmLicenseUrl
+    ),
+    drmScheme: chooseNonEmptyString(primary.drmScheme, secondary?.drmScheme),
+    drmProvider: chooseNonEmptyString(
+      primary.drmProvider,
+      secondary?.drmProvider
+    ),
+    drmHeaders:
+      primary.drmHeaders && Object.keys(primary.drmHeaders).length > 0
+        ? primary.drmHeaders
+        : secondary?.drmHeaders && Object.keys(secondary.drmHeaders).length > 0
+        ? secondary.drmHeaders
+        : undefined,
+    duration: chooseFiniteNumber(primary.duration, secondary?.duration),
+    uploaded: chooseNonEmptyString(primary.uploaded, secondary?.uploaded),
+    cachedAt: chooseFiniteNumber(primary.cachedAt, secondary?.cachedAt),
+    source: chooseNonEmptyString(primary.source, secondary?.source),
+    url: chooseNonEmptyString(primary.url, secondary?.url),
+    playbackStrategy:
+      primary.playbackStrategy || secondary?.playbackStrategy || undefined,
+    relatedSongs:
+      Array.isArray(primary.relatedSongs) && primary.relatedSongs.length > 0
+        ? primary.relatedSongs
+        : Array.isArray(secondary?.relatedSongs) &&
+          secondary.relatedSongs.length > 0
+        ? secondary.relatedSongs
+        : undefined,
+  };
+
+  return normalizeSongSnapshot(merged);
+}
+
+function mergeSongs(primarySongs: Song[], secondarySongs: Song[]): Song[] {
+  const secondaryByKey = new Map<string, Song>();
+  for (const song of secondarySongs) {
+    if (!song?.id) continue;
+    secondaryByKey.set(getSongStorageKey(song), normalizeSongSnapshot(song));
+  }
+
+  const merged: Song[] = [];
+  const seen = new Set<string>();
+
+  for (const song of primarySongs) {
+    if (!song?.id) continue;
+    const key = getSongStorageKey(song);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(mergeSongSnapshots(song, secondaryByKey.get(key)));
+    secondaryByKey.delete(key);
+  }
+
+  for (const song of secondaryByKey.values()) {
+    const key = getSongStorageKey(song);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(normalizeSongSnapshot(song));
+  }
+
+  return merged;
+}
+
 function normalizeCloudTrackRef(value: unknown): CloudTrackRef | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 
@@ -121,6 +252,29 @@ function normalizeCloudTrackRefs(value: unknown): CloudTrackRef[] {
   }
 
   return output;
+}
+
+function getCloudTrackRefKey(ref: CloudTrackRef): string {
+  return `${ref.source.trim().toLowerCase()}:${ref.id}`;
+}
+
+function mergeCloudTrackRefs(
+  primaryRefs: CloudTrackRef[],
+  secondaryRefs: CloudTrackRef[]
+): CloudTrackRef[] {
+  const seen = new Set<string>();
+  const merged: CloudTrackRef[] = [];
+
+  for (const ref of [...primaryRefs, ...secondaryRefs]) {
+    const normalized = normalizeCloudTrackRef(ref);
+    if (!normalized) continue;
+    const key = getCloudTrackRefKey(normalized);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(normalized);
+  }
+
+  return merged;
 }
 
 function normalizeCloudPlaylist(value: unknown): CloudPlaylistSnapshot | null {
@@ -159,6 +313,102 @@ function normalizeCloudLibrarySnapshot(value: unknown): CloudLibrarySnapshot {
           )
       : [],
     likedSongs: normalizeCloudTrackRefs(record.likedSongs),
+  };
+}
+
+function mergeStoredPlaylist(
+  primary: StoredPlaylist,
+  secondary?: StoredPlaylist | null
+): StoredPlaylist {
+  return {
+    id: primary.id,
+    name: chooseNonEmptyString(primary.name, secondary?.name) || primary.id,
+    description:
+      chooseNonEmptyString(primary.description, secondary?.description) || "",
+    createdAt:
+      chooseFiniteNumber(primary.createdAt, secondary?.createdAt, Date.now()) ||
+      Date.now(),
+    songs: mergeSongs(primary.songs, secondary?.songs || []),
+  };
+}
+
+function mergeStoredPlaylists(
+  primaryPlaylists: StoredPlaylist[],
+  secondaryPlaylists: StoredPlaylist[]
+): StoredPlaylist[] {
+  const secondaryById = new Map<string, StoredPlaylist>();
+  for (const playlist of secondaryPlaylists) {
+    secondaryById.set(playlist.id, playlist);
+  }
+
+  const merged: StoredPlaylist[] = [];
+  const seen = new Set<string>();
+
+  for (const playlist of primaryPlaylists) {
+    if (!playlist?.id || seen.has(playlist.id)) continue;
+    seen.add(playlist.id);
+    merged.push(mergeStoredPlaylist(playlist, secondaryById.get(playlist.id)));
+    secondaryById.delete(playlist.id);
+  }
+
+  for (const playlist of secondaryById.values()) {
+    if (!playlist?.id || seen.has(playlist.id)) continue;
+    seen.add(playlist.id);
+    merged.push(normalizePlaylist(playlist) || playlist);
+  }
+
+  return merged;
+}
+
+function mergeCloudPlaylist(
+  primary: CloudPlaylistSnapshot,
+  secondary?: CloudPlaylistSnapshot | null
+): CloudPlaylistSnapshot {
+  return {
+    id: primary.id,
+    name: chooseNonEmptyString(primary.name, secondary?.name) || primary.id,
+    description:
+      chooseNonEmptyString(primary.description, secondary?.description) || "",
+    createdAt:
+      chooseFiniteNumber(primary.createdAt, secondary?.createdAt, Date.now()) ||
+      Date.now(),
+    songs: mergeCloudTrackRefs(primary.songs, secondary?.songs || []),
+  };
+}
+
+export function mergeCloudLibrarySnapshots(
+  primarySnapshot: CloudLibrarySnapshot,
+  secondarySnapshot: CloudLibrarySnapshot
+): CloudLibrarySnapshot {
+  const primary = normalizeCloudLibrarySnapshot(primarySnapshot);
+  const secondary = normalizeCloudLibrarySnapshot(secondarySnapshot);
+  const secondaryPlaylistsById = new Map<string, CloudPlaylistSnapshot>();
+
+  for (const playlist of secondary.playlists) {
+    secondaryPlaylistsById.set(playlist.id, playlist);
+  }
+
+  const playlists: CloudPlaylistSnapshot[] = [];
+  const seenPlaylistIds = new Set<string>();
+
+  for (const playlist of primary.playlists) {
+    if (!playlist?.id || seenPlaylistIds.has(playlist.id)) continue;
+    seenPlaylistIds.add(playlist.id);
+    playlists.push(
+      mergeCloudPlaylist(playlist, secondaryPlaylistsById.get(playlist.id))
+    );
+    secondaryPlaylistsById.delete(playlist.id);
+  }
+
+  for (const playlist of secondaryPlaylistsById.values()) {
+    if (!playlist?.id || seenPlaylistIds.has(playlist.id)) continue;
+    seenPlaylistIds.add(playlist.id);
+    playlists.push(playlist);
+  }
+
+  return {
+    playlists,
+    likedSongs: mergeCloudTrackRefs(primary.likedSongs, secondary.likedSongs),
   };
 }
 
@@ -487,8 +737,10 @@ export async function restoreCloudLibrary(snapshot: unknown) {
     normalized.likedSongs.map(resolveCloudTrackRef)
   );
 
-  writeStoredPlaylists(restoredPlaylists);
-  writeLikedSongs(restoredLikedSongs);
+  writeStoredPlaylists(
+    mergeStoredPlaylists(readStoredPlaylists(), restoredPlaylists)
+  );
+  writeLikedSongs(mergeSongs(readLikedSongs(), restoredLikedSongs));
 }
 
 function readRecentSongsFromAudioState(): Song[] {
