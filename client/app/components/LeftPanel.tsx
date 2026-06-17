@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAudio } from "../contexts/AudioContext";
 import { useSettings } from "../contexts/SettingsContext";
+import { useToast } from "../contexts/ToastContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import { createStoredPlaylist } from "../lib/local-library";
 import PlaylistCreateModal from "./PlaylistCreateModal";
@@ -49,6 +50,7 @@ export default function LeftPanel() {
   const pathname = usePathname();
   const { settings } = useSettings();
   const { t } = useAppLanguage();
+  const { showNavigationToast } = useToast();
   const {
     recentSongs,
     resolveAndPlaySong,
@@ -128,15 +130,18 @@ export default function LeftPanel() {
         params.set("source", effectiveLastSearch.source);
       if (effectiveLastSearch.filter !== "all")
         params.set("filter", effectiveLastSearch.filter);
-      router.push(`/search?${params.toString()}`);
+      const href = `/search?${params.toString()}`;
+      showNavigationToast(href);
+      router.push(href);
       return;
     }
 
-    router.push(
+    const href =
       settings.preferredSearchSource === "youtube"
         ? "/search"
-        : `/search?source=${settings.preferredSearchSource}`
-    );
+        : `/search?source=${settings.preferredSearchSource}`;
+    showNavigationToast(href);
+    router.push(href);
   };
 
   const recentCovers = (() => {
@@ -201,6 +206,7 @@ export default function LeftPanel() {
             type="button"
             onClick={() => {
               closeFullscreen();
+              showNavigationToast("/");
               router.push("/");
             }}
             className="flex flex-1 items-center justify-center lg:flex-none"
@@ -226,6 +232,7 @@ export default function LeftPanel() {
             type="button"
             onClick={() => {
               closeFullscreen();
+              showNavigationToast("/library");
               router.push("/library");
             }}
             className="flex flex-1 items-center justify-center lg:flex-none"
@@ -240,6 +247,7 @@ export default function LeftPanel() {
             type="button"
             onClick={() => {
               closeFullscreen();
+              showNavigationToast("/settings");
               router.push("/settings");
             }}
             className="flex flex-1 cursor-pointer items-center justify-center lg:flex-none"

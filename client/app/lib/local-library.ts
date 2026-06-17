@@ -5,6 +5,7 @@ import type { Song } from "../contexts/AudioContext";
 export const PLAYLISTS_STORAGE_KEY = "libraryUserPlaylists";
 export const LIKED_SONGS_STORAGE_KEY = "libraryLikedSongs";
 export const LOCAL_LIBRARY_UPDATED_EVENT = "streamify-local-library-updated";
+const SONG_METADATA_CACHE_STORAGE_KEY = "librarySongMetadataCache";
 
 export interface CloudTrackRef {
   id: string;
@@ -79,6 +80,54 @@ function normalizeSongSnapshot(song: Song): Song {
   };
 }
 
+function readSongMetadataCache(): Record<string, Song> {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = window.localStorage.getItem(SONG_METADATA_CACHE_STORAGE_KEY);
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw) as Record<string, Song>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    const normalizedEntries = Object.entries(parsed)
+      .map(([key, value]) => {
+        if (!value?.id) return null;
+        return [key, normalizeSongSnapshot(value)] as const;
+      })
+      .filter((entry): entry is readonly [string, Song] => Boolean(entry));
+
+    return Object.fromEntries(normalizedEntries);
+  } catch {
+    return {};
+  }
+}
+
+function writeSongMetadataCache(cache: Record<string, Song>) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      SONG_METADATA_CACHE_STORAGE_KEY,
+      JSON.stringify(cache)
+    );
+  } catch {}
+}
+
+function updateSongMetadataCache(songs: Song[]) {
+  if (typeof window === "undefined" || songs.length === 0) return;
+
+  const nextCache = readSongMetadataCache();
+  for (const song of songs) {
+    if (!song?.id) continue;
+    nextCache[getSongStorageKey(song)] = normalizeSongSnapshot(song);
+  }
+
+  writeSongMetadataCache(nextCache);
+}
+
 function dedupeSongs(songs: Song[]): Song[] {
   const seen = new Set<string>();
   const output: Song[] = [];
@@ -118,6 +167,76 @@ function chooseFiniteNumber(
   return undefined;
 }
 
+function matchesPlaceholderValue(
+  value: string | null | undefined,
+  fallback: string | null | undefined
+): boolean {
+  if (typeof value !== "string" || typeof fallback !== "string") return false;
+  return value.trim().toLowerCase() === fallback.trim().toLowerCase();
+}
+
+function chooseSongTitle(
+  primary: Song,
+  secondary?: Song | null
+): string | undefined {
+  const primaryTitle = primary.title?.trim();
+  const secondaryTitle = secondary?.title?.trim();
+
+  if (
+    primaryTitle &&
+    !matchesPlaceholderValue(primaryTitle, primary.id) &&
+    primaryTitle.toLowerCase() !== "unknown track"
+  ) {
+    return primaryTitle;
+  }
+
+  if (
+    secondaryTitle &&
+    !matchesPlaceholderValue(secondaryTitle, secondary?.id) &&
+    secondaryTitle.toLowerCase() !== "unknown track"
+  ) {
+    return secondaryTitle;
+  }
+
+  return chooseNonEmptyString(
+    primaryTitle,
+    secondaryTitle,
+    primary.id,
+    secondary?.id
+  );
+}
+
+function chooseSongArtist(
+  primary: Song,
+  secondary?: Song | null
+): string | undefined {
+  const primaryArtist = primary.artist?.trim();
+  const secondaryArtist = secondary?.artist?.trim();
+
+  if (
+    primaryArtist &&
+    !matchesPlaceholderValue(primaryArtist, primary.source) &&
+    primaryArtist.toLowerCase() !== "unknown artist"
+  ) {
+    return primaryArtist;
+  }
+
+  if (
+    secondaryArtist &&
+    !matchesPlaceholderValue(secondaryArtist, secondary?.source) &&
+    secondaryArtist.toLowerCase() !== "unknown artist"
+  ) {
+    return secondaryArtist;
+  }
+
+  return chooseNonEmptyString(
+    primaryArtist,
+    secondaryArtist,
+    primary.source,
+    secondary?.source
+  );
+}
+
 function chooseAudioType(
   ...values: Array<Song["audioType"] | null | undefined>
 ): Song["audioType"] {
@@ -137,13 +256,8 @@ function mergeSongSnapshots(primary: Song, secondary?: Song | null): Song {
       primary.id ||
       secondary?.id ||
       "",
-    title:
-      chooseNonEmptyString(primary.title, secondary?.title, primary.id) ||
-      secondary?.id ||
-      "Unknown Track",
-    artist:
-      chooseNonEmptyString(primary.artist, secondary?.artist) ||
-      "Unknown Artist",
+    title: chooseSongTitle(primary, secondary) || "Unknown Track",
+    artist: chooseSongArtist(primary, secondary) || "Unknown Artist",
     artistId: chooseNonEmptyString(primary.artistId, secondary?.artistId),
     artistImage: chooseNonEmptyString(
       primary.artistImage,
@@ -421,6 +535,21 @@ function createCloudTrackRef(
   return { id, source };
 }
 
+function hasPlaceholderSongMetadata(song: Song): boolean {
+  const title = song.title?.trim();
+  const artist = song.artist?.trim();
+  const source = song.source?.trim();
+
+  return Boolean(
+    !title ||
+      matchesPlaceholderValue(title, song.id) ||
+      title.toLowerCase() === "unknown track" ||
+      !artist ||
+      matchesPlaceholderValue(artist, source) ||
+      artist.toLowerCase() === "unknown artist"
+  );
+}
+
 function createPlaceholderSong(ref: CloudTrackRef): Song {
   return {
     id: ref.id,
@@ -430,52 +559,100 @@ function createPlaceholderSong(ref: CloudTrackRef): Song {
   };
 }
 
-async function resolveCloudTrackRef(ref: CloudTrackRef): Promise<Song> {
+function buildKnownSongMetadataMap(): Map<string, Song> {
+  const metadataMap = new Map<string, Song>();
+
+  for (const song of Object.values(readSongMetadataCache())) {
+    if (!song?.id) continue;
+    metadataMap.set(getSongStorageKey(song), normalizeSongSnapshot(song));
+  }
+
+  for (const song of readLikedSongs()) {
+    if (!song?.id) continue;
+    metadataMap.set(getSongStorageKey(song), normalizeSongSnapshot(song));
+  }
+
+  for (const playlist of readStoredPlaylists()) {
+    for (const song of playlist.songs) {
+      if (!song?.id) continue;
+      metadataMap.set(getSongStorageKey(song), normalizeSongSnapshot(song));
+    }
+  }
+
+  for (const song of readRecentSongsFromAudioState()) {
+    if (!song?.id) continue;
+    metadataMap.set(getSongStorageKey(song), normalizeSongSnapshot(song));
+  }
+
+  return metadataMap;
+}
+
+async function resolveCloudTrackRef(
+  ref: CloudTrackRef,
+  knownSong?: Song | null
+): Promise<Song> {
   try {
     const params = new URLSearchParams();
     params.set("id", ref.id);
     params.set("source", ref.source);
+    if (knownSong?.title) {
+      params.set("title", knownSong.title);
+    }
+    if (knownSong?.artist) {
+      params.set("artist", knownSong.artist);
+    }
+    if (knownSong?.url) {
+      params.set("url", knownSong.url);
+    }
     const response = await fetch(`/api/video?${params.toString()}`);
     const payload = (await response.json()) as Record<string, unknown>;
 
     if (!response.ok) {
-      return createPlaceholderSong(ref);
+      return knownSong
+        ? mergeSongSnapshots(knownSong, createPlaceholderSong(ref))
+        : createPlaceholderSong(ref);
     }
 
-    return normalizeSongSnapshot({
-      id:
-        typeof payload.id === "string" && payload.id.trim()
-          ? payload.id
-          : ref.id,
-      source:
-        typeof payload.source === "string" && payload.source.trim()
-          ? payload.source
-          : ref.source,
-      title:
-        typeof payload.title === "string" && payload.title.trim()
-          ? payload.title
-          : ref.id,
-      artist:
-        typeof payload.author === "string" && payload.author.trim()
-          ? payload.author
-          : ref.source,
-      coverUrl:
-        typeof payload.thumbnailUrl === "string" && payload.thumbnailUrl.trim()
-          ? payload.thumbnailUrl
-          : undefined,
-      url:
-        typeof payload.url === "string" && payload.url.trim()
-          ? payload.url
-          : undefined,
-      duration:
-        typeof payload.lengthSeconds === "number"
-          ? payload.lengthSeconds
-          : undefined,
-      playbackStrategy:
-        payload.playbackStrategy === "widget" ? "widget" : undefined,
-    });
+    return mergeSongSnapshots(
+      normalizeSongSnapshot({
+        id:
+          typeof payload.id === "string" && payload.id.trim()
+            ? payload.id
+            : ref.id,
+        source:
+          typeof payload.source === "string" && payload.source.trim()
+            ? payload.source
+            : ref.source,
+        title:
+          typeof payload.title === "string" && payload.title.trim()
+            ? payload.title
+            : ref.id,
+        artist:
+          typeof payload.author === "string" && payload.author.trim()
+            ? payload.author
+            : ref.source,
+        coverUrl:
+          typeof payload.thumbnailUrl === "string" &&
+          payload.thumbnailUrl.trim()
+            ? payload.thumbnailUrl
+            : undefined,
+        url:
+          typeof payload.url === "string" && payload.url.trim()
+            ? payload.url
+            : undefined,
+        duration:
+          typeof payload.lengthSeconds === "number"
+            ? payload.lengthSeconds
+            : undefined,
+        playbackStrategy:
+          payload.playbackStrategy === "widget" ? "widget" : undefined,
+      }),
+      knownSong
+    );
   } catch {
-    return createPlaceholderSong(ref);
+    return knownSong
+      ? mergeSongSnapshots(knownSong, createPlaceholderSong(ref))
+      : createPlaceholderSong(ref);
   }
 }
 
@@ -539,6 +716,7 @@ export function writeStoredPlaylists(playlists: StoredPlaylist[]) {
     PLAYLISTS_STORAGE_KEY,
     JSON.stringify(normalized)
   );
+  updateSongMetadataCache(normalized.flatMap((playlist) => playlist.songs));
   emitLocalLibraryUpdated();
 }
 
@@ -687,11 +865,67 @@ export function readLikedSongs(): Song[] {
 
 export function writeLikedSongs(songs: Song[]) {
   if (typeof window === "undefined") return;
+  const normalizedSongs = dedupeSongs(songs);
   window.localStorage.setItem(
     LIKED_SONGS_STORAGE_KEY,
-    JSON.stringify(dedupeSongs(songs))
+    JSON.stringify(normalizedSongs)
   );
+  updateSongMetadataCache(normalizedSongs);
   emitLocalLibraryUpdated();
+}
+
+export async function refreshLocalLibrarySongMetadata() {
+  const playlists = readStoredPlaylists();
+  const likedSongs = readLikedSongs();
+  const songsToRefresh = [
+    ...playlists.flatMap((playlist) => playlist.songs),
+    ...likedSongs,
+  ].filter(
+    (song) => song?.id && song.source && hasPlaceholderSongMetadata(song)
+  );
+
+  if (songsToRefresh.length === 0) {
+    return { refreshed: 0 };
+  }
+
+  const resolvedEntries = await Promise.all(
+    songsToRefresh.map(async (song) => {
+      const ref = createCloudTrackRef(song);
+      if (!ref) return null;
+
+      return [
+        getSongStorageKey(song),
+        await resolveCloudTrackRef(ref, song),
+      ] as const;
+    })
+  );
+
+  const resolvedByKey = new Map<string, Song>(
+    resolvedEntries.filter((entry): entry is readonly [string, Song] =>
+      Boolean(entry)
+    )
+  );
+
+  if (resolvedByKey.size === 0) {
+    return { refreshed: 0 };
+  }
+
+  const nextPlaylists = playlists.map((playlist) => ({
+    ...playlist,
+    songs: playlist.songs.map((song) => {
+      const resolved = resolvedByKey.get(getSongStorageKey(song));
+      return resolved ? mergeSongSnapshots(song, resolved) : song;
+    }),
+  }));
+  const nextLikedSongs = likedSongs.map((song) => {
+    const resolved = resolvedByKey.get(getSongStorageKey(song));
+    return resolved ? mergeSongSnapshots(song, resolved) : song;
+  });
+
+  writeStoredPlaylists(nextPlaylists);
+  writeLikedSongs(nextLikedSongs);
+
+  return { refreshed: resolvedByKey.size };
 }
 
 export function isSongLiked(songId?: string, source?: string): boolean {
@@ -724,19 +958,28 @@ export function toggleLikedSong(song: Song) {
 
 export async function restoreCloudLibrary(snapshot: unknown) {
   const normalized = normalizeCloudLibrarySnapshot(snapshot);
+  const knownSongsByKey = buildKnownSongMetadataMap();
   const restoredPlaylists = await Promise.all(
     normalized.playlists.map(async (playlist) => ({
       id: playlist.id,
       name: playlist.name,
       description: playlist.description,
       createdAt: playlist.createdAt,
-      songs: await Promise.all(playlist.songs.map(resolveCloudTrackRef)),
+      songs: await Promise.all(
+        playlist.songs.map((ref) =>
+          resolveCloudTrackRef(
+            ref,
+            knownSongsByKey.get(getCloudTrackRefKey(ref))
+          )
+        )
+      ),
     }))
   );
   const restoredLikedSongs = await Promise.all(
-    normalized.likedSongs.map(resolveCloudTrackRef)
+    normalized.likedSongs.map((ref) =>
+      resolveCloudTrackRef(ref, knownSongsByKey.get(getCloudTrackRefKey(ref)))
+    )
   );
-
   writeStoredPlaylists(
     mergeStoredPlaylists(readStoredPlaylists(), restoredPlaylists)
   );

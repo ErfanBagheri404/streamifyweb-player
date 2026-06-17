@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useAudio, type Song } from "../contexts/AudioContext";
 import { useSettings } from "../contexts/SettingsContext";
+import { useToast } from "../contexts/ToastContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import {
   addSongToPlaylist,
@@ -55,9 +56,7 @@ function getRelativeLuminance([r, g, b]: [number, number, number]): number {
       : ((channel + 0.055) / 1.055) ** 2.4;
   };
 
-  return (
-    0.2126 * normalize(r) + 0.7152 * normalize(g) + 0.0722 * normalize(b)
-  );
+  return 0.2126 * normalize(r) + 0.7152 * normalize(g) + 0.0722 * normalize(b);
 }
 
 function isYouTubeBackedSource(source?: string): boolean {
@@ -341,13 +340,12 @@ export default function FullscreenPlayer() {
   const isProgrammaticLyricsScrollRef = useRef(false);
   const lyricsScrollReleaseTimerRef = useRef<number | null>(null);
   const lyricsUserScrollIntentUntilRef = useRef(0);
-  const feedbackTimerRef = useRef<number | null>(null);
   const [ownedPlaylists, setOwnedPlaylists] = useState<StoredPlaylist[]>([]);
   const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = useState(false);
   const [isCurrentSongLiked, setIsCurrentSongLiked] = useState(false);
-  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [fetchedRelatedSongs, setFetchedRelatedSongs] = useState<Song[]>([]);
   const [isLoadingRelatedSongs, setIsLoadingRelatedSongs] = useState(false);
+  const { showToast } = useToast();
 
   const upNextSongs = useMemo(() => {
     if (!currentSong || queueIndex < 0) return [];
@@ -637,9 +635,6 @@ export default function FullscreenPlayer() {
       if (lyricsScrollReleaseTimerRef.current !== null) {
         window.clearTimeout(lyricsScrollReleaseTimerRef.current);
       }
-      if (feedbackTimerRef.current !== null) {
-        window.clearTimeout(feedbackTimerRef.current);
-      }
     };
   }, []);
 
@@ -728,7 +723,8 @@ export default function FullscreenPlayer() {
   const sectionSecondary = shiftColor(displayPalette.primary, -42);
   const useHeroLightText = getRelativeLuminance(displayPalette.primary) < 0.36;
   const useSectionLightText =
-    (getRelativeLuminance(sectionPrimary) + getRelativeLuminance(sectionSecondary)) /
+    (getRelativeLuminance(sectionPrimary) +
+      getRelativeLuminance(sectionSecondary)) /
       2 <
     0.42;
   const heroPrimaryText = useHeroLightText
@@ -809,13 +805,11 @@ export default function FullscreenPlayer() {
   };
 
   const showFeedback = (message: string) => {
-    setFeedbackMessage(message);
-    if (feedbackTimerRef.current !== null) {
-      window.clearTimeout(feedbackTimerRef.current);
-    }
-    feedbackTimerRef.current = window.setTimeout(() => {
-      setFeedbackMessage(null);
-    }, 2200);
+    showToast({
+      message,
+      tone: "success",
+      durationMs: 2200,
+    });
   };
 
   const handleToggleLike = () => {
@@ -823,7 +817,9 @@ export default function FullscreenPlayer() {
     const result = toggleLikedSong(currentSong);
     setIsCurrentSongLiked(result.liked);
     showFeedback(
-      result.liked ? "Added to Liked Songs" : "Removed from Liked Songs"
+      result.liked
+        ? t("fullscreen.addedToLiked")
+        : t("fullscreen.removedFromLiked")
     );
   };
 
@@ -837,8 +833,13 @@ export default function FullscreenPlayer() {
     setIsPlaylistPickerOpen(false);
     showFeedback(
       result.alreadyExists
-        ? `${currentSong.title} is already in ${result.playlist.name}`
-        : `Added to ${result.playlist.name}`
+        ? t("fullscreen.alreadyInPlaylist", {
+            title: currentSong.title,
+            playlist: result.playlist.name,
+          })
+        : t("fullscreen.addedToPlaylist", {
+            playlist: result.playlist.name,
+          })
     );
   };
 
@@ -853,18 +854,6 @@ export default function FullscreenPlayer() {
         isPlayerVisible ? "lg:h-[calc(100%-5rem)]" : ""
       }`}
     >
-      <div
-        className={`pointer-events-none absolute left-1/2 top-4 z-40 flex -translate-x-1/2 transition-all duration-200 ${
-          feedbackMessage
-            ? "translate-y-0 opacity-100"
-            : "-translate-y-2 opacity-0"
-        }`}
-      >
-        <div className="rounded-full border border-white/12 bg-black/70 px-4 py-2 text-sm font-medium text-white shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-          {feedbackMessage || t("common.saved")}
-        </div>
-      </div>
-
       <div
         className={`theme-overlay absolute inset-0 z-30 flex items-center justify-center p-4 backdrop-blur-sm transition-all duration-200 ${
           isPlaylistPickerOpen
@@ -1020,7 +1009,10 @@ export default function FullscreenPlayer() {
                 : "rgba(15,23,42,0.12)",
             }}
           >
-            <p className="text-xs sm:text-sm" style={{ color: heroSecondaryText }}>
+            <p
+              className="text-xs sm:text-sm"
+              style={{ color: heroSecondaryText }}
+            >
               {t("common.song")}
             </p>
             <h2

@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { type Song, useAudio } from "../../contexts/AudioContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { useAppLanguage } from "../../hooks/useAppLanguage";
+import { usePageLoadingToast } from "../../hooks/usePageLoadingToast";
 import { HorizontalScrollRow } from "../../components/HorizontalScrollRow";
 import { isLightAppTheme } from "../../lib/app-settings";
 import { findSavedArtistRouteContext } from "../../lib/navigation-state";
@@ -175,6 +176,11 @@ export default function ArtistPage() {
   const isLoading = activeState.isLoading;
   const error = activeState.error;
   const songs = useMemo(() => data?.songs ?? [], [data?.songs]);
+
+  usePageLoadingToast({
+    isLoading,
+    message: t("common.loading"),
+  });
 
   useEffect(() => {
     let cancelled = false;

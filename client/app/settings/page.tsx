@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAudio, type AutoRetryPreference } from "../contexts/AudioContext";
+import { useToast } from "../contexts/ToastContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import { useSettings } from "../contexts/SettingsContext";
 import {
@@ -16,6 +17,7 @@ import {
   buildCurrentLocalLibrarySyncSource,
   pushCloudLibrarySnapshot,
 } from "../lib/cloud-library-sync";
+import { refreshLocalLibrarySongMetadata } from "../lib/local-library";
 import {
   getUserAvatarUrl,
   getUserDisplayName,
@@ -270,8 +272,7 @@ export default function SettingsPage() {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     let isMounted = true;
@@ -558,29 +559,35 @@ export default function SettingsPage() {
     : t("settings.accountGuest");
 
   const handleSignOut = async () => {
-    setSyncMessage(null);
-    setSyncError(null);
-
     if (!supabase) {
-      setSyncError(cloudSyncUnavailableMessage);
+      showToast({
+        tone: "error",
+        message: cloudSyncUnavailableMessage,
+      });
       return;
     }
 
     const { error } = await supabase.auth.signOut();
     if (error) {
-      setSyncError(error.message);
+      showToast({
+        tone: "error",
+        message: error.message,
+      });
       return;
     }
 
-    setSyncMessage(t("settings.accountSignedOut"));
+    showToast({
+      tone: "success",
+      message: t("settings.accountSignedOut"),
+    });
   };
 
   const handleSyncLibrary = async () => {
-    setSyncMessage(null);
-    setSyncError(null);
-
     if (!supabase) {
-      setSyncError(cloudSyncUnavailableMessage);
+      showToast({
+        tone: "error",
+        message: cloudSyncUnavailableMessage,
+      });
       return;
     }
 
@@ -588,25 +595,37 @@ export default function SettingsPage() {
       buildCurrentLocalLibrarySyncSource();
 
     if (playlists.length === 0 && likedSongs.length === 0) {
-      setSyncError(t("settings.syncEmpty"));
+      showToast({
+        tone: "error",
+        message: t("settings.syncEmpty"),
+      });
       return;
     }
 
     setIsSyncing(true);
+    showToast({
+      message: t("settings.syncInProgress"),
+      tone: "loading",
+      durationMs: 0,
+    });
 
     try {
       const payload = await pushCloudLibrarySnapshot(snapshot);
+      await refreshLocalLibrarySongMetadata();
 
-      setSyncMessage(
-        t("settings.syncSuccess", {
+      showToast({
+        tone: "success",
+        message: t("settings.syncSuccess", {
           playlists: payload.syncedPlaylists ?? 0,
           likes: payload.syncedLikes ?? 0,
-        })
-      );
+        }),
+      });
     } catch (error) {
-      setSyncError(
-        error instanceof Error ? error.message : t("settings.syncFailed")
-      );
+      showToast({
+        tone: "error",
+        message:
+          error instanceof Error ? error.message : t("settings.syncFailed"),
+      });
     } finally {
       setIsSyncing(false);
     }
@@ -954,9 +973,7 @@ export default function SettingsPage() {
                           disabled={isSyncing}
                           className="theme-button-solid rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isSyncing
-                            ? t("settings.syncInProgress")
-                            : t("settings.syncLibrary")}
+                          {t("settings.syncLibrary")}
                         </button>
                         <button
                           type="button"
@@ -985,16 +1002,6 @@ export default function SettingsPage() {
                       </>
                     )}
                   </div>
-                  {syncError ? (
-                    <p className="theme-overlay mt-3 rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)]">
-                      {syncError}
-                    </p>
-                  ) : null}
-                  {syncMessage ? (
-                    <p className="theme-accent-soft mt-3 rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)]">
-                      {syncMessage}
-                    </p>
-                  ) : null}
                 </div>
               </div>
             </section>

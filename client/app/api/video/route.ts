@@ -1168,6 +1168,45 @@ function extractVideoIdFromUrl(value: string): string {
   return "";
 }
 
+async function fetchYouTubeOEmbedMetadata(
+  videoId: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const payload = (await fetchJson(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(
+        `https://www.youtube.com/watch?v=${videoId}`
+      )}&format=json`,
+      undefined,
+      8000
+    )) as Record<string, unknown>;
+
+    const title =
+      typeof payload.title === "string" && payload.title.trim()
+        ? payload.title.trim()
+        : "";
+    if (!title) {
+      return null;
+    }
+
+    return {
+      id: videoId,
+      title,
+      author:
+        typeof payload.author_name === "string" && payload.author_name.trim()
+          ? payload.author_name.trim()
+          : "YouTube",
+      thumbnailUrl:
+        typeof payload.thumbnail_url === "string" &&
+        payload.thumbnail_url.trim()
+          ? payload.thumbnail_url.trim()
+          : `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`,
+      url: `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function extractChannelIdFromUrl(value: string): string {
   const rawValue = value.trim().replace(/^\/+/, "");
   if (!rawValue) return "";
@@ -1484,6 +1523,14 @@ async function fetchVideoDetails(
       return value;
     } catch {
       controller.abort();
+    }
+
+    const fallbackMetadata = await fetchYouTubeOEmbedMetadata(videoId);
+    if (fallbackMetadata) {
+      return {
+        ...fallbackMetadata,
+        source: source || "youtube",
+      };
     }
 
     throw new Error(errors.join(" | ") || "All YouTube providers failed");

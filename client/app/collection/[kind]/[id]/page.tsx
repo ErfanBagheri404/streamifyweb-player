@@ -19,6 +19,7 @@ import {
   writeSessionCache,
 } from "../../../lib/session-cache";
 import { useAppLanguage } from "../../../hooks/useAppLanguage";
+import { usePageLoadingToast } from "../../../hooks/usePageLoadingToast";
 import { findSavedCollectionRouteContext } from "../../../lib/navigation-state";
 
 const DEBUG_SERVER_URL = "";
@@ -515,6 +516,12 @@ export default function CollectionPage() {
           (kind === "playlist" || kind === "album"))
     );
   }, [kind, source]);
+
+  usePageLoadingToast({
+    enabled: shouldFetchRemote,
+    isLoading: remoteState.isLoading,
+    message: t("common.loading"),
+  });
 
   useEffect(() => {
     let cancelled = false;

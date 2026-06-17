@@ -12,6 +12,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type Song, useAudio } from "../contexts/AudioContext";
+import { useToast } from "../contexts/ToastContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import PlaylistCreateModal from "../components/PlaylistCreateModal";
 import {
@@ -19,6 +20,7 @@ import {
   getLocalCollectionPath,
   LOCAL_LIBRARY_UPDATED_EVENT,
   readLikedSongs,
+  refreshLocalLibrarySongMetadata,
   readStoredPlaylists,
   type StoredPlaylist,
 } from "../lib/local-library";
@@ -714,15 +716,8 @@ export default function LibraryPage() {
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<LibraryViewMode>("grid");
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
-  const [createdPlaylistToast, setCreatedPlaylistToast] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncFeedback, setSyncFeedback] = useState<{
-    tone: "success" | "error";
-    message: string;
-  } | null>(null);
+  const { showNavigationToast, showToast } = useToast();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -773,30 +768,6 @@ export default function LibraryPage() {
       subscription.unsubscribe();
     };
   }, [supabase]);
-
-  useEffect(() => {
-    if (!createdPlaylistToast) return;
-
-    const timer = window.setTimeout(() => {
-      setCreatedPlaylistToast(null);
-    }, 2600);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [createdPlaylistToast]);
-
-  useEffect(() => {
-    if (!syncFeedback) return;
-
-    const timer = window.setTimeout(() => {
-      setSyncFeedback(null);
-    }, 3200);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [syncFeedback]);
 
   useEffect(() => {
     if (!isSortMenuOpen) return;
@@ -877,6 +848,14 @@ export default function LibraryPage() {
     [likedSongs, previouslyPlayed, resolveAndPlaySong, userPlaylists]
   );
 
+  const openCollectionPath = useCallback(
+    (path: string) => {
+      showNavigationToast(path);
+      router.push(path);
+    },
+    [router, showNavigationToast]
+  );
+
   const visiblePlaylistCards = useMemo(() => {
     const baseCards = [
       {
@@ -895,7 +874,7 @@ export default function LibraryPage() {
             priority
           />
         ),
-        onOpen: () => router.push(getLocalCollectionPath("liked-songs")),
+        onOpen: () => openCollectionPath(getLocalCollectionPath("liked-songs")),
         onPlay:
           likedSongs.length > 0
             ? () => {
@@ -919,7 +898,8 @@ export default function LibraryPage() {
             priority
           />
         ),
-        onOpen: () => router.push(getLocalCollectionPath("previously-played")),
+        onOpen: () =>
+          openCollectionPath(getLocalCollectionPath("previously-played")),
         onPlay:
           previouslyPlayed.length > 0
             ? () => {
@@ -940,7 +920,7 @@ export default function LibraryPage() {
             label={playlist.name}
           />
         ),
-        onOpen: () => router.push(getLocalCollectionPath(playlist.id)),
+        onOpen: () => openCollectionPath(getLocalCollectionPath(playlist.id)),
         onPlay:
           playlist.songs.length > 0
             ? () => {
@@ -955,7 +935,7 @@ export default function LibraryPage() {
     likedSongs,
     playLocalCollection,
     previouslyPlayed,
-    router,
+    openCollectionPath,
     t,
     userPlaylists,
   ]);
@@ -1177,20 +1157,22 @@ export default function LibraryPage() {
     const playlist = createStoredPlaylist(name, description);
     setUserPlaylists((prev) => [playlist, ...prev]);
     closeCreatePlaylist();
-    setCreatedPlaylistToast({
-      id: playlist.id,
-      name: playlist.name,
+    showToast({
+      message: t("library.created", { name: playlist.name }),
+      tone: "success",
+      actionLabel: t("library.open"),
+      onAction: () => {
+        openCollectionPath(getLocalCollectionPath(playlist.id));
+      },
     });
   };
 
   const handleSyncLibrary = async () => {
-    setSyncFeedback(null);
-
     const { playlists, likedSongs, snapshot } =
       buildCurrentLocalLibrarySyncSource();
 
     if (playlists.length === 0 && likedSongs.length === 0) {
-      setSyncFeedback({
+      showToast({
         tone: "error",
         message: t("settings.syncEmpty"),
       });
@@ -1198,10 +1180,16 @@ export default function LibraryPage() {
     }
 
     setIsSyncing(true);
+    showToast({
+      message: t("settings.syncInProgress"),
+      tone: "loading",
+      durationMs: 0,
+    });
 
     try {
       const result = await pushCloudLibrarySnapshot(snapshot);
-      setSyncFeedback({
+      await refreshLocalLibrarySongMetadata();
+      showToast({
         tone: "success",
         message: t("settings.syncSuccess", {
           playlists: result.syncedPlaylists,
@@ -1209,7 +1197,7 @@ export default function LibraryPage() {
         }),
       });
     } catch (error) {
-      setSyncFeedback({
+      showToast({
         tone: "error",
         message:
           error instanceof Error ? error.message : t("settings.syncFailed"),
@@ -1222,34 +1210,6 @@ export default function LibraryPage() {
   return (
     <>
       <div className="theme-surface relative h-full overflow-hidden rounded-xl border text-[color:var(--foreground)]">
-        <div
-          className={`pointer-events-none absolute left-1/2 top-4 z-40 flex -translate-x-1/2 transition-all duration-200 ${
-            createdPlaylistToast
-              ? "translate-y-0 opacity-100"
-              : "-translate-y-2 opacity-0"
-          }`}
-        >
-          <div className="theme-overlay pointer-events-auto flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-medium text-[color:var(--foreground)] shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-            <span>
-              {t("library.created", {
-                name:
-                  createdPlaylistToast?.name || t("library.createdFallback"),
-              })}
-            </span>
-            {createdPlaylistToast ? (
-              <button
-                type="button"
-                onClick={() =>
-                  router.push(getLocalCollectionPath(createdPlaylistToast.id))
-                }
-                className="theme-button-solid rounded-full px-3 py-1 text-xs font-semibold transition hover:scale-[1.02]"
-              >
-                {t("library.open")}
-              </button>
-            ) : null}
-          </div>
-        </div>
-
         <div className="flex h-full min-h-0 w-full flex-col gap-6 rounded-xl px-4 py-4">
           <section className="rounded-xl">
             <div className="flex flex-col gap-5">
@@ -1285,9 +1245,7 @@ export default function LibraryPage() {
                       ) : (
                         <SyncGlyph />
                       )}
-                      {isSyncing
-                        ? t("settings.syncInProgress")
-                        : t("settings.syncLibrary")}
+                      {t("settings.syncLibrary")}
                     </button>
                   ) : null}
                   <button
@@ -1313,21 +1271,6 @@ export default function LibraryPage() {
                   </button>
                 </div>
               </div>
-
-              {syncFeedback ? (
-                <div
-                  className={`inline-flex max-w-full items-center gap-2 rounded-2xl border px-3 py-2 text-sm ${
-                    syncFeedback.tone === "success"
-                      ? "theme-accent-soft"
-                      : "theme-overlay"
-                  }`}
-                >
-                  {syncFeedback.tone === "success" ? <SyncGlyph /> : null}
-                  <span className="min-w-0 truncate text-[color:var(--foreground)]">
-                    {syncFeedback.message}
-                  </span>
-                </div>
-              ) : null}
 
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                 <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 hide-scrollbar sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 sm:gap-2">
