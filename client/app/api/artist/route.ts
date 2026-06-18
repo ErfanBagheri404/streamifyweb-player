@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
-import { INVIDIOUS_INSTANCES } from "../../lib/media-providers";
+import { getInvidiousInstances } from "../../lib/media-providers";
+import {
+  buildProviderUrlCandidates,
+  getProviderEndpoints,
+} from "../../lib/provider-endpoints";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
-
-const INVIDIOUS_BASE = INVIDIOUS_INSTANCES[0];
-const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
 
 function isYouTubeChannelId(id: string): boolean {
   return id.startsWith("UC") || id.startsWith("U") || id.length === 24;
@@ -70,12 +71,26 @@ async function fetchJson(url: string): Promise<unknown> {
   return res.json() as Promise<unknown>;
 }
 
+async function fetchFirstSuccessfulJsonUrl(urls: string[]): Promise<unknown> {
+  const errors: string[] = [];
+
+  for (const url of urls) {
+    try {
+      return await fetchJson(url);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  throw new Error(errors.join(" | ") || "All requests failed");
+}
+
 async function fetchFirstSuccessfulJson(
   buildUrl: (instance: string) => string
 ): Promise<unknown> {
   const errors: string[] = [];
 
-  for (const instance of INVIDIOUS_INSTANCES) {
+  for (const instance of await getInvidiousInstances()) {
     try {
       return await fetchJson(buildUrl(instance));
     } catch (error) {
@@ -152,21 +167,25 @@ async function fetchInvidiousChannelPlaylists(
     : toArray(toRecord(payload).playlists);
 }
 
-function absolutizeUrl(url: string): string {
+function absolutizeUrl(url: string, invidiousBase: string): string {
   if (!url) return url;
   if (url.startsWith("https://") || url.startsWith("http://")) return url;
   if (url.startsWith("//")) return `https:${url}`;
-  if (url.startsWith("/")) return `${INVIDIOUS_BASE}${url}`;
+  if (url.startsWith("/")) return `${invidiousBase}${url}`;
   return url;
 }
 
-function pickBestImageUrl(arr: unknown, urlKey: string = "url"): string {
+function pickBestImageUrl(
+  arr: unknown,
+  invidiousBase: string,
+  urlKey: string = "url"
+): string {
   if (!Array.isArray(arr) || arr.length === 0) return "";
   const sorted = [...arr]
     .map((x) => x as Record<string, unknown>)
     .sort((a, b) => safeNumber(b.width) - safeNumber(a.width));
   const url = safeString(sorted[0]?.[urlKey]);
-  return absolutizeUrl(url);
+  return absolutizeUrl(url, invidiousBase);
 }
 
 function qualityScore(value: unknown): number {
@@ -236,13 +255,26 @@ function normalizeJioSaavnAlbum(
 }
 
 async function fetchJioSaavnArtist(id: string): Promise<ArtistPayload> {
+  const providerEndpoints = await getProviderEndpoints();
+  const jiosaavnApiBase = providerEndpoints.providers.jiosaavn.apiBase;
   const [artistPayload, songsPayload, albumsPayload] = await Promise.all([
-    fetchJson(`${JIOSAAVN_API_BASE}/api/artists/${encodeURIComponent(id)}`),
-    fetchJson(
-      `${JIOSAAVN_API_BASE}/api/artists/${encodeURIComponent(id)}/songs`
+    fetchFirstSuccessfulJsonUrl(
+      buildProviderUrlCandidates(jiosaavnApiBase, [
+        `/api/artists/${encodeURIComponent(id)}`,
+        `/artists/${encodeURIComponent(id)}`,
+      ])
+    ),
+    fetchFirstSuccessfulJsonUrl(
+      buildProviderUrlCandidates(jiosaavnApiBase, [
+        `/api/artists/${encodeURIComponent(id)}/songs`,
+        `/artists/${encodeURIComponent(id)}/songs`,
+      ])
     ).catch(() => null),
-    fetchJson(
-      `${JIOSAAVN_API_BASE}/api/artists/${encodeURIComponent(id)}/albums`
+    fetchFirstSuccessfulJsonUrl(
+      buildProviderUrlCandidates(jiosaavnApiBase, [
+        `/api/artists/${encodeURIComponent(id)}/albums`,
+        `/artists/${encodeURIComponent(id)}/albums`,
+      ])
     ).catch(() => null),
   ]);
 
@@ -329,6 +361,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const providerEndpoints = await getProviderEndpoints();
+    const youtubeWebBase = providerEndpoints.providers.youtube.webBase;
+    const invidiousBase = providerEndpoints.instances.invidious[0] || "";
     const [channelResult, videosResult, playlistsResult] = await Promise.all([
       fetchInvidiousChannel(id).catch(() => null),
       fetchInvidiousChannelVideos(id).catch(() => []),
@@ -359,13 +394,13 @@ export async function GET(request: NextRequest) {
     const artist: ArtistPayload["artist"] = {
       id,
       name,
-      image: pickBestImageUrl(invidiousChannel.authorThumbnails),
-      banner: pickBestImageUrl(invidiousChannel.authorBanners),
+      image: pickBestImageUrl(invidiousChannel.authorThumbnails, invidiousBase),
+      banner: pickBestImageUrl(invidiousChannel.authorBanners, invidiousBase),
       subscribers: safeNumber(invidiousChannel.subCount),
       verified: Boolean(invidiousChannel.verified),
       description: safeString(invidiousChannel.description),
       source: "youtube",
-      url: `https://www.youtube.com/channel/${encodeURIComponent(id)}`,
+      url: `${youtubeWebBase}/channel/${encodeURIComponent(id)}`,
     };
 
     const songs = videosToUse.map((v) => {
@@ -373,7 +408,7 @@ export async function GET(request: NextRequest) {
       return {
         id: safeString(v.videoId) || safeString(v.id),
         title: safeString(v.title) || "Unknown",
-        thumbnail: pickBestImageUrl(thumbnails),
+        thumbnail: pickBestImageUrl(thumbnails, invidiousBase),
         views: safeNumber(v.viewCount),
         duration: safeNumber(v.lengthSeconds),
       };
@@ -391,7 +426,10 @@ export async function GET(request: NextRequest) {
       const payload = {
         id: playlistId,
         title: safeString(p.title) || "Unknown",
-        thumbnail: absolutizeUrl(safeString(p.playlistThumbnail)),
+        thumbnail: absolutizeUrl(
+          safeString(p.playlistThumbnail),
+          invidiousBase
+        ),
         videoCount: safeNumber(p.videoCount),
       };
 

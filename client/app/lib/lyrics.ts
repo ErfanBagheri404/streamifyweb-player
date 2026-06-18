@@ -13,7 +13,6 @@ import {
 const LYRICS_CACHE_KEY = "streamifyweb_lyrics_cache";
 const CACHE_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 const MISS_CACHE_EXPIRY_MS = 6 * 60 * 60 * 1000;
-const LYRICS_REQUEST_TIMEOUT_MS = 4500;
 const memoryCache = new Map<string, LyricsCacheEntry>();
 const missCache = new Map<string, number>();
 const pendingRequests = new Map<string, Promise<LyricsCacheEntry | null>>();
@@ -58,7 +57,10 @@ function saveCache(cache: Map<string, LyricsCacheEntry>): void {
 }
 
 export async function fetchLyrics(
-  track: LyricsTrack
+  track: LyricsTrack,
+  options?: {
+    force?: boolean;
+  }
 ): Promise<LyricsCacheEntry | null> {
   const cache = loadCache();
   const cacheKey = getTrackCacheKey(track);
@@ -74,7 +76,11 @@ export async function fetchLyrics(
   }
 
   const missedAt = missCache.get(cacheKey);
-  if (missedAt && Date.now() - missedAt <= MISS_CACHE_EXPIRY_MS) {
+  if (
+    !options?.force &&
+    missedAt &&
+    Date.now() - missedAt <= MISS_CACHE_EXPIRY_MS
+  ) {
     return null;
   }
 
@@ -82,12 +88,6 @@ export async function fetchLyrics(
   if (pending) return pending;
 
   const request = (async () => {
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(
-      () => controller.abort(),
-      LYRICS_REQUEST_TIMEOUT_MS
-    );
-
     try {
       const url = new URL("/api/lyrics", window.location.origin);
       url.searchParams.set("id", track.id);
@@ -101,8 +101,8 @@ export async function fetchLyrics(
 
       const response = await fetch(url.toString(), {
         cache: "no-store",
-        signal: controller.signal,
       });
+
       if (!response.ok) {
         missCache.set(cacheKey, Date.now());
         return null;
@@ -122,12 +122,12 @@ export async function fetchLyrics(
       cache.set(cacheKey, normalizedPayload);
       saveCache(cache);
       missCache.delete(cacheKey);
+
       return normalizedPayload;
     } catch {
       missCache.set(cacheKey, Date.now());
       return null;
     } finally {
-      window.clearTimeout(timeoutId);
       pendingRequests.delete(cacheKey);
     }
   })();

@@ -2,20 +2,22 @@ import { readFileSync } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import {
-  INVIDIOUS_INSTANCES,
-  PIPED_INSTANCES,
+  getInvidiousInstances,
+  getPipedInstances,
 } from "../../lib/media-providers";
+import {
+  buildProviderUrlCandidates,
+  getProviderEndpoints,
+} from "../../lib/provider-endpoints";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
-const YTIFY_INSTANCE = "https://api.ytify.workers.dev";
-
 type SearchResponse = { items: unknown[]; nextpage?: string | null };
 
-const DEBUG_ENV_PATH = ".dbg/soundcloud-collection-bug.env";
+const DEBUG_ENV_PATH = ".dbg/search-api-bug.env";
 const DEBUG_SERVER_URL_FALLBACK = "";
-const DEBUG_SESSION_ID_FALLBACK = "soundcloud-collection-bug";
+const DEBUG_SESSION_ID_FALLBACK = "search-api-bug";
 
 function getDebugConfig(): { url: string; sessionId: string } {
   let url = DEBUG_SERVER_URL_FALLBACK;
@@ -181,12 +183,33 @@ async function tryProxyToBackend(
   return { items: parsed.items ?? [], nextpage: parsed.nextpage ?? null };
 }
 
+async function fetchFirstSuccessfulJson(
+  urls: string[]
+): Promise<unknown | null> {
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": USER_AGENT, accept: "application/json" },
+        cache: "no-store",
+      });
+
+      if (!res.ok) continue;
+      return (await res.json()) as unknown;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 async function searchPiped(
   query: string,
   filter: string,
   nextpage?: string
 ): Promise<SearchResponse> {
-  const instance = PIPED_INSTANCES[0];
+  const [instance] = await getPipedInstances();
+  if (!instance) return { items: [], nextpage: null };
   const filterParam = filter === "" ? "all" : filter;
   const endpoint = nextpage
     ? `/nextpage/search?nextpage=${encodeURIComponent(nextpage)}`
@@ -249,18 +272,32 @@ async function searchYtify(
   query: string,
   filter: string
 ): Promise<SearchResponse> {
+  const endpoints = await getProviderEndpoints();
+  const ytifyInstance = endpoints.providers.search.ytifyInstance;
+  const youtubeWebBase = endpoints.providers.youtube.webBase;
+  const youtubeImageBase = endpoints.providers.youtube.imageBase;
   const f = (filter || "all").toLowerCase();
-  const url = `${YTIFY_INSTANCE}/search?q=${encodeURIComponent(
-    query
-  )}&f=${encodeURIComponent(f === "" ? "all" : f)}`;
-
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT, accept: "application/json" },
-    cache: "no-store",
-  });
-
-  if (!res.ok) return { items: [], nextpage: null };
-  const data = (await res.json()) as unknown;
+  const ytifyUrlCandidates = buildProviderUrlCandidates(
+    ytifyInstance,
+    ["/search"],
+    {
+      q: query,
+      f: f === "" ? "all" : f,
+    }
+  );
+  reportDebugEvent(
+    `pre-ytify-${Date.now()}`,
+    "B",
+    "app/api/search/route.ts:searchYtify:candidates",
+    "[DEBUG] ytify search candidate URLs built",
+    {
+      query,
+      filter: f,
+      ytifyInstance,
+      ytifyUrlCandidates,
+    }
+  );
+  const data = await fetchFirstSuccessfulJson(ytifyUrlCandidates);
   if (!Array.isArray(data)) return { items: [], nextpage: null };
 
   const items = data.map((entry) => {
@@ -281,18 +318,18 @@ async function searchYtify(
     const authorId = typeof e.authorId === "string" ? e.authorId : "";
     const durationSeconds = parseDurationToSeconds(e.duration);
 
-    const thumb = id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";
+    const thumb = id ? `${youtubeImageBase}/vi/${id}/hqdefault.jpg` : "";
 
     return {
       source: "youtube",
       type: type === "video" ? "stream" : type,
       id: id, // Use 'id' field instead of 'videoId' to match frontend expectations
       videoId: id, // Keep videoId for compatibility
-      url: id ? `https://www.youtube.com/watch?v=${id}` : "",
+      url: id ? `${youtubeWebBase}/watch?v=${id}` : "",
       title,
       uploaderName: author,
       uploaderUrl: authorId
-        ? `https://www.youtube.com/channel/${authorId}`
+        ? `${youtubeWebBase}/channel/${authorId}`
         : undefined,
       thumbnail: thumb,
       duration: durationSeconds,
@@ -330,8 +367,9 @@ async function searchInvidious(
   page: number
 ): Promise<SearchResponse> {
   const typeParam = mapFilterToInvidiousType(filter);
+  const invidiousInstances = await getInvidiousInstances();
 
-  for (const instance of INVIDIOUS_INSTANCES) {
+  for (const instance of invidiousInstances) {
     try {
       const url = new URL(`${instance}/api/v1/search`);
       url.searchParams.set("q", query);
@@ -391,6 +429,10 @@ async function searchSoundCloud(
   page: number,
   limit: number
 ): Promise<SearchResponse> {
+  const endpoints = await getProviderEndpoints();
+  const beatseekBase = endpoints.providers.beatseek.apiBase;
+  const soundcloudSearchProxyBase =
+    endpoints.providers.search.soundcloudSearchProxyBase;
   const normalizeTrackDuration = (value: unknown): number | undefined => {
     if (typeof value === "number" && Number.isFinite(value)) {
       return value > 10000 ? Math.floor(value / 1000) : Math.floor(value);
@@ -433,11 +475,18 @@ async function searchSoundCloud(
   const offset = (page - 1) * limit;
   try {
     if (f === "playlists" || f === "albums") {
-      const beatseekUrl = `https://beatseek.io/api/search?query=${encodeURIComponent(
-        query
-      )}&platform=soundcloud&type=${encodeURIComponent(
-        f
-      )}&sort=both&limit=${limit}`;
+      const beatseekUrls = buildProviderUrlCandidates(
+        beatseekBase,
+        ["/search", "/api/search"],
+        {
+          query,
+          platform: "soundcloud",
+          type: f,
+          sort: "both",
+          limit,
+        }
+      );
+      const beatseekUrl = beatseekUrls[0] || "";
       // #region debug-point B:soundcloud-search-upstream-start
       reportDebugEvent(
         `pre-soundcloud-${Date.now()}`,
@@ -450,15 +499,13 @@ async function searchSoundCloud(
           page,
           limit,
           beatseekUrl,
+          beatseekUrls,
         }
       );
       // #endregion
-      const res = await fetch(beatseekUrl, {
-        headers: { "User-Agent": USER_AGENT, accept: "application/json" },
-        cache: "no-store",
-      });
+      const json = await fetchFirstSuccessfulJson(beatseekUrls);
 
-      if (!res.ok) {
+      if (!json) {
         // #region debug-point B:soundcloud-search-upstream-non-ok
         reportDebugEvent(
           `pre-soundcloud-${Date.now()}`,
@@ -468,15 +515,12 @@ async function searchSoundCloud(
           {
             query,
             filter: f,
-            status: res.status,
-            statusText: res.statusText,
+            candidateCount: beatseekUrls.length,
           }
         );
         // #endregion
         return { items: [], nextpage: null };
       }
-
-      const json = (await res.json()) as unknown;
       const results = (json as { results?: unknown[] }).results ?? [];
       // #region debug-point B:soundcloud-search-upstream-success
       reportDebugEvent(
@@ -531,18 +575,25 @@ async function searchSoundCloud(
       return { items, nextpage: null };
     }
 
-    const proxyUrl = `https://proxy.searchsoundcloud.com/tracks?q=${encodeURIComponent(
-      query
-    )}&limit=${limit}&offset=${offset}`;
-
-    const res = await fetch(proxyUrl, {
-      headers: { "User-Agent": USER_AGENT, accept: "application/json" },
-      cache: "no-store",
-    });
-
-    if (!res.ok) return { items: [], nextpage: null };
-
-    const json = (await res.json()) as unknown;
+    const proxyUrlCandidates = buildProviderUrlCandidates(
+      soundcloudSearchProxyBase,
+      ["/tracks", "/api/tracks"],
+      { q: query, limit, offset }
+    );
+    reportDebugEvent(
+      `pre-soundcloud-${Date.now()}`,
+      "B",
+      "app/api/search/route.ts:searchSoundCloud:track-candidates",
+      "[DEBUG] SoundCloud track search candidate URLs built",
+      {
+        query,
+        filter: f,
+        soundcloudSearchProxyBase,
+        proxyUrlCandidates,
+      }
+    );
+    const json = await fetchFirstSuccessfulJson(proxyUrlCandidates);
+    if (!json) return { items: [], nextpage: null };
     const data = json as { collection?: unknown[]; results?: unknown[] };
     const collection = data.collection ?? data.results ?? [];
 
@@ -572,15 +623,25 @@ async function searchSoundCloud(
 
 async function searchJioSaavn(query: string): Promise<SearchResponse> {
   try {
-    const url = `https://streamifyjiosaavn.vercel.app/api/search?query=${encodeURIComponent(
-      query
-    )}`;
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, accept: "application/json" },
-      cache: "no-store",
-    });
-    if (!res.ok) return { items: [], nextpage: null };
-    const json = (await res.json()) as unknown;
+    const endpoints = await getProviderEndpoints();
+    const jiosaavnUrlCandidates = buildProviderUrlCandidates(
+      endpoints.providers.jiosaavn.apiBase,
+      ["/api/search", "/search"],
+      { query }
+    );
+    reportDebugEvent(
+      `pre-jiosaavn-${Date.now()}`,
+      "B",
+      "app/api/search/route.ts:searchJioSaavn:candidates",
+      "[DEBUG] JioSaavn search candidate URLs built",
+      {
+        query,
+        apiBase: endpoints.providers.jiosaavn.apiBase,
+        jiosaavnUrlCandidates,
+      }
+    );
+    const json = await fetchFirstSuccessfulJson(jiosaavnUrlCandidates);
+    if (!json) return { items: [], nextpage: null };
     const data = json as { success?: boolean; data?: Record<string, unknown> };
     if (!data?.success) return { items: [], nextpage: null };
 
@@ -673,7 +734,7 @@ export async function GET(request: NextRequest) {
   if (blockedResponse) return blockedResponse;
 
   const searchParams = request.nextUrl.searchParams;
-  const q = searchParams.get("q");
+  const q = (searchParams.get("q") || "").trim();
   const sourceParam = (searchParams.get("source") || "youtube").toLowerCase();
   const filterParam = searchParams.get("filter") || "";
   const pageNum = parseInt(searchParams.get("page") || "1", 10) || 1;
@@ -718,7 +779,7 @@ export async function GET(request: NextRequest) {
   if (backendBaseUrl) {
     try {
       const proxied = await tryProxyToBackend(backendBaseUrl, searchParams);
-      if (proxied) {
+      if (proxied && (proxied.items.length > 0 || proxied.nextpage)) {
         // #region debug-point B:search-route-proxy-success
         reportDebugEvent(
           runId,
@@ -739,6 +800,19 @@ export async function GET(request: NextRequest) {
           { status: 200 }
         );
       }
+      reportDebugEvent(
+        runId,
+        "B",
+        "app/api/search/route.ts:GET:proxy-empty-fallback",
+        "[DEBUG] backend proxy returned empty result and route will fall back to built-in providers",
+        {
+          backendBaseUrl,
+          sourceParam,
+          filterParam,
+          itemCount: proxied?.items.length ?? 0,
+          nextpage: proxied?.nextpage ?? null,
+        }
+      );
     } catch (error) {
       // #region debug-point E:search-backend-proxy-failed
       reportDebugEvent(
@@ -754,6 +828,10 @@ export async function GET(request: NextRequest) {
       // #endregion
       // fall through to built-in providers
     }
+  }
+
+  if (!q) {
+    return NextResponse.json({ items: [], nextpage: null }, { status: 200 });
   }
 
   try {

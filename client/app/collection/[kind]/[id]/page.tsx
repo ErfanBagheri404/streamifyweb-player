@@ -7,11 +7,20 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { SearchResult } from "../../../components/search";
 import { type Song, useAudio } from "../../../contexts/AudioContext";
 import { useSettings } from "../../../contexts/SettingsContext";
+import { useToast } from "../../../contexts/ToastContext";
 import {
+  createStoredPlaylist,
+  findStoredPlaylistForSourceCollection,
+  isSongLiked,
   LOCAL_LIBRARY_UPDATED_EVENT,
   moveSongInStoredPlaylist,
+  readLikedSongs,
   readLocalCollection,
+  readStoredPlaylists,
+  removeSongFromStoredPlaylist,
   removeStoredPlaylist,
+  renameStoredPlaylist,
+  toggleLikedSong,
 } from "../../../lib/local-library";
 import { isLightAppTheme } from "../../../lib/app-settings";
 import {
@@ -21,6 +30,7 @@ import {
 import { useAppLanguage } from "../../../hooks/useAppLanguage";
 import { usePageLoadingToast } from "../../../hooks/usePageLoadingToast";
 import { findSavedCollectionRouteContext } from "../../../lib/navigation-state";
+import PlaylistCreateModal from "../../../components/PlaylistCreateModal";
 
 const DEBUG_SERVER_URL = "";
 const DEBUG_SESSION_ID = "soundcloud-collection-bug";
@@ -213,7 +223,33 @@ function PlayGlyph({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-function HeartGlyph() {
+function HeartGlyph({
+  filled = false,
+  className = "h-5 w-5",
+}: {
+  filled?: boolean;
+  className?: string;
+}) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 20.25s-7.5-4.35-7.5-10.125A4.125 4.125 0 0 1 8.625 6a4.68 4.68 0 0 1 3.375 1.575A4.68 4.68 0 0 1 15.375 6 4.125 4.125 0 0 1 19.5 10.125C19.5 15.9 12 20.25 12 20.25Z"
+      />
+    </svg>
+  );
+}
+
+function PencilGlyph() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -227,7 +263,7 @@ function HeartGlyph() {
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
-        d="M12 20.25s-7.5-4.35-7.5-10.125A4.125 4.125 0 0 1 8.625 6a4.68 4.68 0 0 1 3.375 1.575A4.68 4.68 0 0 1 15.375 6 4.125 4.125 0 0 1 19.5 10.125C19.5 15.9 12 20.25 12 20.25Z"
+        d="m16.86 4.49 2.65 2.65M7.5 18.5l-3.75.75.75-3.75L15.8 4.2a1.87 1.87 0 0 1 2.65 0l1.35 1.35a1.87 1.87 0 0 1 0 2.65L8.5 19.5Z"
       />
     </svg>
   );
@@ -397,12 +433,50 @@ function getCollectionEntries(item: SearchResult | null): CollectionEntry[] {
   return [];
 }
 
+function getSongPreferenceKey(songId: string, source?: string): string {
+  return `${(source || "unknown").trim().toLowerCase()}:${songId}`;
+}
+
+function toSongSnapshot(
+  entry: CollectionEntry,
+  fallback: {
+    artist?: string;
+    coverUrl?: string;
+    source?: string;
+  }
+): Song {
+  return {
+    id: entry.id,
+    title: entry.title,
+    artist:
+      entry.artist || entry.subtitle || fallback.artist || "Unknown Artist",
+    coverUrl: entry.thumbnailUrl || fallback.coverUrl,
+    duration: entry.duration,
+    source: fallback.source,
+    url: entry.url,
+    uploaded: entry.addedAt,
+  };
+}
+
+function matchesCollectionEntrySong(entry: CollectionEntry, song: Song): boolean {
+  if (song.id !== entry.id) return false;
+
+  const normalizedEntryTitle = entry.title.trim().toLowerCase();
+  const normalizedSongTitle = song.title.trim().toLowerCase();
+  if (normalizedEntryTitle && normalizedSongTitle) {
+    return normalizedEntryTitle === normalizedSongTitle;
+  }
+
+  return true;
+}
+
 export default function CollectionPage() {
   const router = useRouter();
   const params = useParams<{ kind: string; id: string }>();
   const searchParams = useSearchParams();
   const { currentSong, isPlaying, resolveAndPlaySong } = useAudio();
   const { settings } = useSettings();
+  const { showToast } = useToast();
   const {
     t,
     formatNumber,
@@ -467,7 +541,17 @@ export default function CollectionPage() {
   const [dragOverEntryIndex, setDragOverEntryIndex] = useState<number | null>(
     null
   );
+  const [isPlaylistActionsOpen, setIsPlaylistActionsOpen] = useState(false);
+  const [selectedEntryAction, setSelectedEntryAction] = useState<{
+    entry: CollectionEntry;
+    index: number;
+  } | null>(null);
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [renamePlaylistName, setRenamePlaylistName] = useState("");
+  const [renamePlaylistDescription, setRenamePlaylistDescription] =
+    useState("");
   const suppressRowClickRef = useRef(false);
+  const collectionSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -494,6 +578,19 @@ export default function CollectionPage() {
   const localCollection = useMemo(
     () => (source.toLowerCase() === "local" ? readLocalCollection(id) : null),
     [id, localLibraryVersion, source]
+  );
+  const storedPlaylists = useMemo(
+    () => readStoredPlaylists(),
+    [localLibraryVersion]
+  );
+  const likedSongKeys = useMemo(
+    () =>
+      new Set(
+        readLikedSongs().map((song) =>
+          getSongPreferenceKey(song.id, song.source)
+        )
+      ),
+    [localLibraryVersion]
   );
 
   useEffect(() => {
@@ -756,6 +853,13 @@ export default function CollectionPage() {
     remoteState.collection?.source ||
     storedItem?.source ||
     source;
+  const savedRemotePlaylist = useMemo(
+    () =>
+      source.toLowerCase() === "local"
+        ? null
+        : findStoredPlaylistForSourceCollection(id, kind, collectionSource),
+    [collectionSource, id, kind, localLibraryVersion, source]
+  );
 
   const totalRuntime = useMemo(
     () =>
@@ -832,6 +936,8 @@ export default function CollectionPage() {
     isPlayableSource(collectionSource);
   const isLikedSongsCollection =
     source.toLowerCase() === "local" && id === "liked-songs";
+  const isPreviouslyPlayedCollection =
+    source.toLowerCase() === "local" && id === "previously-played";
   const useHeroLightText =
     (Boolean(displayImage) || isLikedSongsCollection) &&
     !isLightAppTheme(settings.theme);
@@ -842,6 +948,16 @@ export default function CollectionPage() {
     id !== "previously-played" &&
     Boolean(localCollection);
   const canReorderLocalPlaylist = isRemovableLocalPlaylist;
+  const canLikeCollection =
+    kind === "playlist" &&
+    source.toLowerCase() !== "local" &&
+    !savedRemotePlaylist;
+  const canRenamePlaylist = isRemovableLocalPlaylist;
+  const canOpenPlaylistActions =
+    canLikeCollection ||
+    canRenamePlaylist ||
+    isRemovableLocalPlaylist ||
+    entries.length > 0;
 
   useEffect(() => {
     setDraggedEntryIndex(null);
@@ -912,6 +1028,98 @@ export default function CollectionPage() {
     void handleEntryPress(filteredEntries[0]);
   };
 
+  const focusCollectionSearch = () => {
+    setIsPlaylistActionsOpen(false);
+    window.setTimeout(() => {
+      collectionSearchInputRef.current?.focus();
+      collectionSearchInputRef.current?.select();
+    }, 0);
+  };
+
+  const showFeedback = (
+    message: string,
+    tone: "success" | "error" = "success"
+  ) => {
+    showToast({
+      message,
+      tone,
+      durationMs: 2200,
+    });
+  };
+
+  const handleToggleCollectionLike = () => {
+    if (!canLikeCollection) return;
+
+    if (savedRemotePlaylist) {
+      showFeedback(t("collection.alreadyInLibrary"));
+      return;
+    }
+
+    const playlist = createStoredPlaylist(displayTitle, displayDescription, {
+      songs: entries.map((entry) =>
+        toSongSnapshot(entry, {
+          artist: displayAuthor,
+          coverUrl: displayImage,
+          source: collectionSource,
+        })
+      ),
+      sourceCollectionId: id,
+      sourceCollectionKind: kind,
+      sourceCollectionSource: collectionSource,
+      sourceCollectionUrl: sourceUrl || href || remoteState.collection?.url,
+    });
+
+    showToast({
+      message: t("collection.addedToLibrary"),
+      tone: "success",
+      actionLabel: t("library.open"),
+      onAction: () => {
+        router.push(
+          `/collection/playlist/${encodeURIComponent(playlist.id)}?source=local`
+        );
+      },
+    });
+  };
+
+  const handleToggleEntryLike = (entry: CollectionEntry) => {
+    const song =
+      localCollection?.songs.find((storedSong) =>
+        matchesCollectionEntrySong(entry, storedSong)
+      ) ||
+      toSongSnapshot(entry, {
+        artist: displayAuthor,
+        coverUrl: displayImage,
+        source: collectionSource,
+      });
+    const result = toggleLikedSong(song);
+    showFeedback(
+      result.liked
+        ? t("fullscreen.addedToLiked")
+        : t("fullscreen.removedFromLiked")
+    );
+  };
+
+  const handleOpenRenameModal = () => {
+    if (!canRenamePlaylist || !localCollection) return;
+    setIsPlaylistActionsOpen(false);
+    setRenamePlaylistName(localCollection.collection.title || displayTitle);
+    setRenamePlaylistDescription(localCollection.collection.description || "");
+    setIsRenameModalOpen(true);
+  };
+
+  const handleRenamePlaylist = () => {
+    if (!canRenamePlaylist) return;
+    const result = renameStoredPlaylist(
+      id,
+      renamePlaylistName,
+      renamePlaylistDescription
+    );
+    if (!result.updated || !result.playlist) return;
+
+    setIsRenameModalOpen(false);
+    showFeedback(t("collection.renamedPlaylist"));
+  };
+
   const handleDeletePlaylist = () => {
     const result = removeStoredPlaylist(id);
     if (!result.removed) {
@@ -921,6 +1129,28 @@ export default function CollectionPage() {
 
     setIsDeleteModalOpen(false);
     router.replace("/library");
+  };
+
+  const handleRemoveEntryFromPlaylist = (entry: CollectionEntry) => {
+    if (!isRemovableLocalPlaylist) return;
+
+    const song =
+      localCollection?.songs.find((storedSong) =>
+        matchesCollectionEntrySong(entry, storedSong)
+      ) ||
+      toSongSnapshot(entry, {
+        artist: displayAuthor,
+        coverUrl: displayImage,
+        source: collectionSource,
+      });
+    const result = removeSongFromStoredPlaylist(id, song.id, song.source);
+    if (!result.removed) {
+      showFeedback(t("collection.couldNotRemoveFromPlaylist"), "error");
+      return;
+    }
+
+    setSelectedEntryAction(null);
+    showFeedback(t("collection.removedFromPlaylist"));
   };
 
   const handleReorderEntry = (fromIndex: number, toIndex: number) => {
@@ -938,7 +1168,7 @@ export default function CollectionPage() {
   return (
     <div className="theme-surface-strong relative h-full overflow-y-auto hide-scrollbar rounded-2xl border text-[color:var(--foreground)]">
       <div
-        className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm transition ${
+        className={`fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm transition ${
           isDeleteModalOpen
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0"
@@ -975,6 +1205,173 @@ export default function CollectionPage() {
             >
               {t("collection.removePlaylistAction")}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm transition ${
+          isPlaylistActionsOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setIsPlaylistActionsOpen(false)}
+      >
+        <div
+          className={`theme-surface w-full max-w-md rounded-[28px] border p-4 shadow-[0_30px_80px_rgba(0,0,0,0.45)] transition ${
+            isPlaylistActionsOpen ? "scale-100" : "scale-95"
+          }`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:color-mix(in_srgb,var(--foreground)_40%,transparent)]">
+            {t("collection.moreActions")}
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold text-[color:var(--foreground)]">
+            {displayTitle}
+          </h2>
+          <div className="mt-5 space-y-2">
+            {entries.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPlaylistActionsOpen(false);
+                  handlePrimaryPlay();
+                }}
+                className="theme-button-soft flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition hover:text-[color:var(--foreground)]"
+              >
+                <span>{t("common.play")}</span>
+                <PlayGlyph />
+              </button>
+            ) : null}
+            {entries.length > 0 ? (
+              <button
+                type="button"
+                onClick={focusCollectionSearch}
+                className="theme-button-soft flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition hover:text-[color:var(--foreground)]"
+              >
+                <span>{t("common.search")}</span>
+                <SearchGlyph />
+              </button>
+            ) : null}
+            {canLikeCollection ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPlaylistActionsOpen(false);
+                  handleToggleCollectionLike();
+                }}
+                className="theme-button-soft flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition hover:text-[color:var(--foreground)]"
+              >
+                <span>{t("collection.saveToLibrary")}</span>
+                <HeartGlyph filled />
+              </button>
+            ) : null}
+            {canRenamePlaylist ? (
+              <button
+                type="button"
+                onClick={handleOpenRenameModal}
+                className="theme-button-soft flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition hover:text-[color:var(--foreground)]"
+              >
+                <span>{t("collection.renamePlaylistAction")}</span>
+                <PencilGlyph />
+              </button>
+            ) : null}
+            {isRemovableLocalPlaylist ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPlaylistActionsOpen(false);
+                  setIsDeleteModalOpen(true);
+                }}
+                className="flex w-full items-center justify-between rounded-2xl border border-[#f15e6c]/30 bg-[#f15e6c]/10 px-4 py-3 text-left text-sm font-medium text-[#ff8b96] transition hover:bg-[#f15e6c]/15"
+              >
+                <span>{t("collection.removePlaylistAction")}</span>
+                <TrashGlyph />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm transition ${
+          selectedEntryAction
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setSelectedEntryAction(null)}
+      >
+        <div
+          className={`theme-surface w-full max-w-md rounded-[28px] border p-4 shadow-[0_30px_80px_rgba(0,0,0,0.45)] transition ${
+            selectedEntryAction ? "scale-100" : "scale-95"
+          }`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:color-mix(in_srgb,var(--foreground)_40%,transparent)]">
+            {selectedEntryAction
+              ? t("collection.trackActions", {
+                  number: String(selectedEntryAction.index + 1),
+                })
+              : t("collection.moreActions")}
+          </p>
+          <h2 className="mt-3 truncate text-2xl font-semibold text-[color:var(--foreground)]">
+            {selectedEntryAction?.entry.title}
+          </h2>
+          <div className="mt-5 space-y-2">
+            {selectedEntryAction ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void handleEntryPress(selectedEntryAction.entry);
+                  setSelectedEntryAction(null);
+                }}
+                className="theme-button-soft flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition hover:text-[color:var(--foreground)]"
+              >
+                <span>{t("collection.playTrack")}</span>
+                <PlayGlyph />
+              </button>
+            ) : null}
+            {selectedEntryAction ? (
+              <button
+                type="button"
+                onClick={() => {
+                  handleToggleEntryLike(selectedEntryAction.entry);
+                  setSelectedEntryAction(null);
+                }}
+                className="theme-button-soft flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition hover:text-[color:var(--foreground)]"
+              >
+                <span>
+                  {likedSongKeys.has(
+                    getSongPreferenceKey(
+                      selectedEntryAction.entry.id,
+                      collectionSource
+                    )
+                  )
+                    ? t("collection.unlikeSong")
+                    : t("collection.likeSong")}
+                </span>
+                <HeartGlyph
+                  filled={likedSongKeys.has(
+                    getSongPreferenceKey(
+                      selectedEntryAction.entry.id,
+                      collectionSource
+                    )
+                  )}
+                />
+              </button>
+            ) : null}
+            {selectedEntryAction && isRemovableLocalPlaylist ? (
+              <button
+                type="button"
+                onClick={() =>
+                  handleRemoveEntryFromPlaylist(selectedEntryAction.entry)
+                }
+                className="flex w-full items-center justify-between rounded-2xl border border-[#f15e6c]/30 bg-[#f15e6c]/10 px-4 py-3 text-left text-sm font-medium text-[#ff8b96] transition hover:bg-[#f15e6c]/15"
+              >
+                <span>{t("collection.removeFromPlaylist")}</span>
+                <TrashGlyph />
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -1095,20 +1492,27 @@ export default function CollectionPage() {
           >
             <PlayGlyph className="h-6 w-6" />
           </button>
-          <button
-            type="button"
-            className="theme-button-soft rounded-full p-2.5 text-[color:color-mix(in_srgb,var(--foreground)_75%,transparent)] transition hover:text-[color:var(--foreground)]"
-            aria-label={t("collection.likeCollection")}
-          >
-            <HeartGlyph />
-          </button>
-          <button
-            type="button"
-            className="theme-button-soft rounded-full p-2.5 text-[color:color-mix(in_srgb,var(--foreground)_75%,transparent)] transition hover:text-[color:var(--foreground)]"
-            aria-label={t("collection.moreActions")}
-          >
-            <MoreGlyph />
-          </button>
+          {canLikeCollection ? (
+            <button
+              type="button"
+              onClick={handleToggleCollectionLike}
+              className="theme-button-soft rounded-full p-2.5 text-[color:color-mix(in_srgb,var(--foreground)_75%,transparent)] transition hover:text-[color:var(--foreground)]"
+              aria-label={t("collection.likeCollection")}
+              title={t("collection.saveToLibrary")}
+            >
+              <HeartGlyph />
+            </button>
+          ) : null}
+          {canOpenPlaylistActions ? (
+            <button
+              type="button"
+              onClick={() => setIsPlaylistActionsOpen(true)}
+              className="theme-button-soft rounded-full p-2.5 text-[color:color-mix(in_srgb,var(--foreground)_75%,transparent)] transition hover:text-[color:var(--foreground)]"
+              aria-label={t("collection.moreActions")}
+            >
+              <MoreGlyph />
+            </button>
+          ) : null}
           {isRemovableLocalPlaylist ? (
             <button
               type="button"
@@ -1127,6 +1531,7 @@ export default function CollectionPage() {
             >
               <SearchGlyph />
               <input
+                ref={collectionSearchInputRef}
                 type="text"
                 value={collectionQuery}
                 onChange={(event) => setCollectionQuery(event.target.value)}
@@ -1168,31 +1573,45 @@ export default function CollectionPage() {
             </div>
           ) : entries.length > 0 ? (
             <div>
-              <div className={headerGridClass}>
-                {canReorderLocalPlaylist ? <div /> : null}
-                <div className="text-center">#</div>
-                <div>{t("collection.titleColumn")}</div>
-                <div className="hidden truncate md:block">
-                  {t("collection.albumColumn")}
+              {kind === "playlist" ? (
+                <div className="mx-3 border-b border-[color:var(--border-subtle)] pb-3" />
+              ) : (
+                <div className={headerGridClass}>
+                  {canReorderLocalPlaylist ? <div /> : null}
+                  <div className="text-center">#</div>
+                  <div>{t("collection.titleColumn")}</div>
+                  <div className="hidden truncate md:block">
+                    {t("collection.albumColumn")}
+                  </div>
+                  <div className="hidden md:block">
+                    {t("collection.dateAdded")}
+                  </div>
+                  <div className="flex justify-end">
+                    <ClockGlyph />
+                  </div>
                 </div>
-                <div className="hidden md:block">
-                  {t("collection.dateAdded")}
-                </div>
-                <div className="flex justify-end">
-                  <ClockGlyph />
-                </div>
-              </div>
+              )}
 
               <div className="mt-2 space-y-1">
                 {filteredEntries.map((entry, index) => {
                   const isActiveTrack = currentSong?.id === entry.id;
                   const isLoadingTrack = loadingSongId === entry.id;
-                  const RowComponent = canPlayEntries ? "button" : "div";
+                  const rowSong =
+                    localCollection?.songs.find((storedSong) =>
+                      matchesCollectionEntrySong(entry, storedSong)
+                    ) ||
+                    toSongSnapshot(entry, {
+                      artist: displayAuthor,
+                      coverUrl: displayImage,
+                      source: collectionSource,
+                    });
+                  const isEntryLiked = likedSongKeys.has(
+                    getSongPreferenceKey(rowSong.id, rowSong.source)
+                  );
 
                   return (
-                    <RowComponent
+                    <div
                       key={`${entry.id}-${index}`}
-                      type={canPlayEntries ? "button" : undefined}
                       onClick={
                         canPlayEntries
                           ? () => {
@@ -1205,6 +1624,18 @@ export default function CollectionPage() {
                             }
                           : undefined
                       }
+                      onKeyDown={
+                        canPlayEntries
+                          ? (event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                void handleEntryPress(entry);
+                              }
+                            }
+                          : undefined
+                      }
+                      role={canPlayEntries ? "button" : undefined}
+                      tabIndex={canPlayEntries ? 0 : undefined}
                       draggable={canReorderLocalPlaylist}
                       onDragStart={
                         canReorderLocalPlaylist
@@ -1246,7 +1677,9 @@ export default function CollectionPage() {
                             }
                           : undefined
                       }
-                      className={`group ${rowGridClass} hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_6%)] ${
+                      className={`group ${rowGridClass} ${
+                        canPlayEntries ? "cursor-pointer" : ""
+                      } hover:bg-[color:color-mix(in_srgb,var(--surface-3)_78%,var(--foreground)_6%)] ${
                         isActiveTrack
                           ? "bg-[color:color-mix(in_srgb,var(--surface-3)_86%,var(--foreground)_4%)]"
                           : ""
@@ -1338,17 +1771,44 @@ export default function CollectionPage() {
                       </p>
 
                       <div className="flex items-center justify-end gap-3 text-sm text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]">
-                        <span className="hidden text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] opacity-0 transition group-hover:opacity-100 lg:flex">
-                          <HeartGlyph />
-                        </span>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleToggleEntryLike(entry);
+                          }}
+                          className={`hidden rounded-full p-1 transition group-hover:opacity-100 lg:flex ${
+                            isEntryLiked
+                              ? "text-[color:var(--theme-accent)] opacity-100"
+                              : "text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] opacity-0 hover:text-[color:var(--foreground)]"
+                          }`}
+                          aria-label={
+                            isEntryLiked
+                              ? t("collection.unlikeSong")
+                              : t("collection.likeSong")
+                          }
+                        >
+                          <HeartGlyph
+                            filled={isEntryLiked}
+                            className="h-4 w-4"
+                          />
+                        </button>
                         <span className="tabular-nums">
                           {formatDuration(entry.duration)}
                         </span>
-                        <span className="hidden text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] opacity-0 transition group-hover:opacity-100 lg:flex">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedEntryAction({ entry, index });
+                          }}
+                          className="hidden rounded-full p-1 text-[color:color-mix(in_srgb,var(--foreground)_60%,transparent)] opacity-0 transition hover:text-[color:var(--foreground)] group-hover:opacity-100 lg:flex"
+                          aria-label={t("collection.moreActions")}
+                        >
                           <MoreGlyph />
-                        </span>
+                        </button>
                       </div>
-                    </RowComponent>
+                    </div>
                   );
                 })}
               </div>
@@ -1364,6 +1824,19 @@ export default function CollectionPage() {
           )}
         </div>
       </section>
+
+      <PlaylistCreateModal
+        open={isRenameModalOpen}
+        name={renamePlaylistName}
+        description={renamePlaylistDescription}
+        onNameChange={setRenamePlaylistName}
+        onDescriptionChange={setRenamePlaylistDescription}
+        onClose={() => setIsRenameModalOpen(false)}
+        onSubmit={handleRenamePlaylist}
+        title={t("library.renamePlaylistModalTitle")}
+        subtitle={t("library.renamePlaylistModalDescription")}
+        submitLabel={t("collection.renamePlaylistAction")}
+      />
     </div>
   );
 }

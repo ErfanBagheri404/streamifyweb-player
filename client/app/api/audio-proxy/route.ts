@@ -5,6 +5,7 @@ import https from "node:https";
 import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
+import { getProviderEndpoints } from "../../lib/provider-endpoints";
 
 const DEBUG_ENV_FILE = ".dbg/soundcloud-geekin-fail.env";
 const DEBUG_SERVER_URL_FALLBACK = "";
@@ -452,6 +453,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const range = request.headers.get("range");
+    const providerEndpoints = await getProviderEndpoints();
+    const headerOrigins = providerEndpoints.headers.origins;
+    const headerReferers = providerEndpoints.headers.referers;
 
     // Create headers that mimic a real browser request
     const headers: Record<string, string> = {
@@ -470,26 +474,26 @@ export async function GET(request: NextRequest) {
       const audioUrlObj = new URL(audioUrl);
       if (audioUrlObj.hostname.includes("saavncdn.com")) {
         // JioSaavn specific headers
-        headers.Referer = "https://www.jiosaavn.com/";
-        headers.Origin = "https://www.jiosaavn.com";
+        headers.Referer = headerReferers.jiosaavn;
+        headers.Origin = headerOrigins.jiosaavn;
       } else if (isSoundCloudHost(audioUrlObj.hostname)) {
         // SoundCloud specific headers
-        headers.Referer = "https://soundcloud.com/";
-        headers.Origin = "https://soundcloud.com";
+        headers.Referer = headerReferers.soundcloud;
+        headers.Origin = headerOrigins.soundcloud;
         headers.Accept =
           "application/vnd.apple.mpegurl,application/x-mpegURL,audio/mp4,audio/*;q=0.9,*/*;q=0.5";
       } else {
         // Default YouTube headers
-        headers.Referer = "https://www.youtube.com/";
-        headers.Origin = "https://www.youtube.com";
+        headers.Referer = headerReferers.youtube;
+        headers.Origin = headerOrigins.youtube;
         headers["Sec-Fetch-Dest"] = "audio";
         headers["Sec-Fetch-Mode"] = "cors";
         headers["Sec-Fetch-Site"] = "cross-site";
       }
     } catch {
       // Fallback to YouTube headers if URL parsing fails
-      headers.Referer = "https://www.youtube.com/";
-      headers.Origin = "https://www.youtube.com";
+      headers.Referer = headerReferers.youtube;
+      headers.Origin = headerOrigins.youtube;
       headers["Sec-Fetch-Dest"] = "audio";
       headers["Sec-Fetch-Mode"] = "cors";
       headers["Sec-Fetch-Site"] = "cross-site";

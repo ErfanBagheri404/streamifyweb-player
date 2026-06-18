@@ -1,3 +1,8 @@
+import {
+  getCachedProviderEndpointsSnapshot,
+  getProviderEndpoints,
+} from "./provider-endpoints";
+
 function parseInstanceList(value: string | undefined): string[] {
   if (!value) return [];
 
@@ -26,27 +31,70 @@ function getEnvInstanceList(
   return null;
 }
 
-const defaultPipedInstances = ["https://api.piped.private.coffee"];
-const defaultInvidiousInstances = [
-  "https://yt.omada.cafe",
-  "https://invidious.schenkel.eti.br",
-  "https://invidious.kemonomimi.nl",
-  "https://lekker.gay",
-];
+const cachedProviderEndpoints = getCachedProviderEndpointsSnapshot();
+const cachedPipedInstances = cachedProviderEndpoints.instances.piped;
+const cachedInvidiousInstances = cachedProviderEndpoints.instances.invidious;
 
-export const PIPED_INSTANCES =
-  getEnvInstanceList(
+export const PIPED_INSTANCES = [
+  ...(getEnvInstanceList(
     process.env.STREAMIFY_PIPED_INSTANCES,
     process.env.NEXT_PUBLIC_STREAMIFY_PIPED_INSTANCES
-  ) || defaultPipedInstances;
+  ) || cachedPipedInstances),
+];
 
-export const INVIDIOUS_INSTANCES =
-  getEnvInstanceList(
+export const INVIDIOUS_INSTANCES = [
+  ...(getEnvInstanceList(
     process.env.STREAMIFY_INVIDIOUS_INSTANCES,
     process.env.NEXT_PUBLIC_STREAMIFY_INVIDIOUS_INSTANCES
-  ) || defaultInvidiousInstances;
+  ) || cachedInvidiousInstances),
+];
+
+let providerInstanceRefreshPromise: Promise<void> | null = null;
+let clientRefreshRequested = false;
+
+function replaceInstances(target: string[], nextValues: string[]) {
+  target.splice(0, target.length, ...nextValues);
+}
+
+async function refreshProviderInstances(revalidate = false) {
+  const endpoints = await getProviderEndpoints({ revalidate });
+  replaceInstances(PIPED_INSTANCES, endpoints.instances.piped);
+  replaceInstances(INVIDIOUS_INSTANCES, endpoints.instances.invidious);
+}
+
+export async function primeMediaProviderInstances(options?: {
+  revalidate?: boolean;
+}): Promise<void> {
+  if (!providerInstanceRefreshPromise) {
+    providerInstanceRefreshPromise = refreshProviderInstances(
+      options?.revalidate
+    ).finally(() => {
+      providerInstanceRefreshPromise = null;
+    });
+  }
+
+  await providerInstanceRefreshPromise;
+}
+
+function ensureClientInstanceRefresh() {
+  if (typeof window === "undefined" || clientRefreshRequested) return;
+  clientRefreshRequested = true;
+  void primeMediaProviderInstances({ revalidate: true });
+}
+
+export async function getPipedInstances(): Promise<string[]> {
+  await primeMediaProviderInstances();
+  return PIPED_INSTANCES;
+}
+
+export async function getInvidiousInstances(): Promise<string[]> {
+  await primeMediaProviderInstances();
+  return INVIDIOUS_INSTANCES;
+}
 
 export function isManagedRemoteAudioUrl(audioUrl: string): boolean {
+  ensureClientInstanceRefresh();
+
   if (!audioUrl) return false;
 
   const normalized = audioUrl.toLowerCase();

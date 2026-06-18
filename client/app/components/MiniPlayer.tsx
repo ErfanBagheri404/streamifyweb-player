@@ -161,7 +161,9 @@ const MiniPlayer: React.FC = () => {
     : t("miniPlayer.volumeHigh");
   const canGoPrevious =
     currentTime > 3 || queueIndex > 0 || recentSongs.length > 1;
-  const canGoNext = queueIndex >= 0 && queueIndex < playbackQueue.length - 1;
+  const canGoNext =
+    (queueIndex >= 0 && queueIndex < playbackQueue.length - 1) ||
+    (repeatMode === "queue" && playbackQueue.length > 1);
   const queuePositionLabel =
     playbackQueue.length > 1 && queueIndex >= 0
       ? t("miniPlayer.queuePosition", {

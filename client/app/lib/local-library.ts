@@ -31,6 +31,10 @@ export interface StoredPlaylist {
   description: string;
   createdAt: number;
   songs: Song[];
+  sourceCollectionId?: string;
+  sourceCollectionKind?: string;
+  sourceCollectionSource?: string;
+  sourceCollectionUrl?: string;
 }
 
 export interface LocalCollectionData {
@@ -443,6 +447,22 @@ function mergeStoredPlaylist(
       chooseFiniteNumber(primary.createdAt, secondary?.createdAt, Date.now()) ||
       Date.now(),
     songs: mergeSongs(primary.songs, secondary?.songs || []),
+    sourceCollectionId: chooseNonEmptyString(
+      primary.sourceCollectionId,
+      secondary?.sourceCollectionId
+    ),
+    sourceCollectionKind: chooseNonEmptyString(
+      primary.sourceCollectionKind,
+      secondary?.sourceCollectionKind
+    ),
+    sourceCollectionSource: chooseNonEmptyString(
+      primary.sourceCollectionSource,
+      secondary?.sourceCollectionSource
+    )?.toLowerCase(),
+    sourceCollectionUrl: chooseNonEmptyString(
+      primary.sourceCollectionUrl,
+      secondary?.sourceCollectionUrl
+    ),
   };
 }
 
@@ -683,6 +703,26 @@ function normalizePlaylist(raw: unknown): StoredPlaylist | null {
         ? candidate.createdAt
         : Date.now(),
     songs: dedupeSongs(Array.isArray(candidate.songs) ? candidate.songs : []),
+    sourceCollectionId:
+      typeof candidate.sourceCollectionId === "string" &&
+      candidate.sourceCollectionId.trim()
+        ? candidate.sourceCollectionId.trim()
+        : undefined,
+    sourceCollectionKind:
+      typeof candidate.sourceCollectionKind === "string" &&
+      candidate.sourceCollectionKind.trim()
+        ? candidate.sourceCollectionKind.trim()
+        : undefined,
+    sourceCollectionSource:
+      typeof candidate.sourceCollectionSource === "string" &&
+      candidate.sourceCollectionSource.trim()
+        ? candidate.sourceCollectionSource.trim().toLowerCase()
+        : undefined,
+    sourceCollectionUrl:
+      typeof candidate.sourceCollectionUrl === "string" &&
+      candidate.sourceCollectionUrl.trim()
+        ? candidate.sourceCollectionUrl.trim()
+        : undefined,
   };
 }
 
@@ -740,13 +780,28 @@ export function createCloudLibrarySnapshot(
   };
 }
 
-export function createStoredPlaylist(name: string, description: string) {
+export function createStoredPlaylist(
+  name: string,
+  description: string,
+  options?: {
+    songs?: Song[];
+    sourceCollectionId?: string;
+    sourceCollectionKind?: string;
+    sourceCollectionSource?: string;
+    sourceCollectionUrl?: string;
+  }
+) {
   const playlist: StoredPlaylist = {
     id: createPlaylistId(),
     name: name.trim(),
     description: description.trim(),
     createdAt: Date.now(),
-    songs: [],
+    songs: dedupeSongs(options?.songs || []),
+    sourceCollectionId: options?.sourceCollectionId?.trim() || undefined,
+    sourceCollectionKind: options?.sourceCollectionKind?.trim() || undefined,
+    sourceCollectionSource:
+      options?.sourceCollectionSource?.trim().toLowerCase() || undefined,
+    sourceCollectionUrl: options?.sourceCollectionUrl?.trim() || undefined,
   };
 
   const next = [playlist, ...readStoredPlaylists()];
@@ -773,6 +828,43 @@ export function removeStoredPlaylist(playlistId: string) {
   return {
     removed: true,
     playlist: removedPlaylist,
+  };
+}
+
+export function renameStoredPlaylist(
+  playlistId: string,
+  name: string,
+  description: string
+) {
+  const nextName = name.trim();
+  if (!nextName) {
+    return {
+      updated: false,
+      playlist: null,
+    };
+  }
+
+  const playlists = readStoredPlaylists();
+  let updatedPlaylist: StoredPlaylist | null = null;
+
+  const next = playlists.map((playlist) => {
+    if (playlist.id !== playlistId) return playlist;
+
+    updatedPlaylist = {
+      ...playlist,
+      name: nextName,
+      description: description.trim(),
+    };
+    return updatedPlaylist;
+  });
+
+  if (updatedPlaylist) {
+    writeStoredPlaylists(next);
+  }
+
+  return {
+    updated: Boolean(updatedPlaylist),
+    playlist: updatedPlaylist,
   };
 }
 
@@ -847,6 +939,57 @@ export function moveSongInStoredPlaylist(
   }
 
   return updatedPlaylist;
+}
+
+export function removeSongFromStoredPlaylist(
+  playlistId: string,
+  songId: string,
+  source?: string
+) {
+  if (!songId) {
+    return {
+      removed: false,
+      playlist: null,
+    };
+  }
+
+  const targetSource = source?.trim();
+  const playlists = readStoredPlaylists();
+  let updatedPlaylist: StoredPlaylist | null = null;
+  let removed = false;
+
+  const next = playlists.map((playlist) => {
+    if (playlist.id !== playlistId) return playlist;
+
+    const songs = playlist.songs.filter((song) => {
+      const sameId = song.id === songId;
+      const sameSource = targetSource
+        ? (song.source || "") === targetSource
+        : true;
+      const shouldRemove = sameId && sameSource && !removed;
+      if (shouldRemove) {
+        removed = true;
+      }
+      return !shouldRemove;
+    });
+
+    updatedPlaylist = removed
+      ? {
+          ...playlist,
+          songs,
+        }
+      : playlist;
+    return updatedPlaylist;
+  });
+
+  if (removed && updatedPlaylist) {
+    writeStoredPlaylists(next);
+  }
+
+  return {
+    removed,
+    playlist: updatedPlaylist,
+  };
 }
 
 export function readLikedSongs(): Song[] {
@@ -954,6 +1097,22 @@ export function toggleLikedSong(song: Song) {
     liked: !exists,
     songs: next,
   };
+}
+
+export function findStoredPlaylistForSourceCollection(
+  collectionId: string,
+  collectionKind: string,
+  collectionSource: string
+): StoredPlaylist | null {
+  const normalizedSource = collectionSource.trim().toLowerCase();
+  return (
+    readStoredPlaylists().find(
+      (playlist) =>
+        playlist.sourceCollectionId === collectionId &&
+        playlist.sourceCollectionKind === collectionKind &&
+        (playlist.sourceCollectionSource || "") === normalizedSource
+    ) || null
+  );
 }
 
 export async function restoreCloudLibrary(snapshot: unknown) {

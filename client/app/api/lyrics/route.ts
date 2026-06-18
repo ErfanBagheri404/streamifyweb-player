@@ -5,6 +5,10 @@ import {
   LyricsCacheEntry,
   LyricsTrack,
 } from "../../lib/lyrics-shared";
+import {
+  buildProviderUrlCandidates,
+  getProviderEndpoints,
+} from "../../lib/provider-endpoints";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 
 type LrcLibResponse = {
@@ -19,10 +23,11 @@ const MAX_LRCLIB_CANDIDATES = 3;
 const MAX_LYRICS_OVH_CANDIDATES = 1;
 
 function buildLrcLibUrl(
+  baseUrl: string,
   candidate: { artist: string; title: string },
   durationSeconds?: number
 ): string {
-  const url = new URL("https://lrclib.net/api/get");
+  const url = new URL(`${baseUrl}/get`);
   url.searchParams.set("artist_name", candidate.artist);
   url.searchParams.set("track_name", candidate.title);
 
@@ -37,11 +42,14 @@ function buildLrcLibUrl(
   return url.toString();
 }
 
-function buildLyricsOvhUrl(candidate: {
-  artist: string;
-  title: string;
-}): string {
-  return `https://api.lyrics.ovh/v1/${encodeURIComponent(
+function buildLyricsOvhUrl(
+  candidate: {
+    artist: string;
+    title: string;
+  },
+  baseUrl: string
+): string {
+  return `${baseUrl}/${encodeURIComponent(
     candidate.artist
   )}/${encodeURIComponent(candidate.title)}`;
 }
@@ -65,49 +73,101 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
   }
 }
 
+async function fetchFirstSuccessfulResponse(
+  urls: string[]
+): Promise<{ response: Response; url: string } | null> {
+  for (const url of urls) {
+    const response = await fetchWithTimeout(url);
+    if (response?.ok) return { response, url };
+  }
+
+  return null;
+}
+
 async function fetchLrcLibLyrics(
   candidate: { artist: string; title: string },
   durationSeconds?: number
 ): Promise<LyricsCacheEntry | null> {
-  const url = buildLrcLibUrl(candidate, durationSeconds);
-  const response = await fetchWithTimeout(url);
-  if (!response || !response.ok) return null;
+  const providerEndpoints = await getProviderEndpoints();
+  const requestVariants = [
+    buildProviderUrlCandidates(
+      providerEndpoints.providers.lyrics.lrclibBase,
+      ["/get", "/api/get"],
+      {
+        artist_name: candidate.artist,
+        track_name: candidate.title,
+        duration:
+          durationSeconds &&
+          Number.isFinite(durationSeconds) &&
+          durationSeconds > 0
+            ? Math.round(durationSeconds)
+            : undefined,
+      }
+    ),
+    buildProviderUrlCandidates(
+      providerEndpoints.providers.lyrics.lrclibBase,
+      ["/get", "/api/get"],
+      {
+        artist_name: candidate.artist,
+        track_name: candidate.title,
+      }
+    ),
+  ];
 
-  const json = (await response.json()) as LrcLibResponse;
-  const syncedLyrics =
-    typeof json.syncedLyrics === "string" ? json.syncedLyrics.trim() : "";
+  for (const urls of requestVariants) {
+    const result = await fetchFirstSuccessfulResponse(urls);
+    if (!result) continue;
 
-  if (!syncedLyrics || !hasTimestampedLyrics(syncedLyrics)) {
-    return null;
+    const json = (await result.response.json()) as LrcLibResponse;
+    const syncedLyrics =
+      typeof json.syncedLyrics === "string" ? json.syncedLyrics.trim() : "";
+    const plainLyrics =
+      typeof json.plainLyrics === "string" ? json.plainLyrics.trim() : "";
+    const lyrics =
+      syncedLyrics && hasTimestampedLyrics(syncedLyrics)
+        ? syncedLyrics
+        : plainLyrics;
+
+    if (!lyrics) continue;
+
+    return {
+      lyrics,
+      artistName:
+        typeof json.artistName === "string" && json.artistName.trim()
+          ? json.artistName.trim()
+          : candidate.artist,
+      trackName:
+        typeof json.trackName === "string" && json.trackName.trim()
+          ? json.trackName.trim()
+          : candidate.title,
+      trackId: "",
+      searchEngine: "lrclib",
+      isSynced: lyrics === syncedLyrics && hasTimestampedLyrics(syncedLyrics),
+      cachedAt: Date.now(),
+      requestUrl: result.url,
+    };
   }
 
-  return {
-    lyrics: syncedLyrics,
-    artistName:
-      typeof json.artistName === "string" && json.artistName.trim()
-        ? json.artistName.trim()
-        : candidate.artist,
-    trackName:
-      typeof json.trackName === "string" && json.trackName.trim()
-        ? json.trackName.trim()
-        : candidate.title,
-    trackId: "",
-    searchEngine: "lrclib",
-    isSynced: true,
-    cachedAt: Date.now(),
-    requestUrl: url,
-  };
+  return null;
 }
 
 async function fetchLyricsOvhLyrics(candidate: {
   artist: string;
   title: string;
 }): Promise<LyricsCacheEntry | null> {
-  const url = buildLyricsOvhUrl(candidate);
-  const response = await fetchWithTimeout(url);
-  if (!response || !response.ok) return null;
+  const providerEndpoints = await getProviderEndpoints();
+  const encodedPath = `/${encodeURIComponent(
+    candidate.artist
+  )}/${encodeURIComponent(candidate.title)}`;
+  const urls = buildProviderUrlCandidates(
+    providerEndpoints.providers.lyrics.lyricsOvhBase,
+    [`/v1${encodedPath}`, encodedPath]
+  );
+  const url = urls[0] || "";
+  const result = await fetchFirstSuccessfulResponse(urls);
+  if (!result) return null;
 
-  const json = (await response.json()) as { lyrics?: unknown };
+  const json = (await result.response.json()) as { lyrics?: unknown };
   const lyrics = typeof json.lyrics === "string" ? json.lyrics.trim() : "";
   if (!lyrics) return null;
 
@@ -119,7 +179,7 @@ async function fetchLyricsOvhLyrics(candidate: {
     searchEngine: "lyrics.ovh",
     isSynced: false,
     cachedAt: Date.now(),
-    requestUrl: url,
+    requestUrl: result.url || url,
   };
 }
 
@@ -179,7 +239,6 @@ export async function GET(request: NextRequest) {
         { status: 200 }
       );
     }
-
     return NextResponse.json(null, { status: 200 });
   } catch {
     return NextResponse.json(

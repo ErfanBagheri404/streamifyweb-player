@@ -4,11 +4,13 @@ import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import {
-  INVIDIOUS_INSTANCES,
-  PIPED_INSTANCES,
+  getInvidiousInstances,
+  getPipedInstances,
 } from "../../lib/media-providers";
-
-const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
+import {
+  buildProviderUrlCandidates,
+  getProviderEndpoints,
+} from "../../lib/provider-endpoints";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
@@ -192,12 +194,15 @@ function buildDirectProxyAudioUrl(streamUrl: string | null): string | null {
   return `/api/audio-proxy?url=${encodeURIComponent(streamUrl)}`;
 }
 
-function buildSoundCloudWidevineLicenseUrl(licenseAuthToken: string): string {
-  const u = new URL(
-    "https://license.media-streaming.soundcloud.cloud/playback/widevine"
+function buildSoundCloudWidevineLicenseUrl(
+  licenseBase: string,
+  licenseAuthToken: string
+): string {
+  return (
+    buildProviderUrlCandidates(licenseBase, ["/playback/widevine"], {
+      license_token: licenseAuthToken,
+    })[0] || ""
   );
-  u.searchParams.set("license_token", licenseAuthToken);
-  return u.toString();
 }
 
 function isSoundCloudEncryptedStreamUrl(streamUrl: string): boolean {
@@ -436,22 +441,27 @@ async function fetchJioSaavnFromEndpoints(
   return null;
 }
 
-function buildJioSaavnSongEndpoints(id: string, urlHint?: string): string[] {
+function buildJioSaavnSongEndpoints(
+  id: string,
+  apiBase: string,
+  urlHint?: string
+): string[] {
   const candidates = new Set<string>();
   const addId = (value?: string) => {
     if (!value) return;
-    candidates.add(
-      `${JIOSAAVN_API_BASE}/api/songs/${encodeURIComponent(value)}`
-    );
-    candidates.add(
-      `${JIOSAAVN_API_BASE}/api/songs?ids=${encodeURIComponent(value)}`
-    );
+    buildProviderUrlCandidates(apiBase, [
+      `/api/songs/${encodeURIComponent(value)}`,
+      `/songs/${encodeURIComponent(value)}`,
+    ]).forEach((candidate) => candidates.add(candidate));
+    buildProviderUrlCandidates(apiBase, ["/api/songs", "/songs"], {
+      ids: value,
+    }).forEach((candidate) => candidates.add(candidate));
   };
   const addLink = (value?: string) => {
     if (!value) return;
-    candidates.add(
-      `${JIOSAAVN_API_BASE}/api/songs?link=${encodeURIComponent(value)}`
-    );
+    buildProviderUrlCandidates(apiBase, ["/api/songs", "/songs"], {
+      link: value,
+    }).forEach((candidate) => candidates.add(candidate));
   };
 
   addId(id);
@@ -505,11 +515,18 @@ async function findJioSaavnMatch(
   const query = [title, artist].filter(Boolean).join(" ").trim();
   if (!query) return null;
 
+  const providerEndpoints = await getProviderEndpoints();
   const endpoints = [
-    `https://streamifyjiosaavn.vercel.app/api/search?query=${encodeURIComponent(
-      query
-    )}`,
-    `https://jiosaavn-api.vercel.app/search?query=${encodeURIComponent(query)}`,
+    ...buildProviderUrlCandidates(
+      providerEndpoints.providers.jiosaavn.apiBase,
+      ["/api/search", "/search"],
+      { query }
+    ),
+    ...buildProviderUrlCandidates(
+      providerEndpoints.providers.jiosaavn.fallbackSearchBase,
+      ["/search"],
+      { query }
+    ),
   ];
 
   for (const endpoint of endpoints) {
@@ -558,27 +575,39 @@ let soundCloudClientId: string | null = null;
 async function getSoundCloudClientId(reset = false): Promise<string> {
   if (soundCloudClientId && !reset) return soundCloudClientId;
 
+  const providerEndpoints = await getProviderEndpoints();
+  const soundcloud = providerEndpoints.providers.soundcloud;
+
   try {
     // Try to get client ID from a known working endpoint first
-    const apiUrl =
-      "https://soundcloud.com/oembed?url=https://soundcloud.com/lil-durk/back-again";
-    const oembedResponse = await fetchTextWithHeaders(
-      apiUrl,
-      {
-        "User-Agent": USER_AGENT,
-        Referer: "https://soundcloud.com/",
-        Origin: "https://soundcloud.com",
-      },
-      12000
+    const oembedUrls = buildProviderUrlCandidates(
+      soundcloud.oembedBase,
+      ["/oembed"],
+      { url: `${soundcloud.origin}/lil-durk/back-again` }
     );
+    for (const apiUrl of oembedUrls) {
+      try {
+        const oembedResponse = await fetchTextWithHeaders(
+          apiUrl,
+          {
+            "User-Agent": USER_AGENT,
+            Referer: `${soundcloud.origin}/`,
+            Origin: soundcloud.origin,
+          },
+          12000
+        );
 
-    // Try to extract client ID from oembed response
-    const clientIdMatch = oembedResponse.match(
-      /client_id["\s:]+([a-zA-Z0-9]+)/
-    );
-    if (clientIdMatch?.[1]) {
-      soundCloudClientId = clientIdMatch[1];
-      return soundCloudClientId;
+        // Try to extract client ID from oembed response
+        const clientIdMatch = oembedResponse.match(
+          /client_id["\s:]+([a-zA-Z0-9]+)/
+        );
+        if (clientIdMatch?.[1]) {
+          soundCloudClientId = clientIdMatch[1];
+          return soundCloudClientId;
+        }
+      } catch {
+        continue;
+      }
     }
   } catch {
     // Continue with other methods if oembed fails
@@ -586,11 +615,11 @@ async function getSoundCloudClientId(reset = false): Promise<string> {
 
   try {
     const desktopHtml = await fetchTextWithHeaders(
-      "https://soundcloud.com",
+      soundcloud.origin,
       {
         "User-Agent": USER_AGENT,
-        Referer: "https://soundcloud.com/",
-        Origin: "https://soundcloud.com",
+        Referer: `${soundcloud.origin}/`,
+        Origin: soundcloud.origin,
       },
       12000
     );
@@ -600,7 +629,7 @@ async function getSoundCloudClientId(reset = false): Promise<string> {
       try {
         const script = await fetchTextWithHeaders(
           scriptUrl,
-          { "User-Agent": USER_AGENT, Referer: "https://soundcloud.com/" },
+          { "User-Agent": USER_AGENT, Referer: `${soundcloud.origin}/` },
           12000
         );
         const match = script.match(/[{,]client_id:"(\w+)"/);
@@ -618,7 +647,7 @@ async function getSoundCloudClientId(reset = false): Promise<string> {
 
   try {
     const mobileHtml = await fetchTextWithHeaders(
-      "https://m.soundcloud.com/",
+      `${soundcloud.mobileOrigin}/`,
       {
         "User-Agent":
           "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/99.0.4844.47 Mobile/15E148 Safari/604.1",
@@ -765,12 +794,13 @@ async function fetchSoundCloudDetails(
   id: string,
   urlHint?: string
 ): Promise<Record<string, unknown>> {
+  const providerEndpoints = await getProviderEndpoints();
+  const soundcloud = providerEndpoints.providers.soundcloud;
   const normalizedUrlHint = normalizeSoundCloudUrlHint(urlHint);
   const hintedTrackId = extractSoundCloudTrackId(normalizedUrlHint);
   const resolvedTrackId = hintedTrackId || id;
   const resolveTarget =
-    normalizedUrlHint ||
-    `https://api-v2.soundcloud.com/tracks/${resolvedTrackId}`;
+    normalizedUrlHint || `${soundcloud.apiV2Base}/tracks/${resolvedTrackId}`;
 
   // #region debug-point A:soundcloud-resolve-start
   reportDebugEvent(
@@ -789,14 +819,14 @@ async function fetchSoundCloudDetails(
 
   const payload = normalizedUrlHint
     ? await fetchSoundCloudJson(
-        `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(
-          resolveTarget
-        )}`
+        buildProviderUrlCandidates(soundcloud.apiV2Base, ["/resolve"], {
+          url: resolveTarget,
+        })[0] || ""
       )
     : await fetchSoundCloudJson(
-        `https://api-v2.soundcloud.com/tracks/${encodeURIComponent(
-          resolvedTrackId
-        )}`
+        buildProviderUrlCandidates(soundcloud.apiV2Base, [
+          `/tracks/${encodeURIComponent(resolvedTrackId)}`,
+        ])[0] || ""
       );
 
   const track = toRecord(payload);
@@ -907,9 +937,7 @@ async function fetchSoundCloudDetails(
     typeof track.permalink_url === "string" && track.permalink_url.trim()
       ? track.permalink_url
       : normalizedUrlHint ||
-        `https://api.soundcloud.com/tracks/${encodeURIComponent(
-          String(track.id)
-        )}`;
+        `${soundcloud.apiBase}/tracks/${encodeURIComponent(String(track.id))}`;
 
   if (isEncrypted) {
     if (!licenseAuthToken) {
@@ -926,7 +954,10 @@ async function fetchSoundCloudDetails(
       url: widgetTrackUrl,
       audioType: "soundcloud-drm",
       audioUrl: streamUrl,
-      drmLicenseUrl: buildSoundCloudWidevineLicenseUrl(licenseAuthToken),
+      drmLicenseUrl: buildSoundCloudWidevineLicenseUrl(
+        soundcloud.licenseBase,
+        licenseAuthToken
+      ),
       drmScheme: "com.widevine.alpha",
       drmProvider: "soundcloud",
       source: "soundcloud",
@@ -1172,10 +1203,13 @@ async function fetchYouTubeOEmbedMetadata(
   videoId: string
 ): Promise<Record<string, unknown> | null> {
   try {
+    const providerEndpoints = await getProviderEndpoints();
+    const youtube = providerEndpoints.providers.youtube;
     const payload = (await fetchJson(
-      `https://www.youtube.com/oembed?url=${encodeURIComponent(
-        `https://www.youtube.com/watch?v=${videoId}`
-      )}&format=json`,
+      buildProviderUrlCandidates(youtube.oembedBase, ["/oembed"], {
+        url: `${youtube.webBase}/watch?v=${videoId}`,
+        format: "json",
+      })[0] || "",
       undefined,
       8000
     )) as Record<string, unknown>;
@@ -1199,8 +1233,10 @@ async function fetchYouTubeOEmbedMetadata(
         typeof payload.thumbnail_url === "string" &&
         payload.thumbnail_url.trim()
           ? payload.thumbnail_url.trim()
-          : `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`,
-      url: `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
+          : `${youtube.imageBase}/vi/${encodeURIComponent(
+              videoId
+            )}/hqdefault.jpg`,
+      url: `${youtube.webBase}/watch?v=${encodeURIComponent(videoId)}`,
     };
   } catch {
     return null;
@@ -1468,6 +1504,7 @@ async function fetchVideoDetails(
   options?: { title?: string; artist?: string; urlHint?: string }
 ): Promise<Record<string, unknown>> {
   if (source === "youtubemusic") {
+    const providerEndpoints = await getProviderEndpoints();
     const matchedJioSaavnSong = await findJioSaavnMatch(
       options?.title || "",
       options?.artist
@@ -1477,6 +1514,7 @@ async function fetchVideoDetails(
       const jioSaavnPayload = await fetchJioSaavnFromEndpoints(
         buildJioSaavnSongEndpoints(
           matchedJioSaavnSong.id,
+          providerEndpoints.providers.jiosaavn.apiBase,
           matchedJioSaavnSong.url
         )
       );
@@ -1488,13 +1526,17 @@ async function fetchVideoDetails(
 
   // The videoId should be the only thing needed for youtube/youtubemusic
   if (source === "youtube" || source === "youtubemusic" || !source) {
+    const [invidiousInstances, pipedInstances] = await Promise.all([
+      getInvidiousInstances(),
+      getPipedInstances(),
+    ]);
     const providers = [
-      ...INVIDIOUS_INSTANCES.map((instance) => ({
+      ...invidiousInstances.map((instance) => ({
         label: `invidious:${instance}`,
         run: (signal?: AbortSignal) =>
           fetchVideoFromInvidious(instance, videoId, source, signal),
       })),
-      ...PIPED_INSTANCES.map((instance) => ({
+      ...pipedInstances.map((instance) => ({
         label: `piped:${instance}`,
         run: (signal?: AbortSignal) =>
           fetchVideoFromPiped(instance, videoId, source, signal),
@@ -1541,8 +1583,13 @@ async function fetchVideoDetails(
   }
 
   if (source === "jiosaavn") {
+    const providerEndpoints = await getProviderEndpoints();
     const jioSaavnPayload = await fetchJioSaavnFromEndpoints(
-      buildJioSaavnSongEndpoints(videoId, options?.urlHint)
+      buildJioSaavnSongEndpoints(
+        videoId,
+        providerEndpoints.providers.jiosaavn.apiBase,
+        options?.urlHint
+      )
     );
     if (jioSaavnPayload?.audioUrl) return jioSaavnPayload;
     throw new Error("Failed to fetch JioSaavn audio stream");

@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import CloudLibraryBridge from "./CloudLibraryBridge";
 import LeftPanel from "./LeftPanel";
 import MobileAppGate from "./MobileAppGate";
+import RuntimeConfigBootstrap from "./RuntimeConfigBootstrap";
 import ShellLayout from "./ShellLayout";
 import { isStandaloneAuthPath } from "../lib/auth-routes";
 import { AudioProvider } from "../contexts/AudioContext";
@@ -18,7 +19,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (isAuthPage) {
     return (
       <SettingsProvider>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <RuntimeConfigBootstrap />
+          {children}
+        </ToastProvider>
       </SettingsProvider>
     );
   }
@@ -26,6 +30,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SettingsProvider>
       <ToastProvider>
+        <RuntimeConfigBootstrap />
         <AudioProvider>
           <SidePanelProvider>
             <CloudLibraryBridge />

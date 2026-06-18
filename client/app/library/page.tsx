@@ -327,50 +327,6 @@ function SmartPlaylistArtwork({
   }
 
   if (variant === "history") {
-    const covers = (() => {
-      const seen = new Set<string>();
-      const out: typeof songs = [];
-      for (const song of songs) {
-        if (!song?.coverUrl || seen.has(song.id)) continue;
-        seen.add(song.id);
-        out.push(song);
-        if (out.length >= 4) break;
-      }
-      return out;
-    })();
-
-    if (covers.length > 0) {
-      return (
-        <div className="theme-surface-soft grid aspect-square w-full grid-cols-2 overflow-hidden rounded-xl">
-          {covers.map((song, index) => (
-            <div
-              key={`history-cover-${song.id}-${index}`}
-              className="relative h-full w-full"
-            >
-              <Image
-                src={song.coverUrl!}
-                alt={song.title}
-                fill
-                sizes="(max-width: 768px) 40vw, 180px"
-                className="object-cover"
-                priority={priority}
-                unoptimized
-              />
-            </div>
-          ))}
-          {covers.length < 4 &&
-            [...Array(4 - covers.length)].map((_, index) => (
-              <div
-                key={`history-empty-${index}`}
-                className="theme-surface-soft flex items-center justify-center theme-muted"
-              >
-                <ClockGlyph />
-              </div>
-            ))}
-        </div>
-      );
-    }
-
     return (
       <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-gradient-to-br from-[#245d8f] via-[#1a4b70] to-[#121212] text-white shadow-[0_18px_40px_rgba(20,70,120,0.32)]">
         <ClockGlyph />
@@ -942,7 +898,9 @@ export default function LibraryPage() {
 
   const pinnedPlaylistCards = useMemo(
     () => [
-      visiblePlaylistCards[0],
+      ...visiblePlaylistCards.filter(
+        (card) => card.id === "liked-songs" || card.id === "previously-played"
+      ),
       ...visiblePlaylistCards.filter(
         (card) => card.id !== "liked-songs" && card.id !== "previously-played"
       ),

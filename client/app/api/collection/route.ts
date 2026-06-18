@@ -4,14 +4,16 @@ import { promisify } from "node:util";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import {
-  INVIDIOUS_INSTANCES,
-  PIPED_INSTANCES,
+  getInvidiousInstances,
+  getPipedInstances,
 } from "../../lib/media-providers";
+import {
+  buildProviderUrlCandidates,
+  getProviderEndpoints,
+} from "../../lib/provider-endpoints";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
-const JIOSAAVN_API_BASE = "https://streamifyjiosaavn.vercel.app";
-const BEATSEEK_API_BASE = "https://beatseek.io/api";
 const DEBUG_ENV_PATH = ".dbg/soundcloud-collection-bug.env";
 const DEBUG_SERVER_URL_FALLBACK = "";
 const DEBUG_SESSION_ID_FALLBACK = "soundcloud-collection-bug";
@@ -287,6 +289,20 @@ async function fetchJson(url: string): Promise<unknown> {
   }
 }
 
+async function fetchFirstSuccessfulJsonUrl(urls: string[]): Promise<unknown> {
+  const errors: string[] = [];
+
+  for (const url of urls) {
+    try {
+      return await fetchJson(url);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  throw new Error(errors.join(" | ") || "All requests failed");
+}
+
 function normalizeJioSaavnSong(song: unknown, albumTitle?: string) {
   const record = toRecord(song);
   return {
@@ -318,12 +334,21 @@ async function fetchJioSaavnCollection(
   id: string,
   kind: "playlist" | "album"
 ): Promise<CollectionResponse> {
-  const endpoint =
+  const providerEndpoints = await getProviderEndpoints();
+  const endpointCandidates =
     kind === "playlist"
-      ? `${JIOSAAVN_API_BASE}/api/playlists?id=${encodeURIComponent(id)}`
-      : `${JIOSAAVN_API_BASE}/api/albums?id=${encodeURIComponent(id)}`;
+      ? buildProviderUrlCandidates(
+          providerEndpoints.providers.jiosaavn.apiBase,
+          ["/api/playlists", "/playlists"],
+          { id }
+        )
+      : buildProviderUrlCandidates(
+          providerEndpoints.providers.jiosaavn.apiBase,
+          ["/api/albums", "/albums"],
+          { id }
+        );
 
-  const payload = await fetchJson(endpoint);
+  const payload = await fetchFirstSuccessfulJsonUrl(endpointCandidates);
   const root = pickJioSaavnRoot(payload);
 
   if (!Object.keys(root).length) {
@@ -360,10 +385,12 @@ async function fetchPipedPlaylist(
   id: string,
   source: "youtube" | "youtubemusic"
 ): Promise<CollectionResponse> {
+  const providerEndpoints = await getProviderEndpoints();
+  const youtube = providerEndpoints.providers.youtube;
   const playlistId = extractYouTubePlaylistId(id) || id;
   const errors: string[] = [];
 
-  for (const instance of PIPED_INSTANCES) {
+  for (const instance of await getPipedInstances()) {
     try {
       const payload = toRecord(
         await fetchJson(
@@ -401,10 +428,10 @@ async function fetchPipedPlaylist(
           thumbnailUrl: safeString(payload.thumbnailUrl),
           url:
             source === "youtubemusic"
-              ? `https://music.youtube.com/playlist?list=${encodeURIComponent(
+              ? `${youtube.musicBase}/playlist?list=${encodeURIComponent(
                   playlistId
                 )}`
-              : `https://www.youtube.com/playlist?list=${encodeURIComponent(
+              : `${youtube.webBase}/playlist?list=${encodeURIComponent(
                   playlistId
                 )}`,
           count: safeNumber(payload.videos) || entries.length,
@@ -427,10 +454,12 @@ async function fetchInvidiousMix(
   id: string,
   source: "youtube" | "youtubemusic"
 ): Promise<CollectionResponse> {
+  const providerEndpoints = await getProviderEndpoints();
+  const youtube = providerEndpoints.providers.youtube;
   const mixId = extractYouTubePlaylistId(id) || id;
   const errors: string[] = [];
 
-  for (const instance of INVIDIOUS_INSTANCES) {
+  for (const instance of await getInvidiousInstances()) {
     try {
       const payload = toRecord(
         await fetchJson(`${instance}/api/v1/mixes/${encodeURIComponent(mixId)}`)
@@ -456,7 +485,7 @@ async function fetchInvidiousMix(
             thumbnailUrl: safeString(thumbnail?.url),
             duration: safeNumber(record.lengthSeconds),
             url: safeString(record.videoId)
-              ? `https://www.youtube.com/watch?v=${encodeURIComponent(
+              ? `${youtube.webBase}/watch?v=${encodeURIComponent(
                   safeString(record.videoId)
                 )}&list=${encodeURIComponent(mixId)}`
               : "",
@@ -473,12 +502,10 @@ async function fetchInvidiousMix(
           source,
           url:
             source === "youtubemusic"
-              ? `https://music.youtube.com/playlist?list=${encodeURIComponent(
+              ? `${youtube.musicBase}/playlist?list=${encodeURIComponent(
                   mixId
                 )}`
-              : `https://www.youtube.com/playlist?list=${encodeURIComponent(
-                  mixId
-                )}`,
+              : `${youtube.webBase}/playlist?list=${encodeURIComponent(mixId)}`,
           description: "Mix",
         },
         entries,
@@ -507,6 +534,13 @@ async function fetchSoundCloudCollection(
   url: string,
   runId: string
 ): Promise<CollectionResponse> {
+  const providerEndpoints = await getProviderEndpoints();
+  const beatseekBase = providerEndpoints.providers.beatseek.apiBase;
+  const beatseekUrls = buildProviderUrlCandidates(
+    beatseekBase,
+    ["/playlist", "/api/playlist"],
+    { url }
+  );
   // #region debug-point B:soundcloud-collection-fetch-start
   reportDebugEvent(
     runId,
@@ -515,17 +549,11 @@ async function fetchSoundCloudCollection(
     "[DEBUG] fetching SoundCloud collection upstream",
     {
       url,
-      beatseekUrl: `${BEATSEEK_API_BASE}/playlist?url=${encodeURIComponent(
-        url
-      )}`,
+      beatseekUrl: beatseekUrls[0] || "",
     }
   );
   // #endregion
-  const payload = toRecord(
-    await fetchJson(
-      `${BEATSEEK_API_BASE}/playlist?url=${encodeURIComponent(url)}`
-    )
-  );
+  const payload = toRecord(await fetchFirstSuccessfulJsonUrl(beatseekUrls));
   const title = safeString(payload.playlistTitle) || "SoundCloud Collection";
   const collectionThumbnailUrl = pickSoundCloudCollectionImage(payload);
   const entries = toArray(payload.tracks)
@@ -632,7 +660,10 @@ export async function GET(request: NextRequest) {
         ? await fetchInvidiousMix(normalizedYouTubePlaylistId, "youtubemusic")
         : await fetchPipedPlaylist(normalizedYouTubePlaylistId, "youtubemusic");
     } else if (source === "soundcloud" && normalizedSoundCloudUrl) {
-      response = await fetchSoundCloudCollection(normalizedSoundCloudUrl, runId);
+      response = await fetchSoundCloudCollection(
+        normalizedSoundCloudUrl,
+        runId
+      );
     }
 
     if (!response) {

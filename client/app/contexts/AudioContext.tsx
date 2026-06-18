@@ -13,6 +13,10 @@ import React, {
 import { useSettings } from "./SettingsContext";
 import { formatNumberByLanguage } from "../lib/i18n";
 import { isManagedRemoteAudioUrl } from "../lib/media-providers";
+import {
+  getCachedProviderEndpointsSnapshot,
+  getProviderEndpoints,
+} from "../lib/provider-endpoints";
 
 type AudioType = "file" | "hls" | "soundcloud-drm";
 type PlaybackStrategy = "audio" | "widget";
@@ -27,6 +31,21 @@ const PLAYBACK_PROGRESS_MIN_DELTA_SECONDS = 0.2;
 const PLAYBACK_DURATION_MIN_DELTA_SECONDS = 0.5;
 const MEDIA_SESSION_POSITION_UPDATE_MS = 1000;
 const MEDIA_SESSION_POSITION_MIN_DELTA_SECONDS = 1;
+let soundCloudRuntimeConfig =
+  getCachedProviderEndpointsSnapshot().providers.soundcloud;
+let soundCloudRuntimeRefreshPromise: Promise<void> | null = null;
+
+function ensureSoundCloudRuntimeConfig() {
+  if (typeof window === "undefined" || soundCloudRuntimeRefreshPromise) return;
+
+  soundCloudRuntimeRefreshPromise = getProviderEndpoints({ revalidate: true })
+    .then((providerEndpoints) => {
+      soundCloudRuntimeConfig = providerEndpoints.providers.soundcloud;
+    })
+    .finally(() => {
+      soundCloudRuntimeRefreshPromise = null;
+    });
+}
 
 export interface Song {
   id: string;
@@ -219,7 +238,8 @@ async function loadSoundCloudWidgetApi(): Promise<SoundCloudWidgetApi> {
 
       const script = document.createElement("script");
       script.id = "soundcloud-widget-api";
-      script.src = "https://w.soundcloud.com/player/api.js";
+      ensureSoundCloudRuntimeConfig();
+      script.src = `${soundCloudRuntimeConfig.widgetBase}/player/api.js`;
       script.async = true;
       script.onload = handleReady;
       script.onerror = handleError;
@@ -284,16 +304,22 @@ function shouldUseSoundCloudWidget(song?: Song | null): boolean {
 }
 
 function getSoundCloudWidgetTrackUrl(song: Song): string | null {
+  ensureSoundCloudRuntimeConfig();
+
   if (typeof song.url === "string" && song.url.trim()) {
     return song.url.trim();
   }
   if (typeof song.id === "string" && song.id.trim()) {
-    return `https://api.soundcloud.com/tracks/${encodeURIComponent(song.id)}`;
+    return `${soundCloudRuntimeConfig.apiBase}/tracks/${encodeURIComponent(
+      song.id
+    )}`;
   }
   return null;
 }
 
 function buildSoundCloudWidgetBootstrapUrl(trackUrl: string): string {
+  ensureSoundCloudRuntimeConfig();
+
   // Match the official embed URL closely so the widget drives playback
   // through SoundCloud's own resolve/media/license request chain.
   const params = new URLSearchParams({
@@ -302,7 +328,7 @@ function buildSoundCloudWidgetBootstrapUrl(trackUrl: string): string {
     show_artwork: "false",
     callback: "true",
   });
-  return `https://w.soundcloud.com/player/?${params.toString()}`;
+  return `${soundCloudRuntimeConfig.widgetBase}/player/?${params.toString()}`;
 }
 
 function describePlaybackError(error: unknown): string {

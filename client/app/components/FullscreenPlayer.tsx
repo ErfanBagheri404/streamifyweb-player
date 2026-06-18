@@ -758,6 +758,8 @@ export default function FullscreenPlayer() {
         title: nextTitle,
         artist: nextArtist,
         duration: currentSong.duration,
+      }, {
+        force: true,
       });
 
       if (!payload?.lyrics) {

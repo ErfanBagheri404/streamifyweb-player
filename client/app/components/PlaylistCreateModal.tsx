@@ -31,6 +31,9 @@ export default function PlaylistCreateModal({
   onDescriptionChange,
   onClose,
   onSubmit,
+  title,
+  subtitle,
+  submitLabel,
 }: {
   open: boolean;
   name: string;
@@ -39,12 +42,19 @@ export default function PlaylistCreateModal({
   onDescriptionChange: (value: string) => void;
   onClose: () => void;
   onSubmit: () => void;
+  title?: string;
+  subtitle?: string;
+  submitLabel?: string;
 }) {
   const { t } = useAppLanguage();
   const canSubmit = name.trim().length > 0;
   const previewName = name.trim() || t("library.myPlaylist");
   const previewDescription =
     description.trim() || t("library.playlistDescriptionPlaceholder");
+  const dialogTitle = title || t("library.createPlaylistModalTitle");
+  const dialogSubtitle =
+    subtitle || t("library.createPlaylistModalDescription");
+  const actionLabel = submitLabel || t("common.create");
 
   useEffect(() => {
     if (!open) return;
@@ -84,13 +94,13 @@ export default function PlaylistCreateModal({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-[color:var(--foreground)]">
-              {t("library.createPlaylistModalTitle")}
+              {dialogTitle}
             </h2>
             <p
               className="mt-1 text-sm"
               style={{ color: "var(--muted-foreground)" }}
             >
-              {t("library.createPlaylistModalDescription")}
+              {dialogSubtitle}
             </p>
           </div>
           <button
@@ -192,7 +202,7 @@ export default function PlaylistCreateModal({
               color: "var(--theme-accent-contrast)",
             }}
           >
-            {t("common.create")}
+            {actionLabel}
           </button>
         </div>
       </div>
