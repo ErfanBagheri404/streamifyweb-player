@@ -87,9 +87,9 @@ function buildTitleVariants(title: string): string[] {
   if (!normalizedTitle) return [];
 
   const variants = [
-    normalizedTitle,
     normalizedTitle.replace(/^([^-|–—]+)\s*[-–—|]\s*/, ""),
     normalizedTitle.replace(/^([^-:]+):\s*/, ""),
+    normalizedTitle,
   ];
 
   const unique = new Set<string>();
@@ -129,10 +129,10 @@ export function buildLyricsCandidates(track: LyricsTrack): LyricsCandidate[] {
   const extractedArtist = extractArtistFromTitle(rawTitle);
   const titleVariants = buildTitleVariants(rawTitle);
   const artistVariants = [
-    cleanArtist(track.artist || ""),
-    extractPrimaryArtist(track.artist || ""),
     extractedArtist,
     extractPrimaryArtist(extractedArtist),
+    cleanArtist(track.artist || ""),
+    extractPrimaryArtist(track.artist || ""),
   ];
 
   const uniqueArtists = new Set<string>();

@@ -18,9 +18,30 @@ type LrcLibResponse = {
   artistName?: unknown;
 };
 
-const LYRICS_UPSTREAM_TIMEOUT_MS = 2500;
+const LYRICS_UPSTREAM_TIMEOUT_MS = 8000;
 const MAX_LRCLIB_CANDIDATES = 3;
 const MAX_LYRICS_OVH_CANDIDATES = 1;
+
+function selectLookupCandidates(
+  candidates: Array<{ artist: string; title: string }>,
+  maxCandidates: number
+): Array<{ artist: string; title: string }> {
+  const selected = candidates.slice(0, maxCandidates);
+  const finalFallback = candidates.at(-1);
+
+  if (
+    finalFallback &&
+    !selected.some(
+      (candidate) =>
+        candidate.artist.toLowerCase() === finalFallback.artist.toLowerCase() &&
+        candidate.title.toLowerCase() === finalFallback.title.toLowerCase()
+    )
+  ) {
+    selected.push(finalFallback);
+  }
+
+  return selected;
+}
 
 function buildLrcLibUrl(
   baseUrl: string,
@@ -209,12 +230,20 @@ export async function GET(request: NextRequest) {
   };
 
   const candidates = buildLyricsCandidates(track);
+  const lrclibCandidates = selectLookupCandidates(
+    candidates,
+    MAX_LRCLIB_CANDIDATES
+  );
+  const lyricsOvhCandidates = selectLookupCandidates(
+    candidates,
+    MAX_LYRICS_OVH_CANDIDATES
+  );
   if (!candidates.length) {
     return NextResponse.json(null, { status: 200 });
   }
 
   try {
-    for (const candidate of candidates.slice(0, MAX_LRCLIB_CANDIDATES)) {
+    for (const candidate of lrclibCandidates) {
       const payload = await fetchLrcLibLyrics(candidate, track.duration);
       if (!payload) continue;
 
@@ -227,7 +256,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    for (const candidate of candidates.slice(0, MAX_LYRICS_OVH_CANDIDATES)) {
+    for (const candidate of lyricsOvhCandidates) {
       const payload = await fetchLyricsOvhLyrics(candidate);
       if (!payload) continue;
 
