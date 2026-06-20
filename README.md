@@ -1,57 +1,62 @@
 # Streamify Web Player
 
-Streamify Web Player is a polished multi-source music player built around a Next.js client and a lightweight Express search service. It brings together search, playback, queue management, lyrics, artist and collection views, and a local library layer in a single interface designed for desktop-first listening.
+[English](#english) | [فارسی](#فارسی)
 
-The project focuses on a smooth listening experience rather than a bare search shell. Search results can flow directly into playback, recent listening history drives recommendations on the home screen, and the player includes both a compact miniplayer and a fullscreen listening view.
+## English
 
-## Highlights
+### Overview
+
+Streamify Web Player is a multi-source music player with a Next.js client and an Express-based backend service. It combines search, playback, lyrics, queue management, artist pages, collection pages, and a local library into one desktop-first listening experience.
+
+### Highlights
 
 - Multi-source discovery across YouTube, YouTube Music, SoundCloud, and JioSaavn
-- Rich playback flow with queue controls, repeat modes, volume controls, seek controls, and fullscreen playback
-- Local library features including liked songs, custom playlists, and recently played content
-- Artist and collection pages with cached client-side data for faster revisits
-- Timed lyrics support and synchronized lyric display in the fullscreen player
-- Theme, language, animation, and playback preferences managed from an in-app settings page
-- Bilingual interface support with English and Persian locale files
+- Rich playback with queue controls, repeat modes, seek controls, volume controls, and fullscreen mode
+- Local library support for liked songs, custom playlists, and recently played content
+- Artist and collection views with client-side caching
+- Timed lyrics support in the fullscreen player
+- Built-in bilingual UI support with English and Persian locales
 
-## Stack
+### Stack
 
-- **Client:** Next.js 16, React 19, TypeScript, Tailwind CSS
-- **Server:** Express 5, TypeScript, Undici
-- **Playback:** native audio, HLS support, SoundCloud widget handling, DRM proxy routes
-- **State and persistence:** React context, localStorage, session-backed client caches
+- Client: Next.js 16, React 19, TypeScript, Tailwind CSS
+- Server: Express 5, TypeScript, Undici
+- Playback: native audio, HLS, SoundCloud widget playback, DRM proxy routes
+- Persistence: React context, localStorage, session-backed client caches
 
-## Workspace Layout
+### Workspace Layout
 
 ```text
 .
-|-- client/   Next.js application, API routes, UI, playback logic, local library
-|-- server/   Express search service for external source aggregation
+|-- client/   Next.js app, UI, API routes, playback logic, local library
+|-- server/   Express search service for provider aggregation
 |-- README.md
+|-- LICENSE
 ```
 
-Within the client app, the main areas are:
+### Main App Areas
 
-- `client/app/page.tsx` for the home experience and recommendation surfaces
-- `client/app/search` for multi-source search and results
-- `client/app/library` for liked songs and local playlists
-- `client/app/artist` and `client/app/collection` for detail pages
-- `client/app/contexts/AudioContext.tsx` for playback, queue, repeat, and persistence logic
+- `client/app/page.tsx`: home and recommendation surfaces
+- `client/app/search`: multi-source search and results
+- `client/app/library`: liked songs and local playlists
+- `client/app/artist` and `client/app/collection`: detail pages
+- `client/app/contexts/AudioContext.tsx`: playback, queue, repeat, and persistence
+- `server/src/api/search/route.ts`: backend search aggregation
 
-## Getting Started
+### Getting Started
 
-### Prerequisites
+#### Prerequisites
 
 - Node.js 20 or newer
 - npm
 
-### Install
+#### Install
 
 ```bash
 npm run install:all
 ```
 
-### Run in Development
+#### Run In Development
 
 ```bash
 npm run dev
@@ -60,88 +65,159 @@ npm run dev
 This starts:
 
 - the Next.js client in `client/`
-- the Express server in `server/`
+- the Express service in `server/`
 
-By default, the Express service listens on `http://localhost:3001`. The Next.js app runs on the first available local port, typically `http://localhost:3000`.
+The Express service usually runs on `http://localhost:3001`. The Next.js app runs on the first available local port, usually `http://localhost:3000`.
 
-## Scripts
+### Scripts
 
-### Root
+#### Root
 
-- `npm run dev` starts client and server together
-- `npm run dev:client` starts only the Next.js app
-- `npm run dev:server` starts only the Express service
-- `npm run build` builds both workspaces
-- `npm run install:all` installs dependencies for the root, client, and server
+- `npm run dev`: start client and server together
+- `npm run dev:client`: start only the Next.js app
+- `npm run dev:server`: start only the Express service
+- `npm run build`: build both workspaces
+- `npm run install:all`: install dependencies for root, client, and server
 
-### Client
+#### Client
 
 - `npm run dev --prefix client`
 - `npm run build --prefix client`
 - `npm run start --prefix client`
 
-### Server
+#### Server
 
 - `npm run dev --prefix server`
 - `npm run build --prefix server`
 - `npm run start --prefix server`
 
-## What the App Covers
+### Contribution Notes
 
-### Discovery
+- We accept issues, pull requests, and documentation updates in both English and Persian.
+- For consistency, commit messages should use Conventional Commits in English when possible.
+- Recommended commit prefixes: `feat:`, `fix:`, `docs:`, `refactor:`, `perf:`, `chore:`, `test:`.
 
-- Search across multiple providers with source-aware filters
-- Artist pages, channel views, albums, and playlists
-- Home recommendations shaped by listening history
+Examples:
 
-### Playback
-
-- Miniplayer and fullscreen player
-- Queue navigation, seek, volume, mute, and repeat controls
-- Repeat off, repeat queue, and repeat one modes
-- Support for different playback backends depending on source
-
-### Personal Library
-
-- Liked songs
-- Custom local playlists
-- Recently played history
-- Stored navigation and search context for smoother return flows
-
-### Preferences
-
-- App theme controls
-- Preferred search source
-- Language selection
-- Animation and playback-related settings
-
-## Development Notes
-
-- The client uses App Router routes under `client/app`, including internal API routes for search, artist, collection, audio proxy, lyrics, and video resolution.
-- The Express server provides a dedicated `/search` endpoint for aggregated provider search.
-- Several client-facing views use browser storage and short-lived cache layers to reduce repeated fetches for previously visited pages.
-- Static icons and fonts are preloaded and cacheable to keep repeated UI interactions lightweight.
-
-## Build
-
-To create a production build for both workspaces:
-
-```bash
-npm run build
+```text
+feat: add mixed search source
+fix: keep player loading during provider fallback
+docs: update bilingual README and license notice
 ```
 
-To build only the frontend:
+### License And Usage
 
-```bash
-npm run build --prefix client
+This project is source-available but not open-source. No one may copy, modify, redistribute, sublicense, sell, host, republish, or publish this app or substantial parts of it without prior written permission from the copyright holder.
+
+See the `LICENSE` file for the full terms.
+
+---
+
+## فارسی
+
+### معرفی
+
+استریمیفای وب پلیر یک پخش کننده موسیقی چندمنبعه است که از یک کلاینت `Next.js` و یک سرویس بک اند مبتنی بر `Express` تشکیل شده است. این پروژه جستجو، پخش، متن آهنگ، مدیریت صف، صفحه هنرمند، صفحه کالکشن و کتابخانه محلی را در یک تجربه یکپارچه و مناسب دسکتاپ کنار هم قرار می دهد.
+
+### قابلیت ها
+
+- جستجوی چندمنبعه بین YouTube و YouTube Music و SoundCloud و JioSaavn
+- پخش کامل با کنترل صف، حالت های تکرار، جستجوی زمانی، کنترل صدا و حالت تمام صفحه
+- کتابخانه محلی شامل آهنگ های لایک شده، پلی لیست های سفارشی و تاریخچه پخش
+- صفحه هنرمند و کالکشن با کش سمت کلاینت
+- پشتیبانی از متن زمان بندی شده آهنگ در پلیر تمام صفحه
+- پشتیبانی داخلی از رابط دوزبانه انگلیسی و فارسی
+
+### تکنولوژی ها
+
+- کلاینت: Next.js 16 و React 19 و TypeScript و Tailwind CSS
+- سرور: Express 5 و TypeScript و Undici
+- پخش: صوت بومی مرورگر، HLS، ویجت SoundCloud و مسیرهای DRM proxy
+- ذخیره سازی: React context و localStorage و کش های موقت سمت کلاینت
+
+### ساختار پروژه
+
+```text
+.
+|-- client/   اپلیکیشن Next.js و رابط کاربری و API routes و منطق پخش و کتابخانه محلی
+|-- server/   سرویس Express برای تجمیع جستجو از منابع مختلف
+|-- README.md
+|-- LICENSE
 ```
 
-To build only the backend:
+### بخش های اصلی برنامه
+
+- `client/app/page.tsx`: صفحه اصلی و پیشنهادها
+- `client/app/search`: جستجو و نتایج چندمنبعه
+- `client/app/library`: آهنگ های پسندیده و پلی لیست های محلی
+- `client/app/artist` و `client/app/collection`: صفحه های جزئیات
+- `client/app/contexts/AudioContext.tsx`: منطق پخش و صف و تکرار و نگه داری وضعیت
+- `server/src/api/search/route.ts`: تجمیع جستجو در بک اند
+
+### شروع سریع
+
+#### پیش نیازها
+
+- Node.js نسخه 20 یا جدیدتر
+- npm
+
+#### نصب
 
 ```bash
-npm run build --prefix server
+npm run install:all
 ```
 
-## License
+#### اجرای توسعه
 
-This repository does not currently declare a project-wide license. Review the individual workspace packages before publishing or distributing it externally.
+```bash
+npm run dev
+```
+
+این دستور موارد زیر را اجرا می کند:
+
+- کلاینت Next.js در `client/`
+- سرویس Express در `server/`
+
+به صورت پیش فرض سرویس Express روی `http://localhost:3001` اجرا می شود و برنامه Next.js معمولا روی `http://localhost:3000` در اولین پورت آزاد بالا می آید.
+
+### اسکریپت ها
+
+#### ریشه پروژه
+
+- `npm run dev`: اجرای همزمان کلاینت و سرور
+- `npm run dev:client`: اجرای فقط کلاینت
+- `npm run dev:server`: اجرای فقط سرور
+- `npm run build`: بیلد هر دو بخش
+- `npm run install:all`: نصب وابستگی های ریشه و کلاینت و سرور
+
+#### کلاینت
+
+- `npm run dev --prefix client`
+- `npm run build --prefix client`
+- `npm run start --prefix client`
+
+#### سرور
+
+- `npm run dev --prefix server`
+- `npm run build --prefix server`
+- `npm run start --prefix server`
+
+### راهنمای مشارکت
+
+- ما گزارش باگ و Pull Request و تغییرات مستندات را هم به زبان فارسی و هم انگلیسی می پذیریم.
+- برای یکدستی پروژه بهتر است پیام commit ها تا حد امکان با Conventional Commits و به زبان انگلیسی نوشته شوند.
+- پیشوندهای پیشنهادی برای commit: `feat:` و `fix:` و `docs:` و `refactor:` و `perf:` و `chore:` و `test:`.
+
+نمونه:
+
+```text
+feat: add mixed search source
+fix: keep player loading during provider fallback
+docs: update bilingual README and license notice
+```
+
+### مجوز و شرایط استفاده
+
+این پروژه متن باز نیست و فقط source-available است. هیچ شخص یا سازمانی اجازه ندارد بدون مجوز کتبی قبلی از صاحب اثر، این برنامه یا بخش قابل توجهی از آن را کپی کند، تغییر دهد، بازنشر کند، توزیع کند، میزبانی کند، بفروشد یا منتشر کند.
+
+برای جزئیات کامل فایل `LICENSE` را ببینید.
