@@ -396,6 +396,37 @@ function LikedCollectionCover({ title }: { title: string }) {
   );
 }
 
+function PreviouslyPlayedCollectionCover({ title }: { title: string }) {
+  return (
+    <div
+      className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-md text-white shadow-[0_18px_40px_rgba(20,70,120,0.32)]"
+      style={{
+        background:
+          "linear-gradient(135deg, #245d8f 0%, #1a4b70 52%, #121212 100%)",
+      }}
+      aria-label={title}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_34%)]" />
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        className="h-10 w-10"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="8.25" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M12 7.75v4.75l3.25 1.75"
+        />
+      </svg>
+    </div>
+  );
+}
+
 function getCollectionEntries(item: SearchResult | null): CollectionEntry[] {
   if (!item) return [];
 
@@ -1412,6 +1443,8 @@ export default function CollectionPage() {
             >
               {isLikedSongsCollection ? (
                 <LikedCollectionCover title={displayTitle} />
+              ) : isPreviouslyPlayedCollection ? (
+                <PreviouslyPlayedCollectionCover title={displayTitle} />
               ) : displayImage ? (
                 <Image
                   src={displayImage}

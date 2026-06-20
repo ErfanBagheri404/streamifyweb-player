@@ -106,7 +106,7 @@ export default function LeftPanel() {
     if (effectiveLastSearch?.query) {
       const params = new URLSearchParams();
       params.set("q", effectiveLastSearch.query);
-      if (effectiveLastSearch.source !== "youtube")
+      if (effectiveLastSearch.source !== "mixed")
         params.set("source", effectiveLastSearch.source);
       if (effectiveLastSearch.filter !== "all")
         params.set("filter", effectiveLastSearch.filter);
@@ -114,7 +114,7 @@ export default function LeftPanel() {
     }
 
     return schedulePrefetch(
-      settings.preferredSearchSource === "youtube"
+      settings.preferredSearchSource === "mixed"
         ? "/search"
         : `/search?source=${settings.preferredSearchSource}`
     );
@@ -126,7 +126,7 @@ export default function LeftPanel() {
     if (effectiveLastSearch?.query) {
       const params = new URLSearchParams();
       params.set("q", effectiveLastSearch.query);
-      if (effectiveLastSearch.source !== "youtube")
+      if (effectiveLastSearch.source !== "mixed")
         params.set("source", effectiveLastSearch.source);
       if (effectiveLastSearch.filter !== "all")
         params.set("filter", effectiveLastSearch.filter);
@@ -137,7 +137,7 @@ export default function LeftPanel() {
     }
 
     const href =
-      settings.preferredSearchSource === "youtube"
+      settings.preferredSearchSource === "mixed"
         ? "/search"
         : `/search?source=${settings.preferredSearchSource}`;
     showNavigationToast(href);

@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import { HorizontalScrollRow } from "../HorizontalScrollRow";
-import { SearchResult } from "./types";
+import { SearchResult, SourceType } from "./types";
 import { ResultItem } from "./ResultItem";
 import { ArtistCard } from "./ArtistCard";
 
@@ -9,10 +9,11 @@ interface SearchSectionProps {
   items: SearchResult[];
   onItemPress: (item: SearchResult) => void;
   isArtistsSection?: boolean;
+  selectedSource?: SourceType;
 }
 
 export const SearchSection = memo<SearchSectionProps>(
-  ({ title, items, onItemPress, isArtistsSection = false }) => {
+  ({ title, items, onItemPress, isArtistsSection = false, selectedSource }) => {
     if (items.length === 0) return null;
 
     if (isArtistsSection) {
@@ -55,6 +56,7 @@ export const SearchSection = memo<SearchSectionProps>(
               key={`${item.source || "yt"}-${item.id}`}
               item={item}
               onPress={() => onItemPress(item)}
+              selectedSource={selectedSource}
             />
           ))}
         </div>

@@ -1,6 +1,7 @@
 import { SourceFilter, FilterOption, SourceType } from "./types";
 
 export const sourceFilters: SourceFilter[] = [
+  { id: "mixed", label: "Mixed", color: "#1ed760" },
   { id: "youtube", label: "YouTube", color: "#ff0000" },
   { id: "youtubemusic", label: "YouTube Music", color: "#ff0000" },
   { id: "soundcloud", label: "SoundCloud", color: "#ff7700" },
@@ -38,6 +39,11 @@ export const jioSaavnFilters: FilterOption[] = [
 
 export function getFilterOptions(source: SourceType): FilterOption[] {
   switch (source) {
+    case "mixed":
+      return [
+        { label: "All", value: "all" },
+        { label: "Playlists", value: "playlists" },
+      ];
     case "youtube":
       return [
         { label: "All", value: "all" },

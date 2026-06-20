@@ -248,6 +248,15 @@ function formatUploadedLabel(value?: string | number): string | undefined {
     }
   }
 
+  const parsedDate = new Date(timestampCandidate);
+  if (!Number.isNaN(parsedDate.getTime())) {
+    return new Intl.DateTimeFormat("en", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(parsedDate);
+  }
+
   return cleaned || raw;
 }
 
@@ -355,7 +364,7 @@ function SearchPageInner() {
 
   const [selectedSource, setSelectedSource] = useState<SourceType>(() => {
     const source = searchParams.get("source");
-    return (source as SourceType) || "youtube";
+    return (source as SourceType) || "mixed";
   });
   const [selectedFilter, setSelectedFilter] = useState(() => {
     const filter = searchParams.get("filter");
@@ -390,7 +399,7 @@ function SearchPageInner() {
     (query: string, source: SourceType, filter: string) => {
       const params = new URLSearchParams();
       if (query.trim()) params.set("q", query.trim());
-      if (source !== "youtube") params.set("source", source);
+      if (source !== "mixed") params.set("source", source);
       if (filter !== "all") params.set("filter", filter);
 
       const newUrl = `${window.location.pathname}${
@@ -473,7 +482,7 @@ function SearchPageInner() {
       const urlSource =
         (new URLSearchParams(window.location.search).get(
           "source"
-        ) as SourceType) || "youtube";
+        ) as SourceType) || "mixed";
       const urlFilter =
         new URLSearchParams(window.location.search).get("filter") || "all";
 
@@ -499,7 +508,7 @@ function SearchPageInner() {
 
   // ─── Helper: map raw item to SearchResult ────────────────
   const mapToSearchResult = (raw: RawPipedItem): SearchResult => {
-    const source = raw.source || selectedSourceRef.current || "youtube";
+    const source = raw.source || selectedSourceRef.current || "mixed";
     const rawUrl = raw.url || "";
     const playlistIdFromUrl = extractYouTubePlaylistId(rawUrl);
     const rawDisplayTitle =
@@ -724,7 +733,9 @@ function SearchPageInner() {
 
         const formatted: SearchResult[] = rawResults.map(mapToSearchResult);
         const hasMore =
-          sourceToUse === "youtube" || sourceToUse === "youtubemusic"
+          sourceToUse === "mixed"
+            ? false
+            : sourceToUse === "youtube" || sourceToUse === "youtubemusic"
             ? !!paginationRef.current.nextpage
             : formatted.length >= 20;
 
@@ -907,11 +918,11 @@ function SearchPageInner() {
 
     const queryFromUrl = searchParams.get("q") || "";
     const sourceFromUrl =
-      (searchParams.get("source") as SourceType) || "youtube";
+      (searchParams.get("source") as SourceType) || "mixed";
     const filterFromUrl = searchParams.get("filter") || "all";
     const savedSessionState = readStoredSearchPageSessionState();
     const savedSessionSource =
-      (savedSessionState?.source as SourceType | undefined) || "youtube";
+      (savedSessionState?.source as SourceType | undefined) || "mixed";
     const savedSessionFilter = savedSessionState?.filter || "all";
     const hasSavedSessionQuery = Boolean(savedSessionState?.query?.trim());
     const matchesSavedSession =
@@ -1018,7 +1029,11 @@ function SearchPageInner() {
         const source = selectedSourceRef.current;
 
         // For YouTube sources, fetch from Piped API
-        if (source === "youtube" || source === "youtubemusic") {
+        if (
+          source === "mixed" ||
+          source === "youtube" ||
+          source === "youtubemusic"
+        ) {
           try {
             setIsLoadingSuggestions(true);
             abortControllerRef.current = new AbortController();
@@ -1104,6 +1119,7 @@ function SearchPageInner() {
         case "youtubemusic":
           newFilter = "songs";
           break;
+        case "mixed":
         case "jiosaavn":
           newFilter = "all";
           break;
@@ -1162,7 +1178,7 @@ function SearchPageInner() {
       params.set("source", item.source);
     }
     if (searchQuery) params.set("search_query", searchQuery);
-    if (selectedSource !== "youtube")
+    if (selectedSource !== "mixed")
       params.set("search_source", selectedSource);
     if (selectedFilter !== "all") params.set("search_filter", selectedFilter);
 
@@ -1193,7 +1209,7 @@ function SearchPageInner() {
     const params = new URLSearchParams();
     if (item.source) params.set("source", item.source);
     if (searchQuery) params.set("search_query", searchQuery);
-    if (selectedSource !== "youtube")
+    if (selectedSource !== "mixed")
       params.set("search_source", selectedSource);
     if (selectedFilter !== "all") params.set("search_filter", selectedFilter);
     // #region debug-point H5:collection-nav
@@ -1364,7 +1380,7 @@ function SearchPageInner() {
         placeholder={t("search.placeholder", {
           source:
             localizedSourceFilters.find((s) => s.id === selectedSource)
-              ?.label || getSourceLabel("youtube"),
+              ?.label || getSourceLabel("mixed"),
         })}
       >
         <SuggestionsDropdown

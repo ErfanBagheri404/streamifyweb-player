@@ -9,7 +9,9 @@ export const SkeletonItem: React.FC<SkeletonItemProps> = ({
   selectedSource,
 }) => {
   const isYouTubeSource =
-    selectedSource === "youtube" || selectedSource === "youtubemusic";
+    selectedSource === "mixed" ||
+    selectedSource === "youtube" ||
+    selectedSource === "youtubemusic";
   const isSoundCloudSource = selectedSource === "soundcloud";
   const isJioSaavnSource = selectedSource === "jiosaavn";
 

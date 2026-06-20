@@ -1,6 +1,7 @@
 "use client";
 
 export type PreferredSearchSource =
+  | "mixed"
   | "youtube"
   | "youtubemusic"
   | "soundcloud"
@@ -87,7 +88,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   language: "en",
   disableAnimations: false,
   rememberLastSearch: true,
-  preferredSearchSource: "youtube",
+  preferredSearchSource: "mixed",
   seekStepSeconds: 10,
 };
 
@@ -141,6 +142,7 @@ function isPreferredSearchSource(
   value: unknown
 ): value is PreferredSearchSource {
   return (
+    value === "mixed" ||
     value === "youtube" ||
     value === "youtubemusic" ||
     value === "soundcloud" ||

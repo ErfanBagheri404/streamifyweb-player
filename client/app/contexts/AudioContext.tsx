@@ -1003,6 +1003,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     song: Song,
     requestId = playbackRequestIdRef.current
   ) => {
+    const attemptedAudioUrl = resolveAudioUrl(
+      audio.currentSrc || audio.src || song.audioUrl
+    );
     const playPromise = audio.play();
     if (playPromise === undefined) return;
 
@@ -1014,11 +1017,21 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       ) {
         return;
       }
+      const currentResolvedSongAudioUrl = resolveAudioUrl(
+        currentSongRef.current?.audioUrl
+      );
+      if (
+        attemptedAudioUrl &&
+        currentResolvedSongAudioUrl &&
+        attemptedAudioUrl !== currentResolvedSongAudioUrl
+      ) {
+        return;
+      }
       if (
         tryNextAudioCandidate(
           song,
           "play-rejected",
-          audio.currentSrc || audio.src || song.audioUrl
+          attemptedAudioUrl || song.audioUrl
         )
       ) {
         return;
@@ -2529,7 +2542,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         }
       );
       // #endregion
-      if (isSongLoading && !currentSong?.audioUrl) {
+      // Keep the player in loading state while audio sources are being swapped
+      // so transient candidate failures do not flash an error UI mid-retry.
+      if (isSongLoading) {
         return;
       }
       setIsSongLoading(false);

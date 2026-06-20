@@ -1,4 +1,5 @@
 export type SourceType =
+  | "mixed"
   | "youtube"
   | "youtubemusic"
   | "soundcloud"

@@ -398,6 +398,7 @@
   "collection.noMappedTracks": "No mapped tracks were available for this {kind} yet.",
   "collection.searchInCollection": "Search tracks or artists",
   "collection.noSearchResults": "No tracks or artists match this search.",
+  "source.mixed": "Mixed",
   "source.youtube": "YouTube",
   "source.youtubemusic": "YouTube Music",
   "source.soundcloud": "SoundCloud",

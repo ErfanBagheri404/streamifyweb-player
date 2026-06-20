@@ -322,6 +322,7 @@ export default function SettingsPage() {
   };
 
   const searchSourceLabels: Record<PreferredSearchSource, string> = {
+    mixed: getSourceLabel("mixed"),
     youtube: getSourceLabel("youtube"),
     youtubemusic: getSourceLabel("youtubemusic"),
     soundcloud: getSourceLabel("soundcloud"),

@@ -114,29 +114,34 @@ export const ResultsList: React.FC<ResultsListProps> = ({
         title={t("search.topResult")}
         items={filteredResults.topResults}
         onItemPress={onTopResultPress}
+        selectedSource={selectedSource}
       />
       <SearchSection
         title={t("search.artists")}
         items={filteredResults.artists}
         onItemPress={onArtistPress}
         isArtistsSection={true}
+        selectedSource={selectedSource}
       />
       {selectedSource !== "youtube" && selectedSource !== "youtubemusic" && (
         <SearchSection
           title={t("search.albums")}
           items={filteredResults.albums}
           onItemPress={onAlbumPress}
+          selectedSource={selectedSource}
         />
       )}
       <SearchSection
         title={t("search.playlists")}
         items={filteredResults.playlists}
         onItemPress={onAlbumPress}
+        selectedSource={selectedSource}
       />
       <SearchSection
         title={t("search.songs")}
         items={filteredResults.songs}
         onItemPress={onSongPress}
+        selectedSource={selectedSource}
       />
 
       {!hasMoreResults ? (

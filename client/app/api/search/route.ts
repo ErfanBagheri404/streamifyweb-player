@@ -268,6 +268,141 @@ function parseDurationToSeconds(value: unknown): number | undefined {
   return undefined;
 }
 
+function normalizeSearchItemType(item: Record<string, unknown>): string {
+  const rawType =
+    typeof item.type === "string" ? item.type.trim().toLowerCase() : "";
+
+  if (rawType === "stream") return "video";
+  if (rawType === "channel") return "artist";
+  if (rawType) return rawType;
+
+  if (item.duration != null || item.lengthSeconds != null) {
+    return "song";
+  }
+
+  return "unknown";
+}
+
+function filterJioSaavnSearchItems(
+  items: Array<Record<string, unknown>>,
+  filter: string
+): Array<Record<string, unknown>> {
+  const normalizedFilter = (filter || "all").toLowerCase();
+  if (!normalizedFilter || normalizedFilter === "all") return items;
+
+  return items.filter((item) => {
+    const itemType = normalizeSearchItemType(item);
+
+    switch (normalizedFilter) {
+      case "playlists":
+        return itemType === "playlist";
+      case "albums":
+        return itemType === "album";
+      case "artists":
+      case "channels":
+        return itemType === "artist";
+      case "songs":
+      case "tracks":
+      case "videos":
+        return itemType === "song" || itemType === "video";
+      default:
+        return true;
+    }
+  });
+}
+
+function interleaveSearchLists<T>(lists: T[][]): T[] {
+  const output: T[] = [];
+  const maxLength = Math.max(0, ...lists.map((list) => list.length));
+
+  for (let index = 0; index < maxLength; index += 1) {
+    for (const list of lists) {
+      if (list[index]) {
+        output.push(list[index]);
+      }
+    }
+  }
+
+  return output;
+}
+
+function dedupeSearchItems(items: unknown[]): unknown[] {
+  const seen = new Set<string>();
+
+  return items.filter((item) => {
+    const entry = item as Record<string, unknown>;
+    const source =
+      typeof entry.source === "string" ? entry.source : "unknown-source";
+    const identity =
+      entry.id ??
+      entry.videoId ??
+      entry.playlistId ??
+      entry.url ??
+      entry.permalink_url ??
+      entry.title;
+
+    if (identity == null) return true;
+
+    const key = `${source}:${String(identity)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildMixedSearchItems(providerItems: unknown[][]): unknown[] {
+  const topResults: unknown[][] = [];
+  const artists: unknown[][] = [];
+  const playlists: unknown[][] = [];
+  const albums: unknown[][] = [];
+  const songs: unknown[][] = [];
+  const others: unknown[][] = [];
+
+  for (const items of providerItems) {
+    const providerTop: unknown[] = [];
+    const providerArtists: unknown[] = [];
+    const providerPlaylists: unknown[] = [];
+    const providerAlbums: unknown[] = [];
+    const providerSongs: unknown[] = [];
+    const providerOthers: unknown[] = [];
+
+    for (const item of items) {
+      const entry = item as Record<string, unknown>;
+      const itemType = normalizeSearchItemType(entry);
+
+      if (itemType === "unknown" || itemType === "hashtag") {
+        providerTop.push(item);
+      } else if (itemType === "artist") {
+        providerArtists.push(item);
+      } else if (itemType === "playlist") {
+        providerPlaylists.push(item);
+      } else if (itemType === "album") {
+        providerAlbums.push(item);
+      } else if (itemType === "song" || itemType === "video") {
+        providerSongs.push(item);
+      } else {
+        providerOthers.push(item);
+      }
+    }
+
+    topResults.push(providerTop);
+    artists.push(providerArtists);
+    playlists.push(providerPlaylists);
+    albums.push(providerAlbums);
+    songs.push(providerSongs);
+    others.push(providerOthers);
+  }
+
+  return dedupeSearchItems([
+    ...interleaveSearchLists(topResults),
+    ...interleaveSearchLists(artists),
+    ...interleaveSearchLists(playlists),
+    ...interleaveSearchLists(albums),
+    ...interleaveSearchLists(songs),
+    ...interleaveSearchLists(others),
+  ]);
+}
+
 async function searchYtify(
   query: string,
   filter: string
@@ -621,7 +756,10 @@ async function searchSoundCloud(
   }
 }
 
-async function searchJioSaavn(query: string): Promise<SearchResponse> {
+async function searchJioSaavn(
+  query: string,
+  filter = "all"
+): Promise<SearchResponse> {
   try {
     const endpoints = await getProviderEndpoints();
     const jiosaavnUrlCandidates = buildProviderUrlCandidates(
@@ -709,11 +847,15 @@ async function searchJioSaavn(query: string): Promise<SearchResponse> {
       items.push(item);
     }
 
-    return { items, nextpage: null };
+    return {
+      items: filterJioSaavnSearchItems(items, filter),
+      nextpage: null,
+    };
   } catch {
     return { items: [], nextpage: null };
   }
 }
+
 async function searchYouTubeDefault(
   query: string,
   filter: string,
@@ -729,13 +871,51 @@ async function searchYouTubeDefault(
   return searchYtify(query, filter);
 }
 
+async function searchMixed(
+  query: string,
+  filter: string,
+  page: number,
+  limit: number
+): Promise<SearchResponse> {
+  const normalizedFilter = (filter || "all").toLowerCase();
+  const youtubeFilter =
+    normalizedFilter === "playlists" ? "playlists" : "all";
+  const youtubeMusicFilter =
+    normalizedFilter === "playlists" ? "playlists" : "all";
+  const soundCloudTasks =
+    normalizedFilter === "playlists"
+      ? [searchSoundCloud(query, "playlists", page, limit)]
+      : [
+          searchSoundCloud(query, "tracks", page, limit),
+          searchSoundCloud(query, "playlists", page, Math.max(8, limit / 2)),
+          searchSoundCloud(query, "albums", page, Math.max(8, limit / 2)),
+        ];
+
+  const [youtubeResult, youtubeMusicResult, jioSaavnResult, ...soundCloudResults] =
+    await Promise.all([
+      searchYouTubeDefault(query, youtubeFilter, page),
+      searchYouTubeMusic(query, youtubeMusicFilter),
+      searchJioSaavn(query, normalizedFilter),
+      ...soundCloudTasks,
+    ]);
+
+  const items = buildMixedSearchItems([
+    youtubeResult.items,
+    youtubeMusicResult.items,
+    ...soundCloudResults.map((result) => result.items),
+    jioSaavnResult.items,
+  ]).slice(0, Math.max(limit * 3, 40));
+
+  return { items, nextpage: null };
+}
+
 export async function GET(request: NextRequest) {
   const blockedResponse = requireStreamifyRequest(request);
   if (blockedResponse) return blockedResponse;
 
   const searchParams = request.nextUrl.searchParams;
   const q = (searchParams.get("q") || "").trim();
-  const sourceParam = (searchParams.get("source") || "youtube").toLowerCase();
+  const sourceParam = (searchParams.get("source") || "mixed").toLowerCase();
   const filterParam = searchParams.get("filter") || "";
   const pageNum = parseInt(searchParams.get("page") || "1", 10) || 1;
   const limitNum = parseInt(searchParams.get("limit") || "20", 10) || 20;
@@ -854,6 +1034,9 @@ export async function GET(request: NextRequest) {
     // #endregion
 
     switch (sourceParam) {
+      case "mixed":
+        result = await searchMixed(q, filterParam, pageNum, limitNum);
+        break;
       case "piped":
         result = await searchPiped(q, filterParam, nextpage);
         break;
@@ -896,7 +1079,7 @@ export async function GET(request: NextRequest) {
         // #endregion
         break;
       case "jiosaavn":
-        result = await searchJioSaavn(q);
+        result = await searchJioSaavn(q, filterParam);
         break;
       default:
         result = { items: [], nextpage: null };

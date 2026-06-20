@@ -398,6 +398,7 @@
   "collection.noMappedTracks": "هنوز آهنگ قابل پخشی برای این {kind} پیدا نشده است.",
   "collection.searchInCollection": "جستجو در آهنگ ها یا هنرمندها",
   "collection.noSearchResults": "هیچ آهنگ یا هنرمندی با این جستجو پیدا نشد.",
+  "source.mixed": "ترکیبی",
   "source.youtube": "یوتیوب",
   "source.youtubemusic": "یوتیوب موزیک",
   "source.soundcloud": "ساوندکلاد",
