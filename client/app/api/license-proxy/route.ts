@@ -1,11 +1,7 @@
-import { readFileSync } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 
 const LICENSE_PROXY_TIMEOUT_MS = 15000;
-const DEBUG_ENV_PATH = ".dbg/soundcloud-drm-playback.env";
-const DEBUG_SERVER_URL = "";
-const DEBUG_SESSION_ID = "soundcloud-drm-playback";
 const SOUNDCLOUD_LICENSE_HOSTS = [
   "license.media-streaming.soundcloud.cloud",
   "license.media-streaming.soundcloud.com",
@@ -13,42 +9,12 @@ const SOUNDCLOUD_LICENSE_HOSTS = [
 ];
 
 async function reportDebugEvent(
-  runId: string,
-  hypothesisId: string,
-  location: string,
-  msg: string,
-  data: Record<string, unknown>
-) {
-  let url = DEBUG_SERVER_URL;
-  let sessionId = DEBUG_SESSION_ID;
-
-  try {
-    const envContents = readFileSync(DEBUG_ENV_PATH, "utf8");
-    const nextUrl = envContents.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim();
-    const nextSessionId = envContents
-      .match(/^DEBUG_SESSION_ID=(.+)$/m)?.[1]
-      ?.trim();
-
-    if (nextUrl) url = nextUrl;
-    if (nextSessionId) sessionId = nextSessionId;
-  } catch {}
-
-  if (!url) return;
-
-  fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId,
-      runId,
-      hypothesisId,
-      location,
-      msg,
-      data,
-      ts: Date.now(),
-    }),
-  }).catch(() => {});
-}
+  _runId: string,
+  _hypothesisId: string,
+  _location: string,
+  _msg: string,
+  _data: Record<string, unknown>
+) {}
 
 function isSoundCloudLicenseUrl(value: string): boolean {
   try {

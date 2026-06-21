@@ -83,11 +83,11 @@ export default function LeftPanel() {
   }, []);
 
   useEffect(() => {
-    const schedulePrefetch = (href: string) => {
+    const schedulePrefetch = (href: string, delayMs = 0) => {
       if (typeof window !== "undefined" && "requestIdleCallback" in window) {
         const callbackId = window.requestIdleCallback(() => {
           router.prefetch(href);
-        });
+        }, { timeout: 1500 + delayMs });
 
         return () => {
           window.cancelIdleCallback(callbackId);
@@ -96,12 +96,18 @@ export default function LeftPanel() {
 
       const timeoutId = globalThis.setTimeout(() => {
         router.prefetch(href);
-      }, 400);
+      }, 400 + delayMs);
 
       return () => {
         globalThis.clearTimeout(timeoutId);
       };
     };
+
+    const cleanupCallbacks = [
+      schedulePrefetch("/", 0),
+      schedulePrefetch("/library", 120),
+      schedulePrefetch("/settings", 240),
+    ];
 
     if (effectiveLastSearch?.query) {
       const params = new URLSearchParams();
@@ -110,14 +116,23 @@ export default function LeftPanel() {
         params.set("source", effectiveLastSearch.source);
       if (effectiveLastSearch.filter !== "all")
         params.set("filter", effectiveLastSearch.filter);
-      return schedulePrefetch(`/search?${params.toString()}`);
+      cleanupCallbacks.push(
+        schedulePrefetch(`/search?${params.toString()}`, 360)
+      );
+    } else {
+      cleanupCallbacks.push(
+        schedulePrefetch(
+          settings.preferredSearchSource === "mixed"
+            ? "/search"
+            : `/search?source=${settings.preferredSearchSource}`,
+          360
+        )
+      );
     }
 
-    return schedulePrefetch(
-      settings.preferredSearchSource === "mixed"
-        ? "/search"
-        : `/search?source=${settings.preferredSearchSource}`
-    );
+    return () => {
+      cleanupCallbacks.forEach((cleanup) => cleanup());
+    };
   }, [effectiveLastSearch, router, settings.preferredSearchSource]);
 
   const openSearch = () => {

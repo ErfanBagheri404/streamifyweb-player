@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import {
@@ -15,52 +14,13 @@ const USER_AGENT =
 
 type SearchResponse = { items: unknown[]; nextpage?: string | null };
 
-const DEBUG_ENV_PATH = ".dbg/search-api-bug.env";
-const DEBUG_SERVER_URL_FALLBACK = "";
-const DEBUG_SESSION_ID_FALLBACK = "search-api-bug";
-
-function getDebugConfig(): { url: string; sessionId: string } {
-  let url = DEBUG_SERVER_URL_FALLBACK;
-  let sessionId = DEBUG_SESSION_ID_FALLBACK;
-
-  try {
-    const envText = readFileSync(DEBUG_ENV_PATH, "utf8");
-    const nextUrl = envText.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim();
-    const nextSessionId = envText
-      .match(/^DEBUG_SESSION_ID=(.+)$/m)?.[1]
-      ?.trim();
-
-    if (nextUrl) url = nextUrl;
-    if (nextSessionId) sessionId = nextSessionId;
-  } catch {}
-
-  return { url, sessionId };
-}
-
 function reportDebugEvent(
-  runId: string,
-  hypothesisId: string,
-  location: string,
-  msg: string,
-  data: Record<string, unknown>
-) {
-  const { url, sessionId } = getDebugConfig();
-  if (!url) return;
-
-  fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId,
-      runId,
-      hypothesisId,
-      location,
-      msg,
-      data,
-      ts: Date.now(),
-    }),
-  }).catch(() => {});
-}
+  _runId: string,
+  _hypothesisId: string,
+  _location: string,
+  _msg: string,
+  _data: Record<string, unknown>
+) {}
 
 function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
   const controller = new AbortController();

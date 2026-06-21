@@ -32,31 +32,13 @@ import { usePageLoadingToast } from "../../../hooks/usePageLoadingToast";
 import { findSavedCollectionRouteContext } from "../../../lib/navigation-state";
 import PlaylistCreateModal from "../../../components/PlaylistCreateModal";
 
-const DEBUG_SERVER_URL = "";
-const DEBUG_SESSION_ID = "soundcloud-collection-bug";
-
 function reportDebugEvent(
-  runId: string,
-  hypothesisId: string,
-  location: string,
-  msg: string,
-  data: Record<string, unknown>
-) {
-  if (!DEBUG_SERVER_URL) return;
-  fetch(DEBUG_SERVER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId: DEBUG_SESSION_ID,
-      runId,
-      hypothesisId,
-      location,
-      msg,
-      data,
-      ts: Date.now(),
-    }),
-  }).catch(() => {});
-}
+  _runId: string,
+  _hypothesisId: string,
+  _location: string,
+  _msg: string,
+  _data: Record<string, unknown>
+) {}
 
 type CollectionEntry = {
   id: string;

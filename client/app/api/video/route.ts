@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import {
@@ -19,54 +18,117 @@ const cache = new Map<string, { at: number; value: Record<string, unknown> }>();
 const inflightRequests = new Map<string, Promise<Record<string, unknown>>>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const STALE_CACHE_TTL_MS = 60 * 60 * 1000;
+const YOUTUBE_PROVIDER_HINT_TTL_MS = 24 * 60 * 60 * 1000;
 const INVIDIOUS_TIMEOUT_MS = 10000;
 const PIPED_TIMEOUT_MS = 7000;
-const DEBUG_SERVER_URL = "";
-const DEBUG_SESSION_ID = "playback-source-500";
-const DEBUG_ENV_PATH = ".dbg/soundcloud-playback.env";
 const execFileAsync = promisify(execFile);
+const preferredYouTubeProviders = new Map<
+  string,
+  { label: string; cachedAt: number }
+>();
 
-function getDebugConfig(): { url: string; sessionId: string } {
-  let url = DEBUG_SERVER_URL;
-  let sessionId = DEBUG_SESSION_ID;
-
-  try {
-    const envText = readFileSync(DEBUG_ENV_PATH, "utf8");
-    const nextUrl = envText.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim();
-    const nextSessionId = envText
-      .match(/^DEBUG_SESSION_ID=(.+)$/m)?.[1]
-      ?.trim();
-
-    if (nextUrl) url = nextUrl;
-    if (nextSessionId) sessionId = nextSessionId;
-  } catch {}
-
-  return { url, sessionId };
-}
+type VideoProvider = {
+  label: string;
+  run: (signal?: AbortSignal) => Promise<Record<string, unknown>>;
+};
 
 function reportDebugEvent(
-  runId: string,
-  hypothesisId: string,
-  location: string,
-  msg: string,
-  data: Record<string, unknown>
-) {
-  const { url, sessionId } = getDebugConfig();
-  if (!url) return;
+  _runId: string,
+  _hypothesisId: string,
+  _location: string,
+  _msg: string,
+  _data: Record<string, unknown>
+) {}
 
-  fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId,
-      runId,
-      hypothesisId,
-      location,
-      msg,
-      data,
-      ts: Date.now(),
-    }),
-  }).catch(() => {});
+function normalizeYouTubeSourceKey(source?: string): string {
+  return source === "youtubemusic" ? "youtubemusic" : "youtube";
+}
+
+function readPreferredYouTubeProvider(source?: string): string | null {
+  const sourceKey = normalizeYouTubeSourceKey(source);
+  const cached = preferredYouTubeProviders.get(sourceKey);
+  if (!cached) return null;
+  if (Date.now() - cached.cachedAt > YOUTUBE_PROVIDER_HINT_TTL_MS) {
+    preferredYouTubeProviders.delete(sourceKey);
+    return null;
+  }
+  return cached.label;
+}
+
+function writePreferredYouTubeProvider(
+  source: string | undefined,
+  label: string
+) {
+  if (!label) return;
+  preferredYouTubeProviders.set(normalizeYouTubeSourceKey(source), {
+    label,
+    cachedAt: Date.now(),
+  });
+}
+
+function parseYouTubeProviderHints(
+  hintValue: string | undefined,
+  source?: string
+): string[] {
+  const requestedHints = (hintValue || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const cachedHint = readPreferredYouTubeProvider(source);
+  return [...new Set([cachedHint, ...requestedHints].filter(Boolean))];
+}
+
+function prioritizeVideoProviders(
+  providers: VideoProvider[],
+  preferredHints: string[]
+): VideoProvider[] {
+  if (preferredHints.length === 0) return providers;
+
+  const preferred = providers.filter((provider) =>
+    preferredHints.includes(provider.label)
+  );
+  const fallback = providers.filter(
+    (provider) => !preferredHints.includes(provider.label)
+  );
+  return [...preferred, ...fallback];
+}
+
+async function tryVideoProvidersSequentially(
+  providers: VideoProvider[],
+  runId: string,
+  source?: string
+): Promise<Record<string, unknown> | null> {
+  const errors: string[] = [];
+
+  for (const provider of providers) {
+    try {
+      const controller = new AbortController();
+      const value = await provider.run(controller.signal);
+      controller.abort();
+      writePreferredYouTubeProvider(source, provider.label);
+      return {
+        ...value,
+        providerHint: provider.label,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`${provider.label}: ${message}`);
+      reportDebugEvent(
+        runId,
+        "H4",
+        "app/api/video/route.ts:fetchVideoDetails:provider-failure",
+        "[DEBUG] YouTube provider attempt failed",
+        {
+          source: source || "youtube",
+          provider: provider.label,
+          error: message,
+        }
+      );
+    }
+  }
+
+  if (errors.length === 0) return null;
+  throw new Error(errors.join(" | "));
 }
 
 function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
@@ -1501,7 +1563,12 @@ async function fetchVideoDetails(
   videoId: string,
   runId: string,
   source?: string,
-  options?: { title?: string; artist?: string; urlHint?: string }
+  options?: {
+    title?: string;
+    artist?: string;
+    urlHint?: string;
+    providerHint?: string;
+  }
 ): Promise<Record<string, unknown>> {
   if (source === "youtubemusic") {
     const providerEndpoints = await getProviderEndpoints();
@@ -1530,52 +1597,47 @@ async function fetchVideoDetails(
       getInvidiousInstances(),
       getPipedInstances(),
     ]);
-    const providers = [
-      ...invidiousInstances.map((instance) => ({
-        label: `invidious:${instance}`,
-        run: (signal?: AbortSignal) =>
-          fetchVideoFromInvidious(instance, videoId, source, signal),
-      })),
-      ...pipedInstances.map((instance) => ({
-        label: `piped:${instance}`,
-        run: (signal?: AbortSignal) =>
-          fetchVideoFromPiped(instance, videoId, source, signal),
-      })),
-    ];
-
-    const errors: string[] = [];
-    const controller = new AbortController();
+    const preferredHints = parseYouTubeProviderHints(
+      options?.providerHint,
+      source
+    );
+    const providers = prioritizeVideoProviders(
+      [
+        ...invidiousInstances.map((instance) => ({
+          label: `invidious:${instance}`,
+          run: (signal?: AbortSignal) =>
+            fetchVideoFromInvidious(instance, videoId, source, signal),
+        })),
+        ...pipedInstances.map((instance) => ({
+          label: `piped:${instance}`,
+          run: (signal?: AbortSignal) =>
+            fetchVideoFromPiped(instance, videoId, source, signal),
+        })),
+      ],
+      preferredHints
+    );
 
     try {
-      const value = await Promise.any(
-        providers.map(async (provider) => {
-          try {
-            return await provider.run(controller.signal);
-          } catch (error) {
-            errors.push(
-              `${provider.label}: ${
-                error instanceof Error ? error.message : String(error)
-              }`
-            );
-            throw error;
-          }
-        })
+      const value = await tryVideoProvidersSequentially(
+        providers,
+        runId,
+        source
       );
-      controller.abort();
-      return value;
-    } catch {
-      controller.abort();
+      if (value) {
+        return value;
+      }
+    } catch (error) {
+      const fallbackMetadata = await fetchYouTubeOEmbedMetadata(videoId);
+      if (fallbackMetadata) {
+        return {
+          ...fallbackMetadata,
+          source: source || "youtube",
+        };
+      }
+      throw error;
     }
 
-    const fallbackMetadata = await fetchYouTubeOEmbedMetadata(videoId);
-    if (fallbackMetadata) {
-      return {
-        ...fallbackMetadata,
-        source: source || "youtube",
-      };
-    }
-
-    throw new Error(errors.join(" | ") || "All YouTube providers failed");
+    throw new Error("All YouTube providers failed");
   }
 
   if (source === "soundcloud") {
@@ -1608,6 +1670,8 @@ export async function GET(request: NextRequest) {
   const title = searchParams.get("title") || undefined;
   const artist = searchParams.get("artist") || undefined;
   const urlHint = searchParams.get("url") || undefined;
+  const providerHint = searchParams.get("providerHint") || undefined;
+  const prewarm = searchParams.get("prewarm") === "1";
   const runId = `pre-${Date.now()}`;
   const requestKey = [
     source || "youtube",
@@ -1632,6 +1696,21 @@ export async function GET(request: NextRequest) {
     }
   );
   // #endregion
+
+  if (prewarm) {
+    if (source === "soundcloud") {
+      await Promise.allSettled([
+        getProviderEndpoints({ revalidate: true }),
+        getSoundCloudClientId(),
+      ]);
+      return NextResponse.json({ ok: true, source: "soundcloud" });
+    }
+
+    if (source === "youtube" || source === "youtubemusic" || !source) {
+      await Promise.allSettled([getInvidiousInstances(), getPipedInstances()]);
+      return NextResponse.json({ ok: true, source: source || "youtube" });
+    }
+  }
 
   if (!videoId) {
     // #region debug-point A:video-route-missing-id
@@ -1690,6 +1769,7 @@ export async function GET(request: NextRequest) {
         title,
         artist,
         urlHint,
+        providerHint,
       }).finally(() => {
         inflightRequests.delete(requestKey);
       });

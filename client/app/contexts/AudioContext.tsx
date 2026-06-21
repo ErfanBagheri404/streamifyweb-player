@@ -11,40 +11,84 @@ import React, {
   ReactNode,
 } from "react";
 import { useSettings } from "./SettingsContext";
-import { formatNumberByLanguage } from "../lib/i18n";
+import { formatNumberByLanguage, translate } from "../lib/i18n";
 import { isManagedRemoteAudioUrl } from "../lib/media-providers";
 import {
   getCachedProviderEndpointsSnapshot,
   getProviderEndpoints,
 } from "../lib/provider-endpoints";
+import { readSessionCache, writeSessionCache } from "../lib/session-cache";
 
 type AudioType = "file" | "hls" | "soundcloud-drm";
 type PlaybackStrategy = "audio" | "widget";
 export type AutoRetryPreference = "unknown" | "enabled" | "disabled";
 export type RepeatMode = "off" | "queue" | "one";
-const DEFAULT_PLAYBACK_ERROR =
+const DEFAULT_PLAYBACK_ERROR_EN =
   "Couldn't play this track. Try again or choose another one.";
+const SOUNDCLOUD_RESTRICTED_PLAYBACK_ERROR_EN =
+  "SoundCloud is restricted in your country. Use a VPN or change your IP to play SoundCloud songs.";
+const SOUNDCLOUD_TRACK_UNAVAILABLE_ERROR_EN =
+  "This SoundCloud track couldn't be loaded.";
+const LOAD_TRACK_NOW_ERROR_EN = "Couldn't load this track right now.";
+const SOUNDCLOUD_DRM_UNSUPPORTED_ERROR_EN =
+  "Encrypted SoundCloud playback is not supported in this browser";
+const SOUNDCLOUD_DRM_METADATA_ERROR_EN =
+  "Missing SoundCloud DRM license metadata";
 const AUTO_RETRY_STORAGE_KEY = "streamifyAutoRetryPlayback";
-const AUTO_RETRY_MESSAGE = "Auto retry is enabled and retrying...";
 const PLAYBACK_PROGRESS_UPDATE_MS = 250;
 const PLAYBACK_PROGRESS_MIN_DELTA_SECONDS = 0.2;
 const PLAYBACK_DURATION_MIN_DELTA_SECONDS = 0.5;
 const MEDIA_SESSION_POSITION_UPDATE_MS = 1000;
 const MEDIA_SESSION_POSITION_MIN_DELTA_SECONDS = 1;
+const YOUTUBE_PROVIDER_HINT_CACHE_PREFIX = "streamifyYoutubeProviderHint";
+const YOUTUBE_PROVIDER_HINT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const SOUNDCLOUD_WIDGET_LOAD_TIMEOUT_MS = 8000;
 let soundCloudRuntimeConfig =
   getCachedProviderEndpointsSnapshot().providers.soundcloud;
 let soundCloudRuntimeRefreshPromise: Promise<void> | null = null;
+let soundCloudRuntimeRefreshRequested = false;
 
 function ensureSoundCloudRuntimeConfig() {
-  if (typeof window === "undefined" || soundCloudRuntimeRefreshPromise) return;
+  if (
+    typeof window === "undefined" ||
+    soundCloudRuntimeRefreshPromise ||
+    soundCloudRuntimeRefreshRequested
+  ) {
+    return;
+  }
 
-  soundCloudRuntimeRefreshPromise = getProviderEndpoints({ revalidate: true })
+  soundCloudRuntimeRefreshRequested = true;
+  soundCloudRuntimeRefreshPromise = getProviderEndpoints()
     .then((providerEndpoints) => {
       soundCloudRuntimeConfig = providerEndpoints.providers.soundcloud;
+    })
+    .catch(() => {
+      soundCloudRuntimeRefreshRequested = false;
     })
     .finally(() => {
       soundCloudRuntimeRefreshPromise = null;
     });
+}
+
+function getYouTubeProviderHintCacheKey(source?: string): string {
+  return `${YOUTUBE_PROVIDER_HINT_CACHE_PREFIX}:${
+    source === "youtubemusic" ? "youtubemusic" : "youtube"
+  }`;
+}
+
+function readCachedYouTubeProviderHint(source?: string): string | null {
+  return readSessionCache<string>(
+    getYouTubeProviderHintCacheKey(source),
+    YOUTUBE_PROVIDER_HINT_CACHE_TTL_MS
+  );
+}
+
+function writeCachedYouTubeProviderHint(
+  source: string | undefined,
+  hint: string
+) {
+  if (!hint) return;
+  writeSessionCache(getYouTubeProviderHintCacheKey(source), hint);
 }
 
 export interface Song {
@@ -156,36 +200,13 @@ interface SoundCloudWidgetApi {
 
 let soundCloudWidgetApiPromise: Promise<SoundCloudWidgetApi> | null = null;
 
-const DEBUG_SERVER_URL =
-  process.env.NEXT_PUBLIC_STREAMIFY_DEBUG_SERVER_URL?.trim() || "";
-const DEBUG_SESSION_ID =
-  process.env.NEXT_PUBLIC_STREAMIFY_DEBUG_SESSION_ID?.trim() ||
-  "chrome-alt-tab-freeze";
-
 function reportDebugEvent(
-  runId: string,
-  hypothesisId: string,
-  location: string,
-  msg: string,
-  data: Record<string, unknown>
-) {
-  if (!DEBUG_SERVER_URL) return;
-  // #region debug-point H4:client-report-debug-event
-  fetch(DEBUG_SERVER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId: DEBUG_SESSION_ID,
-      runId,
-      hypothesisId,
-      location,
-      msg,
-      data,
-      ts: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
+  _runId: string,
+  _hypothesisId: string,
+  _location: string,
+  _msg: string,
+  _data: Record<string, unknown>
+) {}
 
 function resolveAudioUrl(audioUrl?: string): string {
   if (!audioUrl) return "";
@@ -215,19 +236,51 @@ async function loadSoundCloudWidgetApi(): Promise<SoundCloudWidgetApi> {
       const existingScript = document.getElementById(
         "soundcloud-widget-api"
       ) as HTMLScriptElement | null;
+      let settled = false;
+
+      const timeoutId = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        soundCloudWidgetApiPromise = null;
+        reject(
+          new Error(
+            "SoundCloud widget API request timed out. SoundCloud may be restricted in your network or country."
+          )
+        );
+      }, SOUNDCLOUD_WIDGET_LOAD_TIMEOUT_MS);
+
+      const finalizeResolve = (api: SoundCloudWidgetApi) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        resolve(api);
+      };
+
+      const finalizeReject = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        soundCloudWidgetApiPromise = null;
+        window.clearTimeout(timeoutId);
+        reject(error);
+      };
 
       const handleReady = () => {
         const api = (window as Window & { SC?: SoundCloudWidgetApi }).SC;
         if (api?.Widget) {
-          resolve(api);
+          finalizeResolve(api);
           return;
         }
-        reject(new Error("SoundCloud widget API loaded without SC.Widget"));
+        finalizeReject(
+          new Error("SoundCloud widget API loaded without SC.Widget")
+        );
       };
 
       const handleError = () => {
-        soundCloudWidgetApiPromise = null;
-        reject(new Error("Failed to load SoundCloud widget API"));
+        finalizeReject(
+          new Error(
+            "Failed to load SoundCloud widget API. SoundCloud may be restricted in your network or country."
+          )
+        );
       };
 
       if (existingScript) {
@@ -248,6 +301,19 @@ async function loadSoundCloudWidgetApi(): Promise<SoundCloudWidgetApi> {
   );
 
   return soundCloudWidgetApiPromise;
+}
+
+function isSoundCloudRestrictedError(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
+
+  return (
+    message.includes("soundcloud widget api") ||
+    message.includes("soundcloud may be restricted") ||
+    message.includes("request timed out")
+  );
 }
 
 function buildAudioProxyUrl(audioUrl: string): string {
@@ -605,6 +671,55 @@ function shouldRefreshResolvedAudio(song: Song): boolean {
 
 export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const { settings } = useSettings();
+  const playbackText = useCallback(
+    (key: string, params?: Record<string, string | number | undefined>) =>
+      translate(settings.language, key, params),
+    [settings.language]
+  );
+  const defaultPlaybackError = playbackText("playback.errorDefault");
+  const soundCloudRestrictedPlaybackError = playbackText(
+    "playback.soundcloudRestricted"
+  );
+  const autoRetryMessage = playbackText("playback.autoRetryStatus");
+  const localizePlaybackErrorMessage = useCallback(
+    (message: string) => {
+      switch (message.trim()) {
+        case DEFAULT_PLAYBACK_ERROR_EN:
+          return defaultPlaybackError;
+        case SOUNDCLOUD_RESTRICTED_PLAYBACK_ERROR_EN:
+          return soundCloudRestrictedPlaybackError;
+        case SOUNDCLOUD_TRACK_UNAVAILABLE_ERROR_EN:
+          return playbackText("playback.soundcloudTrackUnavailable");
+        case LOAD_TRACK_NOW_ERROR_EN:
+          return playbackText("playback.loadTrackNow");
+        case SOUNDCLOUD_DRM_UNSUPPORTED_ERROR_EN:
+          return playbackText("playback.soundcloudDrmUnsupported");
+        case SOUNDCLOUD_DRM_METADATA_ERROR_EN:
+          return playbackText("playback.soundcloudDrmMetadataMissing");
+        default:
+          return message;
+      }
+    },
+    [defaultPlaybackError, playbackText, soundCloudRestrictedPlaybackError]
+  );
+  const getSoundCloudPlaybackErrorMessage = useCallback(
+    (error: unknown): string => {
+      if (isSoundCloudRestrictedError(error)) {
+        return soundCloudRestrictedPlaybackError;
+      }
+
+      if (error instanceof Error && error.message) {
+        return localizePlaybackErrorMessage(error.message);
+      }
+
+      return defaultPlaybackError;
+    },
+    [
+      defaultPlaybackError,
+      localizePlaybackErrorMessage,
+      soundCloudRestrictedPlaybackError,
+    ]
+  );
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [recentSongs, setRecentSongs] = useState<Song[]>([]);
   const [playbackQueue, setPlaybackQueue] = useState<Song[]>([]);
@@ -843,7 +958,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setShowAutoRetryPrompt(false);
     setIsAutoRetrying(true);
     setPlaybackError(null);
-    setTransientAutoRetryStatus(AUTO_RETRY_MESSAGE);
+    setTransientAutoRetryStatus(autoRetryMessage);
 
     window.setTimeout(() => {
       const activeSong = currentSongRef.current;
@@ -993,6 +1108,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
   };
 
+  const pauseSoundCloudWidgetPlayback = () => {
+    const widget = soundCloudWidgetRef.current;
+    if (!widget) return;
+    try {
+      widget.pause();
+    } catch {}
+  };
+
   const destroyManagedPlayback = () => {
     destroyHlsPlayback();
     destroyShakaPlayback();
@@ -1053,7 +1176,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         }
       );
 
-      setPlaybackError(DEFAULT_PLAYBACK_ERROR);
+      setPlaybackError(defaultPlaybackError);
       console.error("Error playing audio:", error);
       setIsPlaying(false);
     });
@@ -1328,7 +1451,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       // Tear down the finished widget immediately so it cannot restart
       // while the next queued track is still being resolved.
-      destroySoundCloudWidgetPlayback();
+      destroySoundCloudWidgetPlayback(true);
 
       const queuedSongs = playbackQueueRef.current;
       const nextQueueIndex = getNextQueueIndex(
@@ -1389,8 +1512,18 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         !soundCloudWidgetRef.current && iframe.src === "about:blank";
       if (shouldBootstrapIframe) {
         iframe.src = widgetBootstrapUrl;
-        await new Promise<void>((resolve) => {
+        await new Promise<void>((resolve, reject) => {
+          const timeoutId = window.setTimeout(() => {
+            iframe.removeEventListener("load", handleLoad);
+            reject(
+              new Error(
+                "SoundCloud widget iframe request timed out. SoundCloud may be restricted in your network or country."
+              )
+            );
+          }, SOUNDCLOUD_WIDGET_LOAD_TIMEOUT_MS);
+
           const handleLoad = () => {
+            window.clearTimeout(timeoutId);
             iframe.removeEventListener("load", handleLoad);
             resolve();
           };
@@ -1519,7 +1652,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         );
         // #endregion
         if (cancelled) return;
-        setPlaybackError(DEFAULT_PLAYBACK_ERROR);
+        setPlaybackError(soundCloudRestrictedPlaybackError);
         setIsSongLoading(false);
         setIsPlaying(false);
       });
@@ -1585,7 +1718,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       );
       // #endregion
       if (!soundCloudWidgetTrackUrl) {
-        setPlaybackError("This SoundCloud track couldn't be loaded.");
+        setPlaybackError(playbackText("playback.soundcloudTrackUnavailable"));
         setIsSongLoading(false);
         setIsPlaying(false);
         return;
@@ -1613,9 +1746,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         );
         // #endregion
         console.error("Error initializing SoundCloud widget playback:", error);
-        setPlaybackError(
-          error instanceof Error ? error.message : DEFAULT_PLAYBACK_ERROR
-        );
+        setPlaybackError(getSoundCloudPlaybackErrorMessage(error));
         setIsSongLoading(false);
         setIsPlaying(false);
       });
@@ -1644,7 +1775,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         }
       );
       // #endregion
-      setPlaybackError(DEFAULT_PLAYBACK_ERROR);
+      setPlaybackError(defaultPlaybackError);
       setIsPlaying(false);
       return;
     }
@@ -1717,7 +1848,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           }
         );
 
-        setPlaybackError(DEFAULT_PLAYBACK_ERROR);
+        setPlaybackError(defaultPlaybackError);
         setIsSongLoading(false);
         setIsPlaying(false);
         destroyHlsPlayback();
@@ -1818,13 +1949,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       );
 
       if (!shaka.Player?.isBrowserSupported?.()) {
-        throw new Error(
-          "Encrypted SoundCloud playback is not supported in this browser"
-        );
+        throw new Error(SOUNDCLOUD_DRM_UNSUPPORTED_ERROR_EN);
       }
 
       if (!currentSong.drmLicenseUrl || !currentSong.drmScheme) {
-        throw new Error("Missing SoundCloud DRM license metadata");
+        throw new Error(SOUNDCLOUD_DRM_METADATA_ERROR_EN);
       }
 
       destroyManagedPlayback();
@@ -2284,7 +2413,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                 })(),
               })
             );
-            setPlaybackError(errorMessage || DEFAULT_PLAYBACK_ERROR);
+            setPlaybackError(
+              localizePlaybackErrorMessage(errorMessage || defaultPlaybackError)
+            );
             setIsSongLoading(false);
             setIsPlaying(false);
             destroyShakaPlayback();
@@ -2321,7 +2452,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           }
           console.error("Error initializing HLS playback:", error);
           setPlaybackError(
-            error instanceof Error ? error.message : DEFAULT_PLAYBACK_ERROR
+            error instanceof Error
+              ? localizePlaybackErrorMessage(error.message)
+              : defaultPlaybackError
           );
           setIsSongLoading(false);
           setIsPlaying(false);
@@ -2440,6 +2573,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   }, [currentSong?.duration, currentSong?.id, syncPlaybackStateFromElement]);
 
   useEffect(() => {
+    ensureSoundCloudRuntimeConfig();
+    void loadSoundCloudWidgetApi().catch(() => {});
+    void fetch("/api/video?source=soundcloud&prewarm=1").catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     if (shouldUseSoundCloudWidget(currentSong)) return;
@@ -2551,12 +2690,26 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     };
 
     const handleError = () => {
+      const activeSong = currentSongRef.current;
+      const expectedAudioUrl = resolveAudioUrl(activeSong?.audioUrl);
+      const currentElementAudioUrl = resolveAudioUrl(
+        audio.currentSrc || audio.src
+      );
+      if (
+        isSongLoading &&
+        (!expectedAudioUrl ||
+          !currentElementAudioUrl ||
+          currentElementAudioUrl !== expectedAudioUrl)
+      ) {
+        return;
+      }
+
       const mediaError = audio.error;
       if (
         tryNextAudioCandidate(
-          currentSong,
+          activeSong,
           "audio-element-error",
-          audio.currentSrc || audio.src || currentSong?.audioUrl
+          audio.currentSrc || audio.src || activeSong?.audioUrl
         )
       ) {
         return;
@@ -2568,7 +2721,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         "app/contexts/AudioContext.tsx:audio-event:error",
         "[DEBUG] audio element error",
         {
-          songId: currentSong?.id || null,
+          songId: activeSong?.id || null,
           currentSrc: audio.currentSrc || audio.src || null,
           networkState: audio.networkState,
           readyState: audio.readyState,
@@ -2577,7 +2730,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         }
       );
       // #endregion
-      setPlaybackError(DEFAULT_PLAYBACK_ERROR);
+      setPlaybackError(defaultPlaybackError);
       setIsSongLoading(false);
       setIsPlaying(false);
     };
@@ -2693,6 +2846,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     params.set("artist", song.artist);
     if (song.source) params.set("source", song.source);
     if (song.url) params.set("url", song.url);
+    if (isYouTubeSource(song.source)) {
+      const cachedProviderHint = readCachedYouTubeProviderHint(song.source);
+      if (cachedProviderHint) {
+        params.set("providerHint", cachedProviderHint);
+      }
+    }
 
     // #region debug-point H4:resolve-start
     reportDebugEvent(
@@ -2751,10 +2910,18 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     const responseError =
       typeof payload.error === "string" && payload.error.trim()
         ? payload.error.trim()
-        : "Couldn't load this track right now.";
+        : LOAD_TRACK_NOW_ERROR_EN;
+    const resolvedProviderHint =
+      typeof payload.providerHint === "string" && payload.providerHint.trim()
+        ? payload.providerHint.trim()
+        : "";
 
     if (!response.ok || !resolvedAudioUrl) {
       throw new Error(responseError);
+    }
+
+    if (isYouTubeSource(song.source) && resolvedProviderHint) {
+      writeCachedYouTubeProviderHint(song.source, resolvedProviderHint);
     }
 
     const resolvedId =
@@ -2891,7 +3058,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       } catch (error) {
         console.error("Error autoplaying recommended audio:", error);
         setPlaybackError(
-          error instanceof Error ? error.message : DEFAULT_PLAYBACK_ERROR
+          error instanceof Error
+            ? localizePlaybackErrorMessage(error.message)
+            : defaultPlaybackError
         );
         setIsSongLoading(false);
         setIsPlaying(false);
@@ -2974,6 +3143,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
 
     destroyManagedPlayback();
+    pauseSoundCloudWidgetPlayback();
     if (!shouldUseSoundCloudWidget(normalizedSong)) {
       destroySoundCloudWidgetPlayback();
     }
@@ -3027,6 +3197,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
 
     destroyManagedPlayback();
+    pauseSoundCloudWidgetPlayback();
     if (!shouldUseSoundCloudWidget(normalizedSong)) {
       destroySoundCloudWidgetPlayback();
     }
@@ -3123,7 +3294,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       );
       // #endregion
       setPlaybackError(
-        error instanceof Error ? error.message : DEFAULT_PLAYBACK_ERROR
+        error instanceof Error
+          ? localizePlaybackErrorMessage(error.message)
+          : defaultPlaybackError
       );
       clearSongLoading();
       throw error;

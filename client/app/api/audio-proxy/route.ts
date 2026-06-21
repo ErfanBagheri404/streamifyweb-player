@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import type { IncomingHttpHeaders } from "node:http";
 import http from "node:http";
 import https from "node:https";
@@ -7,27 +6,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import { getProviderEndpoints } from "../../lib/provider-endpoints";
 
-const DEBUG_ENV_FILE = ".dbg/soundcloud-geekin-fail.env";
-const DEBUG_SERVER_URL_FALLBACK = "";
-const DEBUG_SESSION_ID_FALLBACK = "soundcloud-geekin-fail";
-const debugConfig = (() => {
-  let serverUrl = DEBUG_SERVER_URL_FALLBACK;
-  let sessionId = DEBUG_SESSION_ID_FALLBACK;
-
-  try {
-    const envContents = fs.readFileSync(DEBUG_ENV_FILE, "utf8");
-    const parsedUrl = envContents
-      .match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]
-      ?.trim();
-    const parsedSessionId = envContents
-      .match(/^DEBUG_SESSION_ID=(.+)$/m)?.[1]
-      ?.trim();
-    if (parsedUrl) serverUrl = parsedUrl;
-    if (parsedSessionId) sessionId = parsedSessionId;
-  } catch {}
-
-  return { serverUrl, sessionId };
-})();
 const AUDIO_REQUEST_TIMEOUT_MS = 20000;
 const MAX_REDIRECTS = 5;
 const RETRYABLE_ERROR_CODES = new Set([
@@ -44,28 +22,12 @@ const GOOGLEVIDEO_MAX_RETRIES = 3;
 const JIOSAAVN_MAX_RETRIES = 3;
 
 function reportDebugEvent(
-  runId: string,
-  hypothesisId: string,
-  location: string,
-  msg: string,
-  data: Record<string, unknown>
-) {
-  if (!debugConfig.serverUrl) return;
-
-  fetch(debugConfig.serverUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId: debugConfig.sessionId,
-      runId,
-      hypothesisId,
-      location,
-      msg,
-      data,
-      ts: Date.now(),
-    }),
-  }).catch(() => {});
-}
+  _runId: string,
+  _hypothesisId: string,
+  _location: string,
+  _msg: string,
+  _data: Record<string, unknown>
+) {}
 
 interface ProxiedAudioResponse {
   statusCode: number;
@@ -511,7 +473,7 @@ export async function GET(request: NextRequest) {
         audioHost: new URL(audioUrl).host,
         hasRange: Boolean(range),
         upstreamPath: `${new URL(audioUrl).host}${new URL(audioUrl).pathname}`,
-        configuredDebugSession: debugConfig.sessionId,
+        configuredDebugSession: null,
         range: range || null,
         urlSummary: summarizeAudioUrl(audioUrl),
         requestHeaders: {

@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { NextRequest, NextResponse } from "next/server";
@@ -14,9 +13,6 @@ import {
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
-const DEBUG_ENV_PATH = ".dbg/soundcloud-collection-bug.env";
-const DEBUG_SERVER_URL_FALLBACK = "";
-const DEBUG_SESSION_ID_FALLBACK = "soundcloud-collection-bug";
 const COLLECTION_FETCH_TIMEOUT_MS = 12000;
 const execFileAsync = promisify(execFile);
 
@@ -44,48 +40,13 @@ type CollectionResponse = {
   }>;
 };
 
-function getDebugConfig(): { url: string; sessionId: string } {
-  let url = DEBUG_SERVER_URL_FALLBACK;
-  let sessionId = DEBUG_SESSION_ID_FALLBACK;
-
-  try {
-    const envText = readFileSync(DEBUG_ENV_PATH, "utf8");
-    const nextUrl = envText.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim();
-    const nextSessionId = envText
-      .match(/^DEBUG_SESSION_ID=(.+)$/m)?.[1]
-      ?.trim();
-
-    if (nextUrl) url = nextUrl;
-    if (nextSessionId) sessionId = nextSessionId;
-  } catch {}
-
-  return { url, sessionId };
-}
-
 function reportDebugEvent(
-  runId: string,
-  hypothesisId: string,
-  location: string,
-  msg: string,
-  data: Record<string, unknown>
-) {
-  const { url, sessionId } = getDebugConfig();
-  if (!url) return;
-
-  fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId,
-      runId,
-      hypothesisId,
-      location,
-      msg,
-      data,
-      ts: Date.now(),
-    }),
-  }).catch(() => {});
-}
+  _runId: string,
+  _hypothesisId: string,
+  _location: string,
+  _msg: string,
+  _data: Record<string, unknown>
+) {}
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)

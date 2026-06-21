@@ -79,7 +79,7 @@ export async function primeMediaProviderInstances(options?: {
 function ensureClientInstanceRefresh() {
   if (typeof window === "undefined" || clientRefreshRequested) return;
   clientRefreshRequested = true;
-  void primeMediaProviderInstances({ revalidate: true });
+  void primeMediaProviderInstances();
 }
 
 export async function getPipedInstances(): Promise<string[]> {

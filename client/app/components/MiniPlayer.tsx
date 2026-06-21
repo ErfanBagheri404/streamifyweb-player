@@ -316,13 +316,25 @@ const MiniPlayer: React.FC = () => {
       >
         {showAutoRetryPrompt ? (
           <div className="theme-surface theme-shadow-strong pointer-events-auto w-[min(92vw,420px)] rounded-[28px] border p-4 text-[color:var(--foreground)] backdrop-blur-2xl">
-            <p className="theme-muted text-xs font-semibold uppercase tracking-[0.18em]">
+            <p
+              dir="auto"
+              style={{ unicodeBidi: "plaintext" }}
+              className="theme-muted text-start text-xs font-semibold uppercase tracking-[0.18em]"
+            >
               {t("miniPlayer.playbackHelp")}
             </p>
-            <p className="mt-2 text-sm font-medium text-[color:var(--foreground)]">
+            <p
+              dir="auto"
+              style={{ unicodeBidi: "plaintext" }}
+              className="mt-2 text-start text-sm font-medium text-[color:var(--foreground)]"
+            >
               {t("miniPlayer.enableAutoRetryQuestion")}
             </p>
-            <p className="theme-muted mt-1 text-sm">
+            <p
+              dir="auto"
+              style={{ unicodeBidi: "plaintext" }}
+              className="theme-muted mt-1 text-start text-sm"
+            >
               {t("miniPlayer.enableAutoRetryDescription")}
             </p>
             <div className="mt-4 flex items-center justify-end gap-2">
@@ -343,7 +355,11 @@ const MiniPlayer: React.FC = () => {
             </div>
           </div>
         ) : autoRetryStatusMessage ? (
-          <div className="theme-overlay theme-shadow-floating pointer-events-auto rounded-full border px-4 py-2 text-sm font-medium text-[color:var(--foreground)] backdrop-blur-xl">
+          <div
+            dir="auto"
+            style={{ unicodeBidi: "plaintext" }}
+            className="theme-overlay theme-shadow-floating pointer-events-auto rounded-full border px-4 py-2 text-sm font-medium text-[color:var(--foreground)] backdrop-blur-xl"
+          >
             {autoRetryStatusMessage}
           </div>
         ) : null}
@@ -375,17 +391,23 @@ const MiniPlayer: React.FC = () => {
               )}
             </div>
             <div className="flex min-w-0 flex-col gap-1">
-              <h4 className="truncate text-[13px] font-medium text-[color:var(--foreground)] lg:text-sm">
+              <h4
+                dir="auto"
+                style={{ unicodeBidi: "plaintext" }}
+                className="truncate text-start text-[13px] font-medium text-[color:var(--foreground)] lg:text-sm"
+              >
                 {currentSong.title}
               </h4>
               <p
+                dir="auto"
+                style={{ unicodeBidi: "plaintext" }}
                 className={`truncate text-[11px] lg:text-xs ${
                   statusText
                     ? isSongLoading
                       ? "theme-muted"
                       : "text-[color:color-mix(in_srgb,var(--theme-accent)_86%,var(--foreground)_14%)]"
                     : "theme-muted"
-                }`}
+                } text-start`}
               >
                 {statusText || currentSong.artist}
               </p>

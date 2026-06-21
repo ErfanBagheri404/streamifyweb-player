@@ -69,11 +69,14 @@ export interface StreamifyRuntimeConfig {
 }
 
 let runtimeConfigPromise: Promise<StreamifyRuntimeConfig> | null = null;
+let runtimeConfigBackgroundRefreshPromise: Promise<void> | null = null;
 const RUNTIME_CONFIG_CACHE_KEY = "streamify-runtime-config-cache";
 const DEFAULT_RUNTIME_CONFIG_URL =
   "https://streamifyinstances.erfannodes.workers.dev/config";
 const RUNTIME_CONFIG_TTL_MS = 5 * 60 * 1000;
+const RUNTIME_CONFIG_BACKGROUND_REFRESH_INTERVAL_MS = 60 * 1000;
 let memoryCachedRuntimeConfig: RuntimeConfigCacheRecord | null = null;
+let lastRuntimeConfigBackgroundRefreshAt = 0;
 
 type RuntimeConfigCacheRecord = {
   etag?: string;
@@ -101,6 +104,8 @@ function getServerFetchSecret(): string {
 
 export function resetRuntimeConfigCache() {
   runtimeConfigPromise = null;
+  runtimeConfigBackgroundRefreshPromise = null;
+  lastRuntimeConfigBackgroundRefreshAt = 0;
 }
 
 function isRuntimeConfigFresh(cache: RuntimeConfigCacheRecord | null): boolean {
@@ -108,6 +113,10 @@ function isRuntimeConfigFresh(cache: RuntimeConfigCacheRecord | null): boolean {
 }
 
 function readCachedRuntimeConfig(): RuntimeConfigCacheRecord | null {
+  if (memoryCachedRuntimeConfig?.payload) {
+    return memoryCachedRuntimeConfig;
+  }
+
   if (typeof window === "undefined") {
     return memoryCachedRuntimeConfig;
   }
@@ -115,7 +124,9 @@ function readCachedRuntimeConfig(): RuntimeConfigCacheRecord | null {
   try {
     const raw = window.localStorage.getItem(RUNTIME_CONFIG_CACHE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as RuntimeConfigCacheRecord;
+    const parsed = JSON.parse(raw) as RuntimeConfigCacheRecord;
+    memoryCachedRuntimeConfig = parsed;
+    return parsed;
   } catch {
     return null;
   }
@@ -126,8 +137,9 @@ export function getCachedRuntimeConfigSnapshot(): StreamifyRuntimeConfig | null 
 }
 
 function writeCachedRuntimeConfig(cache: RuntimeConfigCacheRecord) {
+  memoryCachedRuntimeConfig = cache;
+
   if (typeof window === "undefined") {
-    memoryCachedRuntimeConfig = cache;
     return;
   }
 
@@ -186,6 +198,28 @@ async function fetchRuntimeConfig(
   }
 }
 
+function shouldThrottleBackgroundRefresh(): boolean {
+  return (
+    Date.now() - lastRuntimeConfigBackgroundRefreshAt <
+    RUNTIME_CONFIG_BACKGROUND_REFRESH_INTERVAL_MS
+  );
+}
+
+function requestRuntimeConfigBackgroundRefresh() {
+  if (typeof window === "undefined") return;
+  if (runtimeConfigPromise || runtimeConfigBackgroundRefreshPromise) return;
+  if (shouldThrottleBackgroundRefresh()) return;
+
+  const cached = readCachedRuntimeConfig();
+  lastRuntimeConfigBackgroundRefreshAt = Date.now();
+  runtimeConfigBackgroundRefreshPromise = fetchRuntimeConfig(cached)
+    .then(() => {})
+    .catch(() => {})
+    .finally(() => {
+      runtimeConfigBackgroundRefreshPromise = null;
+    });
+}
+
 export async function getRuntimeConfig(options?: {
   revalidate?: boolean;
 }): Promise<StreamifyRuntimeConfig> {
@@ -209,5 +243,11 @@ export async function getRuntimeConfig(options?: {
 }
 
 export async function primeRuntimeConfig(): Promise<StreamifyRuntimeConfig> {
-  return getRuntimeConfig({ revalidate: true });
+  const cached = readCachedRuntimeConfig();
+  if (cached?.payload) {
+    requestRuntimeConfigBackgroundRefresh();
+    return cached.payload;
+  }
+
+  return getRuntimeConfig();
 }

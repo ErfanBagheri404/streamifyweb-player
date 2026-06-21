@@ -28,8 +28,6 @@ import {
   getFilterOptions,
 } from "../components/search";
 
-const DEBUG_SERVER_URL = process.env.NEXT_PUBLIC_DEBUG_SERVER_URL || "";
-const DEBUG_SESSION_ID = "playback-source-500";
 const SEARCH_STATE_UPDATED_EVENT = "streamify-search-state-updated";
 const SEARCH_HISTORY_STORAGE_KEY = "searchHistory";
 const SEARCH_PAGE_SESSION_STATE_KEY = "streamify-search-page-session-state";
@@ -81,28 +79,12 @@ function filterSearchHistory(history: string[], query: string): string[] {
 }
 
 function reportDebugEvent(
-  runId: string,
-  hypothesisId: string,
-  location: string,
-  msg: string,
-  data: Record<string, unknown>
-) {
-  if (!DEBUG_SERVER_URL) return;
-
-  fetch(DEBUG_SERVER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sessionId: DEBUG_SESSION_ID,
-      runId,
-      hypothesisId,
-      location,
-      msg,
-      data,
-      ts: Date.now(),
-    }),
-  }).catch(() => {});
-}
+  _runId: string,
+  _hypothesisId: string,
+  _location: string,
+  _msg: string,
+  _data: Record<string, unknown>
+) {}
 
 // ─── Raw Piped item shape (partial) ────────────────────────
 interface RawPipedItem {
