@@ -958,6 +958,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setShowAutoRetryPrompt(false);
     setIsAutoRetrying(true);
     setPlaybackError(null);
+    setIsSongLoading(true);
     setTransientAutoRetryStatus(autoRetryMessage);
 
     window.setTimeout(() => {
@@ -1177,6 +1178,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       );
 
       setPlaybackError(defaultPlaybackError);
+      setIsSongLoading(false);
       console.error("Error playing audio:", error);
       setIsPlaying(false);
     });
@@ -3327,19 +3329,25 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const resumeSong = () => {
     if (!currentSong) return;
     if (shouldUseSoundCloudWidget(currentSong)) {
+      setPlaybackError(null);
+      setIsSongLoading(true);
       setIsPlaying(true);
       try {
         soundCloudWidgetRef.current?.play();
       } catch (error) {
         console.error("Error resuming SoundCloud widget:", error);
+        setIsSongLoading(false);
         setIsPlaying(false);
       }
       return;
     }
     if (audioRef.current) {
+      setPlaybackError(null);
+      setIsSongLoading(true);
       setIsPlaying(true);
       audioRef.current.play().catch((error) => {
         console.error("Error resuming audio:", error);
+        setIsSongLoading(false);
         setIsPlaying(false);
       });
     }

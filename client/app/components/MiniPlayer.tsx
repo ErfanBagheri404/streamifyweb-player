@@ -199,13 +199,14 @@ const MiniPlayer: React.FC = () => {
       const bounds = compactWaveformRef.current?.getBoundingClientRect();
       if (!bounds) return;
 
-      const ratio = Math.min(
+      const rawRatio = Math.min(
         Math.max((clientX - bounds.left) / bounds.width, 0),
         1
       );
+      const ratio = isRtl ? 1 - rawRatio : rawRatio;
       seekTo(duration * ratio);
     },
-    [duration, seekTo]
+    [duration, isRtl, seekTo]
   );
 
   useEffect(() => {
@@ -302,7 +303,7 @@ const MiniPlayer: React.FC = () => {
 
   return (
     <div
-      dir="ltr"
+      dir={isRtl ? "rtl" : "ltr"}
       className={`fixed bottom-[calc(4.6rem+env(safe-area-inset-bottom))] left-1.5 right-1.5 z-50 sm:bottom-[calc(4.85rem+env(safe-area-inset-bottom))] lg:bottom-3 lg:left-3 lg:right-3 ${
         isFullscreenOpen ? "hidden lg:block" : ""
       }`}
@@ -367,7 +368,7 @@ const MiniPlayer: React.FC = () => {
 
       <div className="theme-surface theme-shadow-strong rounded-[24px] border px-3 py-2 lg:rounded-full lg:p-2">
         <div className="mx-auto flex max-w-full flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center space-x-2.5 lg:flex-1 lg:space-x-3">
+          <div className="flex min-w-0 items-center gap-2.5 lg:flex-1 lg:gap-3">
             <div className="theme-surface-soft relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border transition lg:h-12 lg:w-12">
               {currentSong.coverUrl ? (
                 <Image
@@ -390,17 +391,17 @@ const MiniPlayer: React.FC = () => {
                 </div>
               )}
             </div>
-            <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
               <h4
-                dir="auto"
-                style={{ unicodeBidi: "plaintext" }}
+                dir={isRtl ? "rtl" : "ltr"}
+                style={{ unicodeBidi: "isolate" }}
                 className="truncate text-start text-[13px] font-medium text-[color:var(--foreground)] lg:text-sm"
               >
                 {currentSong.title}
               </h4>
               <p
-                dir="auto"
-                style={{ unicodeBidi: "plaintext" }}
+                dir={isRtl ? "rtl" : "ltr"}
+                style={{ unicodeBidi: "isolate" }}
                 className={`truncate text-[11px] lg:text-xs ${
                   statusText
                     ? isSongLoading
@@ -443,14 +444,24 @@ const MiniPlayer: React.FC = () => {
               <div
                 className="pointer-events-none absolute inset-y-0 z-10 w-px bg-[color:color-mix(in_srgb,var(--foreground)_90%,transparent)]"
                 style={{
-                  left:
-                    progressPercent <= 0
-                      ? "0px"
-                      : `calc(${progressPercent}% - 0.5px)`,
+                  ...(isRtl
+                    ? {
+                        right:
+                          progressPercent <= 0
+                            ? "0px"
+                            : `calc(${progressPercent}% - 0.5px)`,
+                      }
+                    : {
+                        left:
+                          progressPercent <= 0
+                            ? "0px"
+                            : `calc(${progressPercent}% - 0.5px)`,
+                      }),
                 }}
               />
             </button>
             <div
+              dir="ltr"
               className={`${spaceMono.className} whitespace-nowrap text-[11px] tabular-nums lg:text-xs`}
             >
               <span className="text-[color:var(--foreground)]">
@@ -493,7 +504,9 @@ const MiniPlayer: React.FC = () => {
                 alt={t("miniPlayer.previousTrack")}
                 width={34}
                 height={34}
-                className="theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
+                className={`theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px] ${
+                  isRtl ? "-scale-x-100" : ""
+                }`}
               />
             </button>
 
@@ -524,7 +537,9 @@ const MiniPlayer: React.FC = () => {
                 alt={t("miniPlayer.nextTrack")}
                 width={34}
                 height={34}
-                className="theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
+                className={`theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px] ${
+                  isRtl ? "-scale-x-100" : ""
+                }`}
               />
             </button>
 
@@ -548,7 +563,11 @@ const MiniPlayer: React.FC = () => {
                 className="theme-asset-icon h-[34px] w-[34px] lg:h-[42px] lg:w-[42px]"
               />
               {repeatBadgeLabel ? (
-                <span className="theme-surface absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full border px-1 text-[9px] font-black leading-none text-[color:var(--foreground)] shadow-sm">
+                <span
+                  className={`theme-surface absolute -top-1 flex min-w-4 items-center justify-center rounded-full border px-1 text-[9px] font-black leading-none text-[color:var(--foreground)] shadow-sm ${
+                    isRtl ? "-left-1" : "-right-1"
+                  }`}
+                >
                   {repeatBadgeLabel}
                 </span>
               ) : null}
@@ -556,7 +575,11 @@ const MiniPlayer: React.FC = () => {
 
             <div ref={volumeControlRef} className="relative flex items-center">
               {isVolumeOpen ? (
-                <div className="theme-overlay theme-shadow-strong absolute bottom-full right-0 mb-3 w-[min(85vw,220px)] rounded-2xl border px-4 py-4 backdrop-blur-xl lg:right-1 lg:w-[220px]">
+                <div
+                  className={`theme-overlay theme-shadow-strong absolute bottom-full mb-3 w-[min(85vw,220px)] rounded-2xl border px-4 py-4 backdrop-blur-xl lg:w-[220px] ${
+                    isRtl ? "left-0 lg:left-1" : "right-0 lg:right-1"
+                  }`}
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="theme-muted text-[11px] font-semibold uppercase tracking-[0.18em]">
@@ -574,7 +597,7 @@ const MiniPlayer: React.FC = () => {
                       {isMuted ? t("miniPlayer.unmute") : t("miniPlayer.mute")}
                     </button>
                   </div>
-                  <div className="mt-4 flex items-center gap-3">
+                  <div dir="ltr" className="mt-4 flex items-center gap-3">
                     <span className="theme-muted text-xs">0</span>
                     <input
                       type="range"
