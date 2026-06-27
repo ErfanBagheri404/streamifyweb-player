@@ -8,6 +8,7 @@ import {
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+const ARTIST_FETCH_TIMEOUT_MS = 6000;
 
 function isYouTubeChannelId(id: string): boolean {
   return id.startsWith("UC") || id.startsWith("U") || id.length === 24;
@@ -58,17 +59,24 @@ function toArray(value: unknown): any[] {
 }
 
 async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT, accept: "application/json" },
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ARTIST_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT, accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} ${text}`);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${text}`);
+    }
+
+    return res.json() as Promise<unknown>;
+  } finally {
+    clearTimeout(timer);
   }
-
-  return res.json() as Promise<unknown>;
 }
 
 async function fetchFirstSuccessfulJsonUrl(urls: string[]): Promise<unknown> {
@@ -173,6 +181,11 @@ function absolutizeUrl(url: string, invidiousBase: string): string {
   if (url.startsWith("//")) return `https:${url}`;
   if (url.startsWith("/")) return `${invidiousBase}${url}`;
   return url;
+}
+
+function buildInvidiousImageProxyUrl(url: string): string {
+  if (!url) return "";
+  return `/api/invidious-image?url=${encodeURIComponent(url)}`;
 }
 
 function pickBestImageUrl(
@@ -394,8 +407,12 @@ export async function GET(request: NextRequest) {
     const artist: ArtistPayload["artist"] = {
       id,
       name,
-      image: pickBestImageUrl(invidiousChannel.authorThumbnails, invidiousBase),
-      banner: pickBestImageUrl(invidiousChannel.authorBanners, invidiousBase),
+      image: buildInvidiousImageProxyUrl(
+        pickBestImageUrl(invidiousChannel.authorThumbnails, invidiousBase)
+      ),
+      banner: buildInvidiousImageProxyUrl(
+        pickBestImageUrl(invidiousChannel.authorBanners, invidiousBase)
+      ),
       subscribers: safeNumber(invidiousChannel.subCount),
       verified: Boolean(invidiousChannel.verified),
       description: safeString(invidiousChannel.description),
@@ -408,7 +425,9 @@ export async function GET(request: NextRequest) {
       return {
         id: safeString(v.videoId) || safeString(v.id),
         title: safeString(v.title) || "Unknown",
-        thumbnail: pickBestImageUrl(thumbnails, invidiousBase),
+        thumbnail: buildInvidiousImageProxyUrl(
+          pickBestImageUrl(thumbnails, invidiousBase)
+        ),
         views: safeNumber(v.viewCount),
         duration: safeNumber(v.lengthSeconds),
       };
@@ -426,9 +445,8 @@ export async function GET(request: NextRequest) {
       const payload = {
         id: playlistId,
         title: safeString(p.title) || "Unknown",
-        thumbnail: absolutizeUrl(
-          safeString(p.playlistThumbnail),
-          invidiousBase
+        thumbnail: buildInvidiousImageProxyUrl(
+          absolutizeUrl(safeString(p.playlistThumbnail), invidiousBase)
         ),
         videoCount: safeNumber(p.videoCount),
       };

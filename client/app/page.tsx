@@ -9,6 +9,7 @@ import { type Song, useAudio } from "./contexts/AudioContext";
 import { useAppLanguage } from "./hooks/useAppLanguage";
 import { getUserAvatarUrl, getUserDisplayName } from "./lib/auth-user";
 import { buildArtistRouteHref, canOpenArtistRoute } from "./lib/artist-routing";
+import { INVIDIOUS_INSTANCES } from "./lib/media-providers";
 import { getSupabaseBrowserClient } from "./lib/supabase/browser";
 
 const HOME_ARTIST_BANNER_CACHE_KEY = "homeArtistBannerCache";
@@ -126,6 +127,29 @@ function writeHomeArtistBannerCache(cache: HomeArtistBannerCache) {
       JSON.stringify(cache)
     );
   } catch {}
+}
+
+function normalizeHomeArtistBannerUrl(url: string): string {
+  if (!url) return "";
+
+  try {
+    const parsed = new URL(url, window.location.origin);
+    const isManagedInvidiousHost = INVIDIOUS_INSTANCES.some((instance) => {
+      try {
+        return new URL(instance).host === parsed.host;
+      } catch {
+        return false;
+      }
+    });
+
+    if (!isManagedInvidiousHost) {
+      return url;
+    }
+
+    return `/api/invidious-image?url=${encodeURIComponent(parsed.toString())}`;
+  } catch {
+    return url;
+  }
 }
 
 function PlayGlyph({ className = "h-4 w-4" }: { className?: string }) {
@@ -505,7 +529,7 @@ export default function Home() {
       const cachedBanner = bannerCache[artistId]?.banner;
 
       if (cachedBanner) {
-        setHeroBanner(cachedBanner);
+        setHeroBanner(normalizeHomeArtistBannerUrl(cachedBanner));
         return;
       }
 
@@ -521,7 +545,9 @@ export default function Home() {
 
         if (!response.ok || cancelled) return;
 
-        const nextBanner = payload.artist?.banner || "";
+        const nextBanner = normalizeHomeArtistBannerUrl(
+          payload.artist?.banner || ""
+        );
         setHeroBanner(nextBanner);
 
         if (nextBanner) {

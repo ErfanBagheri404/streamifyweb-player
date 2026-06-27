@@ -234,12 +234,16 @@ function mergeProviderEndpoints(
 
   return {
     instances: {
-      piped:
-        pipedInstances.length > 0 ? pipedInstances : defaults.instances.piped,
-      invidious:
+      piped: dedupeStrings(
+        pipedInstances.length > 0
+          ? [...pipedInstances, ...defaults.instances.piped]
+          : defaults.instances.piped
+      ),
+      invidious: dedupeStrings(
         invidiousInstances.length > 0
-          ? invidiousInstances
-          : defaults.instances.invidious,
+          ? [...invidiousInstances, ...defaults.instances.invidious]
+          : defaults.instances.invidious
+      ),
     },
     providers: {
       search: {
