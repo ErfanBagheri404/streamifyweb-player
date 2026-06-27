@@ -1,5 +1,13 @@
 const YOUTUBE_IMAGE_BASE = "https://i.ytimg.com";
-const DEFAULT_THUMBNAIL_VARIANT = "hqdefault.jpg";
+const DEFAULT_THUMBNAIL_VARIANT = "maxresdefault.jpg";
+type YouTubeThumbnailOutput =
+  | "jpg"
+  | "jxl"
+  | "png"
+  | "gif"
+  | "tiff"
+  | "webp"
+  | "json";
 
 function cleanValue(value: string | null | undefined): string {
   return (value || "").trim().replace(/^["'`]+|["'`]+$/g, "");
@@ -68,17 +76,62 @@ function extractYouTubeThumbnailDetails(value: string): {
   };
 }
 
+function normalizePositiveInt(value: number | null | undefined): string | null {
+  if (!Number.isFinite(value) || !value || value <= 0) return null;
+  return String(Math.floor(value));
+}
+
+function normalizeQuality(value: number | null | undefined): string | null {
+  if (!Number.isFinite(value) || !value) return null;
+  const quality = Math.max(1, Math.min(100, Math.round(value)));
+  return String(quality);
+}
+
 function buildYouTubeThumbnailApiUrl(
   videoId: string,
-  variant: string,
-  useWebp: boolean
+  options: {
+    variant: string;
+    useWebp: boolean;
+    width?: number;
+    height?: number;
+    fit?: string;
+    alignment?: string;
+    trim?: string | number;
+    output?: YouTubeThumbnailOutput;
+    quality?: number;
+  }
 ): string {
   const params = new URLSearchParams({
     id: videoId,
-    variant,
+    variant: options.variant,
   });
-  if (useWebp) {
+  const width = normalizePositiveInt(options.width);
+  const height = normalizePositiveInt(options.height);
+  const quality = normalizeQuality(options.quality);
+
+  if (options.useWebp) {
     params.set("webp", "1");
+  }
+  if (width) {
+    params.set("w", width);
+  }
+  if (height) {
+    params.set("h", height);
+  }
+  if (options.fit?.trim()) {
+    params.set("fit", options.fit.trim());
+  }
+  if (options.alignment?.trim()) {
+    params.set("a", options.alignment.trim());
+  }
+  if (options.trim != null && String(options.trim).trim()) {
+    params.set("trim", String(options.trim).trim());
+  }
+  if (options.output?.trim()) {
+    params.set("output", options.output.trim());
+  }
+  if (quality) {
+    params.set("q", quality);
   }
   return `/api/youtube-thumbnail?${params.toString()}`;
 }
@@ -87,6 +140,13 @@ export function normalizeYouTubeThumbnailUrl(input: {
   url?: string | null;
   videoId?: string | null;
   variant?: string;
+  width?: number;
+  height?: number;
+  fit?: string;
+  alignment?: string;
+  trim?: string | number;
+  output?: YouTubeThumbnailOutput;
+  quality?: number;
 }): string | undefined {
   const cleanedUrl = cleanValue(input.url);
   const videoId =
@@ -94,11 +154,18 @@ export function normalizeYouTubeThumbnailUrl(input: {
 
   if (videoId) {
     const thumbnailDetails = extractYouTubeThumbnailDetails(cleanedUrl);
-    return buildYouTubeThumbnailApiUrl(
-      videoId,
-      input.variant || thumbnailDetails.variant || DEFAULT_THUMBNAIL_VARIANT,
-      thumbnailDetails.useWebp
-    );
+    return buildYouTubeThumbnailApiUrl(videoId, {
+      variant:
+        input.variant || DEFAULT_THUMBNAIL_VARIANT || thumbnailDetails.variant,
+      useWebp: thumbnailDetails.useWebp,
+      width: input.width,
+      height: input.height,
+      fit: input.fit,
+      alignment: input.alignment,
+      trim: input.trim,
+      output: input.output,
+      quality: input.quality,
+    });
   }
 
   return cleanedUrl || undefined;

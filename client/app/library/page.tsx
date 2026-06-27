@@ -33,6 +33,7 @@ import {
   pushCloudLibrarySnapshot,
 } from "../lib/cloud-library-sync";
 import { getSupabaseBrowserClient } from "../lib/supabase/browser";
+import { normalizeYouTubeThumbnailUrl } from "../lib/youtube-thumbnails";
 
 type FilterChip =
   | "Playlists"
@@ -51,6 +52,27 @@ interface ArtistSummary {
   artistId?: string;
   source?: string;
   href?: string | null;
+}
+
+function getLibraryArtworkUrl(song: Song): string | undefined {
+  if (!song.coverUrl) return undefined;
+  if (song.source !== "youtube" && song.source !== "youtubemusic") {
+    return song.coverUrl;
+  }
+  return (
+    normalizeYouTubeThumbnailUrl({
+      url: song.coverUrl,
+      videoId: song.id,
+      variant: "maxresdefault.jpg",
+      width: 512,
+      height: 512,
+      fit: "cover",
+      alignment: "attention",
+      trim: 10,
+      output: "webp",
+      quality: 90,
+    }) || song.coverUrl
+  );
 }
 
 type LibraryGridItem =
@@ -338,9 +360,13 @@ function SmartPlaylistArtwork({
     const seen = new Set<string>();
     const out: typeof songs = [];
     for (const song of songs) {
-      if (!song?.coverUrl || seen.has(song.id)) continue;
+      const coverUrl = getLibraryArtworkUrl(song);
+      if (!coverUrl || seen.has(song.id)) continue;
       seen.add(song.id);
-      out.push(song);
+      out.push({
+        ...song,
+        coverUrl,
+      });
       if (out.length >= 4) break;
     }
     return out;

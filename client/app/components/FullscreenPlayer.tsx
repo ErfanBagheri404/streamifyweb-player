@@ -20,6 +20,7 @@ import {
   findActiveLyricIndex,
   TimedLyricLine,
 } from "../lib/lyrics";
+import { normalizeYouTubeThumbnailUrl } from "../lib/youtube-thumbnails";
 
 const DEFAULT_PALETTE = {
   primary: [138, 18, 7] as [number, number, number],
@@ -346,6 +347,19 @@ export default function FullscreenPlayer() {
   const [fetchedRelatedSongs, setFetchedRelatedSongs] = useState<Song[]>([]);
   const [isLoadingRelatedSongs, setIsLoadingRelatedSongs] = useState(false);
   const { showToast } = useToast();
+  const fullscreenCoverUrl = useMemo(() => {
+    if (!currentSong?.coverUrl) return currentSong?.coverUrl;
+    if (!isYouTubeBackedSource(currentSong.source)) return currentSong.coverUrl;
+    return (
+      normalizeYouTubeThumbnailUrl({
+        url: currentSong.coverUrl,
+        videoId: currentSong.id,
+        variant: "maxresdefault.jpg",
+        output: "webp",
+        quality: 100,
+      }) || currentSong.coverUrl
+    );
+  }, [currentSong?.coverUrl, currentSong?.id, currentSong?.source]);
 
   const upNextSongs = useMemo(() => {
     if (!currentSong || queueIndex < 0) return [];
@@ -387,7 +401,7 @@ export default function FullscreenPlayer() {
   }, [closeFullscreen]);
 
   useEffect(() => {
-    if (!currentSong?.coverUrl) return;
+    if (!fullscreenCoverUrl) return;
 
     let isCancelled = false;
     const image = new window.Image();
@@ -408,12 +422,12 @@ export default function FullscreenPlayer() {
       setRelatedPalette(DEFAULT_PALETTE);
     };
 
-    image.src = currentSong.coverUrl;
+    image.src = fullscreenCoverUrl;
 
     return () => {
       isCancelled = true;
     };
-  }, [currentSong?.coverUrl]);
+  }, [fullscreenCoverUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -951,10 +965,10 @@ export default function FullscreenPlayer() {
 
       <div className="grid min-h-full w-full min-w-0 gap-2 overflow-x-hidden lg:h-full lg:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)]">
         <section className="relative min-h-[54svh] min-w-0 overflow-hidden rounded-xl bg-[#8a1207] lg:min-h-[320px]">
-          {currentSong.coverUrl ? (
+          {fullscreenCoverUrl ? (
             <>
               <Image
-                src={currentSong.coverUrl}
+                src={fullscreenCoverUrl}
                 alt={currentSong.title}
                 fill
                 className="object-cover"
