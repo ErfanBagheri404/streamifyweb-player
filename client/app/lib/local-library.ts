@@ -1,6 +1,7 @@
 "use client";
 
 import type { Song } from "../contexts/AudioContext";
+import { normalizeYouTubeThumbnailUrl } from "./youtube-thumbnails";
 
 export const PLAYLISTS_STORAGE_KEY = "libraryUserPlaylists";
 export const LIKED_SONGS_STORAGE_KEY = "libraryLikedSongs";
@@ -60,6 +61,14 @@ function getSongStorageKey(song: Pick<Song, "id" | "source">): string {
 }
 
 function normalizeSongSnapshot(song: Song): Song {
+  const normalizedCoverUrl =
+    song.source === "youtube" || song.source === "youtubemusic"
+      ? normalizeYouTubeThumbnailUrl({
+          url: song.coverUrl,
+          videoId: song.id,
+        }) || song.coverUrl
+      : song.coverUrl;
+
   return {
     id: song.id,
     title: song.title,
@@ -67,7 +76,7 @@ function normalizeSongSnapshot(song: Song): Song {
     artistId: song.artistId,
     artistImage: song.artistImage,
     artistSource: song.artistSource,
-    coverUrl: song.coverUrl,
+    coverUrl: normalizedCoverUrl,
     audioUrl: song.audioUrl,
     audioUrls: song.audioUrls,
     audioType: song.audioType,

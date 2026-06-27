@@ -16,6 +16,10 @@ const nextConfig = {
       },
       {
         protocol: "https",
+        hostname: "wsrv.nl",
+      },
+      {
+        protocol: "https",
         hostname: "proxy.piped.private.coffee",
         pathname: "/**",
       },

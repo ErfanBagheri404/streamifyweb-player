@@ -30,6 +30,7 @@ import {
 import { useAppLanguage } from "../../../hooks/useAppLanguage";
 import { usePageLoadingToast } from "../../../hooks/usePageLoadingToast";
 import { findSavedCollectionRouteContext } from "../../../lib/navigation-state";
+import { normalizeYouTubeThumbnailUrl } from "../../../lib/youtube-thumbnails";
 import PlaylistCreateModal from "../../../components/PlaylistCreateModal";
 
 function reportDebugEvent(
@@ -416,7 +417,10 @@ function getCollectionEntries(item: SearchResult | null): CollectionEntry[] {
     return item.videos.map((video, index) => ({
       id: video.videoId || video.id || `${item.id}-${index}`,
       title: video.title || `Track ${index + 1}`,
-      thumbnailUrl: video.videoThumbnails?.[0]?.url,
+      thumbnailUrl: normalizeYouTubeThumbnailUrl({
+        url: video.videoThumbnails?.[0]?.url,
+        videoId: video.videoId || video.id,
+      }),
       duration: video.lengthSeconds,
       artist: item.author,
       subtitle: item.author,

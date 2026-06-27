@@ -17,6 +17,7 @@ import {
   getSearchCategoryPlaylistHref,
   type SearchCategoryPlaylist,
 } from "../lib/search-category-playlists";
+import { normalizeYouTubeThumbnailUrl } from "../lib/youtube-thumbnails";
 import {
   SearchInput,
   FilterBar,
@@ -277,6 +278,21 @@ function normalizeArtistRouteId(value?: string): string {
 }
 
 function getBestThumbnail(raw: RawPipedItem, source: string): string {
+  const normalizedYouTubeThumbnail =
+    source === "youtube" || source === "youtubemusic"
+      ? normalizeYouTubeThumbnailUrl({
+          url:
+            raw.thumbnailUrl ||
+            raw.thumbnail ||
+            raw.videoThumbnails?.[0]?.url ||
+            raw.img,
+          videoId: raw.videoId || raw.id || raw.url,
+        })
+      : undefined;
+  if (normalizedYouTubeThumbnail) {
+    return normalizedYouTubeThumbnail;
+  }
+
   if (Array.isArray(raw.authorThumbnails) && raw.authorThumbnails.length > 0) {
     return [...raw.authorThumbnails].sort(
       (a, b) => scoreImageQuality(b) - scoreImageQuality(a)

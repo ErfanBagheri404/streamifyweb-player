@@ -18,6 +18,7 @@ import {
   getProviderEndpoints,
 } from "../lib/provider-endpoints";
 import { readSessionCache, writeSessionCache } from "../lib/session-cache";
+import { normalizeYouTubeThumbnailUrl } from "../lib/youtube-thumbnails";
 
 type AudioType = "file" | "hls" | "soundcloud-drm";
 type PlaybackStrategy = "audio" | "widget";
@@ -569,8 +570,16 @@ function normalizeAudioCandidates(song: Song): string[] {
 }
 
 function normalizeSong(song: Song): Song {
+  const normalizedCoverUrl = isYouTubeSource(song.source)
+    ? normalizeYouTubeThumbnailUrl({
+        url: song.coverUrl,
+        videoId: song.id,
+      }) || song.coverUrl
+    : song.coverUrl;
+
   return {
     ...song,
+    coverUrl: normalizedCoverUrl,
     cachedAt: song.cachedAt ?? Date.now(),
   };
 }

@@ -8,6 +8,10 @@ import {
   buildProviderUrlCandidates,
   getProviderEndpoints,
 } from "../../lib/provider-endpoints";
+import {
+  extractYouTubeVideoId,
+  normalizeYouTubeThumbnailUrl,
+} from "../../lib/youtube-thumbnails";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
@@ -109,7 +113,28 @@ function upgradeSoundCloudImage(url: string): string {
 
 function rewriteInvidiousThumbs(item: unknown, instanceBase: string): unknown {
   const obj = item as Record<string, unknown>;
-  const rewriteArray = (key: string) => {
+  const videoId =
+    typeof obj.videoId === "string"
+      ? obj.videoId
+      : typeof obj.id === "string"
+      ? obj.id
+      : extractYouTubeVideoId(typeof obj.url === "string" ? obj.url : "");
+  const rewriteThumbnailArray = (key: string) => {
+    const arr = obj[key] as Array<Record<string, unknown>> | undefined;
+    if (!Array.isArray(arr)) return;
+    obj[key] = arr.map((t) => {
+      const url = typeof t?.url === "string" ? t.url : "";
+      return {
+        ...t,
+        url:
+          normalizeYouTubeThumbnailUrl({
+            url: absolutizeUrl(url, instanceBase),
+            videoId,
+          }) || absolutizeUrl(url, instanceBase),
+      };
+    });
+  };
+  const rewriteAbsoluteArray = (key: string) => {
     const arr = obj[key] as Array<Record<string, unknown>> | undefined;
     if (!Array.isArray(arr)) return;
     obj[key] = arr.map((t) => {
@@ -117,8 +142,22 @@ function rewriteInvidiousThumbs(item: unknown, instanceBase: string): unknown {
       return { ...t, url: absolutizeUrl(url, instanceBase) };
     });
   };
-  rewriteArray("videoThumbnails");
-  rewriteArray("authorThumbnails");
+  rewriteThumbnailArray("videoThumbnails");
+  rewriteAbsoluteArray("authorThumbnails");
+  if (typeof obj.thumbnail === "string") {
+    obj.thumbnail =
+      normalizeYouTubeThumbnailUrl({
+        url: absolutizeUrl(obj.thumbnail, instanceBase),
+        videoId,
+      }) || absolutizeUrl(obj.thumbnail, instanceBase);
+  }
+  if (typeof obj.thumbnailUrl === "string") {
+    obj.thumbnailUrl =
+      normalizeYouTubeThumbnailUrl({
+        url: absolutizeUrl(obj.thumbnailUrl, instanceBase),
+        videoId,
+      }) || absolutizeUrl(obj.thumbnailUrl, instanceBase);
+  }
   return obj;
 }
 
@@ -209,6 +248,46 @@ async function searchPiped(
         } catch {
           // Ignore parsing errors
         }
+      }
+      const videoId =
+        typeof entry.videoId === "string"
+          ? entry.videoId
+          : typeof entry.id === "string"
+          ? entry.id
+          : extractYouTubeVideoId(
+              typeof entry.url === "string" ? entry.url : ""
+            );
+      if (typeof entry.thumbnail === "string") {
+        entry.thumbnail =
+          normalizeYouTubeThumbnailUrl({
+            url: absolutizeUrl(entry.thumbnail, instance),
+            videoId,
+          }) || absolutizeUrl(entry.thumbnail, instance);
+      }
+      if (typeof entry.thumbnailUrl === "string") {
+        entry.thumbnailUrl =
+          normalizeYouTubeThumbnailUrl({
+            url: absolutizeUrl(entry.thumbnailUrl, instance),
+            videoId,
+          }) || absolutizeUrl(entry.thumbnailUrl, instance);
+      }
+      if (Array.isArray(entry.videoThumbnails)) {
+        entry.videoThumbnails = entry.videoThumbnails.map((thumbnail) => {
+          const record =
+            thumbnail &&
+            typeof thumbnail === "object" &&
+            !Array.isArray(thumbnail)
+              ? (thumbnail as Record<string, unknown>)
+              : {};
+          const url =
+            typeof record.url === "string"
+              ? normalizeYouTubeThumbnailUrl({
+                  url: absolutizeUrl(record.url, instance),
+                  videoId,
+                }) || absolutizeUrl(record.url, instance)
+              : record.url;
+          return { ...record, url };
+        });
       }
       return { ...entry, source: "youtube" };
     });
@@ -370,7 +449,6 @@ async function searchYtify(
   const endpoints = await getProviderEndpoints();
   const ytifyInstance = endpoints.providers.search.ytifyInstance;
   const youtubeWebBase = endpoints.providers.youtube.webBase;
-  const youtubeImageBase = endpoints.providers.youtube.imageBase;
   const f = (filter || "all").toLowerCase();
   const ytifyUrlCandidates = buildProviderUrlCandidates(
     ytifyInstance,
@@ -413,7 +491,12 @@ async function searchYtify(
     const authorId = typeof e.authorId === "string" ? e.authorId : "";
     const durationSeconds = parseDurationToSeconds(e.duration);
 
-    const thumb = id ? `${youtubeImageBase}/vi/${id}/hqdefault.jpg` : "";
+    const thumb = id
+      ? normalizeYouTubeThumbnailUrl({
+          videoId: id,
+          variant: "hqdefault.jpg",
+        }) || ""
+      : "";
 
     return {
       source: "youtube",
@@ -838,8 +921,7 @@ async function searchMixed(
   limit: number
 ): Promise<SearchResponse> {
   const normalizedFilter = (filter || "all").toLowerCase();
-  const youtubeFilter =
-    normalizedFilter === "playlists" ? "playlists" : "all";
+  const youtubeFilter = normalizedFilter === "playlists" ? "playlists" : "all";
   const youtubeMusicFilter =
     normalizedFilter === "playlists" ? "playlists" : "all";
   const soundCloudTasks =
@@ -851,13 +933,17 @@ async function searchMixed(
           searchSoundCloud(query, "albums", page, Math.max(8, limit / 2)),
         ];
 
-  const [youtubeResult, youtubeMusicResult, jioSaavnResult, ...soundCloudResults] =
-    await Promise.all([
-      searchYouTubeDefault(query, youtubeFilter, page),
-      searchYouTubeMusic(query, youtubeMusicFilter),
-      searchJioSaavn(query, normalizedFilter),
-      ...soundCloudTasks,
-    ]);
+  const [
+    youtubeResult,
+    youtubeMusicResult,
+    jioSaavnResult,
+    ...soundCloudResults
+  ] = await Promise.all([
+    searchYouTubeDefault(query, youtubeFilter, page),
+    searchYouTubeMusic(query, youtubeMusicFilter),
+    searchJioSaavn(query, normalizedFilter),
+    ...soundCloudTasks,
+  ]);
 
   const items = buildMixedSearchItems([
     youtubeResult.items,

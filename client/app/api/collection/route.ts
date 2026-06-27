@@ -10,6 +10,7 @@ import {
   buildProviderUrlCandidates,
   getProviderEndpoints,
 } from "../../lib/provider-endpoints";
+import { normalizeYouTubeThumbnailUrl } from "../../lib/youtube-thumbnails";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
@@ -372,7 +373,10 @@ async function fetchPipedPlaylist(
             title: safeString(record.title) || `Track ${index + 1}`,
             subtitle: safeString(record.uploaderName),
             artist: safeString(record.uploaderName),
-            thumbnailUrl: safeString(record.thumbnail),
+            thumbnailUrl: normalizeYouTubeThumbnailUrl({
+              url: safeString(record.thumbnail),
+              videoId,
+            }),
             duration: safeNumber(record.duration),
             url: streamUrl,
             album: title,
@@ -386,7 +390,9 @@ async function fetchPipedPlaylist(
           id: playlistId,
           title,
           author: safeString(payload.uploader),
-          thumbnailUrl: safeString(payload.thumbnailUrl),
+          thumbnailUrl: normalizeYouTubeThumbnailUrl({
+            url: safeString(payload.thumbnailUrl),
+          }),
           url:
             source === "youtubemusic"
               ? `${youtube.musicBase}/playlist?list=${encodeURIComponent(
@@ -443,7 +449,10 @@ async function fetchInvidiousMix(
             title: safeString(record.title) || `Track ${index + 1}`,
             subtitle: safeString(record.author),
             artist: safeString(record.author),
-            thumbnailUrl: safeString(thumbnail?.url),
+            thumbnailUrl: normalizeYouTubeThumbnailUrl({
+              url: safeString(thumbnail?.url),
+              videoId: safeString(record.videoId),
+            }),
             duration: safeNumber(record.lengthSeconds),
             url: safeString(record.videoId)
               ? `${youtube.webBase}/watch?v=${encodeURIComponent(

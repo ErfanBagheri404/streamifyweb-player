@@ -10,6 +10,10 @@ import {
   buildProviderUrlCandidates,
   getProviderEndpoints,
 } from "../../lib/provider-endpoints";
+import {
+  extractYouTubeVideoId,
+  normalizeYouTubeThumbnailUrl,
+} from "../../lib/youtube-thumbnails";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
@@ -1294,10 +1298,16 @@ async function fetchYouTubeOEmbedMetadata(
       thumbnailUrl:
         typeof payload.thumbnail_url === "string" &&
         payload.thumbnail_url.trim()
-          ? payload.thumbnail_url.trim()
-          : `${youtube.imageBase}/vi/${encodeURIComponent(
-              videoId
-            )}/hqdefault.jpg`,
+          ? normalizeYouTubeThumbnailUrl({
+              url: payload.thumbnail_url.trim(),
+              videoId,
+            })
+          : normalizeYouTubeThumbnailUrl({
+              url: `${youtube.imageBase}/vi/${encodeURIComponent(
+                videoId
+              )}/hqdefault.jpg`,
+              videoId,
+            }),
       url: `${youtube.webBase}/watch?v=${encodeURIComponent(videoId)}`,
     };
   } catch {
@@ -1328,6 +1338,18 @@ function pickThumbnailUrl(
   record: Record<string, unknown>,
   base: string
 ): string {
+  const rawUrl =
+    typeof record.url === "string"
+      ? record.url
+      : typeof record.videoUrl === "string"
+      ? record.videoUrl
+      : "";
+  const videoId =
+    typeof record.videoId === "string"
+      ? record.videoId
+      : typeof record.id === "string"
+      ? record.id
+      : extractYouTubeVideoId(rawUrl);
   const directThumbnail =
     typeof record.thumbnailUrl === "string"
       ? record.thumbnailUrl
@@ -1336,7 +1358,12 @@ function pickThumbnailUrl(
       : null;
 
   if (directThumbnail) {
-    return absolutizeUrl(directThumbnail, base);
+    return (
+      normalizeYouTubeThumbnailUrl({
+        url: absolutizeUrl(directThumbnail, base),
+        videoId,
+      }) || absolutizeUrl(directThumbnail, base)
+    );
   }
 
   const thumbs = toArray(record.videoThumbnails)
@@ -1349,7 +1376,13 @@ function pickThumbnailUrl(
       return rightScore - leftScore;
     });
 
-  return absolutizeUrl(String(thumbs[0]?.url || ""), base);
+  const thumbnailUrl = absolutizeUrl(String(thumbs[0]?.url || ""), base);
+  return (
+    normalizeYouTubeThumbnailUrl({
+      url: thumbnailUrl,
+      videoId,
+    }) || thumbnailUrl
+  );
 }
 
 function pickArtistImageUrl(
@@ -1471,6 +1504,12 @@ function normalizeVideoPayload(
     directAudioUrl ||
     pickBestStreamUrl([...adaptiveFormats, ...audioStreams], base) ||
     pickBestStreamUrl(formatStreams, base);
+  const videoId =
+    typeof record.videoId === "string"
+      ? record.videoId
+      : typeof record.id === "string"
+      ? record.id
+      : extractYouTubeVideoId(typeof record.url === "string" ? record.url : "");
 
   const thumbs = toArray(record.videoThumbnails).map((entry) =>
     toRecord(entry)
@@ -1510,7 +1549,11 @@ function normalizeVideoPayload(
         ? audioStreams
         : undefined,
     audioUrl,
-    thumbnailUrl: absolutizeUrl(String(maxThumb || anyThumb || ""), base),
+    thumbnailUrl:
+      normalizeYouTubeThumbnailUrl({
+        url: absolutizeUrl(String(maxThumb || anyThumb || ""), base),
+        videoId,
+      }) || absolutizeUrl(String(maxThumb || anyThumb || ""), base),
     relatedSongs: normalizeRelatedSongs(
       record.recommendedVideos || record.relatedStreams,
       base,
@@ -1627,13 +1670,6 @@ async function fetchVideoDetails(
         return value;
       }
     } catch (error) {
-      const fallbackMetadata = await fetchYouTubeOEmbedMetadata(videoId);
-      if (fallbackMetadata) {
-        return {
-          ...fallbackMetadata,
-          source: source || "youtube",
-        };
-      }
       throw error;
     }
 
