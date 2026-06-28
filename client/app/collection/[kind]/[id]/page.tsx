@@ -80,16 +80,11 @@ function isYouTubeCollectionSource(source?: string): boolean {
 }
 
 function resolveEntryCoverUrl(
-  entry: Pick<CollectionEntry, "thumbnailUrl">,
-  fallback: {
-    coverUrl?: string;
-    source?: string;
-  }
+  entry: Pick<CollectionEntry, "thumbnailUrl">
 ): string | undefined {
   const entryCoverUrl = entry.thumbnailUrl?.trim();
   if (entryCoverUrl) return entryCoverUrl;
-  if (isYouTubeCollectionSource(fallback.source)) return undefined;
-  return fallback.coverUrl?.trim() || undefined;
+  return undefined;
 }
 
 function getCollectionPageCacheKey(
@@ -476,7 +471,6 @@ function toSongSnapshot(
   entry: CollectionEntry,
   fallback: {
     artist?: string;
-    coverUrl?: string;
     source?: string;
   }
 ): Song {
@@ -485,7 +479,7 @@ function toSongSnapshot(
     title: entry.title,
     artist:
       entry.artist || entry.subtitle || fallback.artist || "Unknown Artist",
-    coverUrl: resolveEntryCoverUrl(entry, fallback),
+    coverUrl: resolveEntryCoverUrl(entry),
     duration: entry.duration,
     source: fallback.source,
     url: entry.url,
@@ -1021,7 +1015,6 @@ export default function CollectionPage() {
         const queue: Song[] = entries.map((item) =>
           toSongSnapshot(item, {
             artist: displayAuthor,
-            coverUrl: displayImage,
             source: collectionSource,
           })
         );
@@ -1031,7 +1024,6 @@ export default function CollectionPage() {
         await resolveAndPlaySong(
           toSongSnapshot(entry, {
             artist: displayAuthor,
-            coverUrl: displayImage,
             source: collectionSource,
           }),
           {
@@ -1083,7 +1075,6 @@ export default function CollectionPage() {
       songs: entries.map((entry) =>
         toSongSnapshot(entry, {
           artist: displayAuthor,
-          coverUrl: displayImage,
           source: collectionSource,
         })
       ),
@@ -1112,7 +1103,6 @@ export default function CollectionPage() {
       ) ||
       toSongSnapshot(entry, {
         artist: displayAuthor,
-        coverUrl: displayImage,
         source: collectionSource,
       });
     const result = toggleLikedSong(song);
@@ -1164,7 +1154,6 @@ export default function CollectionPage() {
       ) ||
       toSongSnapshot(entry, {
         artist: displayAuthor,
-        coverUrl: displayImage,
         source: collectionSource,
       });
     const result = removeSongFromStoredPlaylist(id, song.id, song.source);
@@ -1620,10 +1609,7 @@ export default function CollectionPage() {
 
               <div className="mt-2 space-y-1">
                 {filteredEntries.map((entry, index) => {
-                  const rowCoverUrl = resolveEntryCoverUrl(entry, {
-                    coverUrl: displayImage,
-                    source: collectionSource,
-                  });
+                  const rowCoverUrl = resolveEntryCoverUrl(entry);
                   const isActiveTrack = currentSong?.id === entry.id;
                   const isLoadingTrack = loadingSongId === entry.id;
                   const rowSong =
@@ -1632,7 +1618,6 @@ export default function CollectionPage() {
                     ) ||
                     toSongSnapshot(entry, {
                       artist: displayAuthor,
-                      coverUrl: displayImage,
                       source: collectionSource,
                     });
                   const isEntryLiked = likedSongKeys.has(

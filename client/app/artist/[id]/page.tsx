@@ -89,6 +89,11 @@ function shortenDescription(value?: string, maxLength = 260): string {
   return `${safeText.trimEnd()}...`;
 }
 
+function resolveArtistSongCoverUrl(song: ArtistSong): string | undefined {
+  const thumbnail = song.thumbnail?.trim();
+  return thumbnail || undefined;
+}
+
 function PlayGlyph({ className = "h-5 w-5" }: { className?: string }) {
   return (
     <svg
@@ -277,12 +282,12 @@ export default function ArtistPage() {
         id: song.id,
         title: song.title,
         artist: song.artist || header.name || "Unknown Artist",
-        coverUrl: song.thumbnail || header.image,
+        coverUrl: resolveArtistSongCoverUrl(song),
         duration: song.duration,
         source: pageSource,
         url: song.url,
       })),
-    [header.image, header.name, pageSource, songs]
+    [header.name, pageSource, songs]
   );
 
   const backParams = new URLSearchParams();
@@ -343,7 +348,7 @@ export default function ArtistPage() {
           id: song.id,
           title: song.title,
           artist: song.artist || header.name || "Unknown Artist",
-          coverUrl: song.thumbnail || header.image,
+          coverUrl: resolveArtistSongCoverUrl(song),
           duration: song.duration,
           source: pageSource,
           url: song.url,
