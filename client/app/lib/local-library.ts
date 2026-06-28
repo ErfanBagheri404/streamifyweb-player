@@ -1148,10 +1148,8 @@ export async function restoreCloudLibrary(snapshot: unknown) {
       resolveCloudTrackRef(ref, knownSongsByKey.get(getCloudTrackRefKey(ref)))
     )
   );
-  writeStoredPlaylists(
-    mergeStoredPlaylists(readStoredPlaylists(), restoredPlaylists)
-  );
-  writeLikedSongs(mergeSongs(readLikedSongs(), restoredLikedSongs));
+  writeStoredPlaylists(restoredPlaylists);
+  writeLikedSongs(restoredLikedSongs);
 }
 
 function readRecentSongsFromAudioState(): Song[] {

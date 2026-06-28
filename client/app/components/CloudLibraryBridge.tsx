@@ -4,10 +4,6 @@ import { useEffect, useMemo } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabase/browser";
 import { restoreCloudLibrary } from "../lib/local-library";
 
-function getRestoreMarker(userId: string): string {
-  return `streamify-cloud-library-restored:${userId}`;
-}
-
 export default function CloudLibraryBridge() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
 
@@ -19,10 +15,6 @@ export default function CloudLibraryBridge() {
     }
 
     const restoreLibrary = async (userId: string) => {
-      if (typeof window === "undefined") return;
-      const marker = getRestoreMarker(userId);
-      if (window.sessionStorage.getItem(marker) === "1") return;
-
       try {
         const response = await fetch("/api/library/sync", {
           method: "GET",
@@ -34,7 +26,6 @@ export default function CloudLibraryBridge() {
         if (!isMounted) return;
 
         await restoreCloudLibrary(payload);
-        window.sessionStorage.setItem(marker, "1");
       } catch {}
     };
 

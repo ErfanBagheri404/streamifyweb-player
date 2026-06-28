@@ -74,6 +74,24 @@ type CachedRemoteCollectionState = {
 
 const COLLECTION_PAGE_CACHE_TTL_MS = 15 * 60 * 1000;
 
+function isYouTubeCollectionSource(source?: string): boolean {
+  const normalized = (source || "").trim().toLowerCase();
+  return normalized === "youtube" || normalized === "youtubemusic";
+}
+
+function resolveEntryCoverUrl(
+  entry: Pick<CollectionEntry, "thumbnailUrl">,
+  fallback: {
+    coverUrl?: string;
+    source?: string;
+  }
+): string | undefined {
+  const entryCoverUrl = entry.thumbnailUrl?.trim();
+  if (entryCoverUrl) return entryCoverUrl;
+  if (isYouTubeCollectionSource(fallback.source)) return undefined;
+  return fallback.coverUrl?.trim() || undefined;
+}
+
 function getCollectionPageCacheKey(
   id: string,
   kind: string,
@@ -467,7 +485,7 @@ function toSongSnapshot(
     title: entry.title,
     artist:
       entry.artist || entry.subtitle || fallback.artist || "Unknown Artist",
-    coverUrl: entry.thumbnailUrl || fallback.coverUrl,
+    coverUrl: resolveEntryCoverUrl(entry, fallback),
     duration: entry.duration,
     source: fallback.source,
     url: entry.url,
@@ -1000,33 +1018,22 @@ export default function CollectionPage() {
           });
         }
       } else {
-        const queue: Song[] = entries.map((item) => ({
-          id: item.id,
-          title: item.title,
-          artist:
-            item.artist || item.subtitle || displayAuthor || "Unknown Artist",
-          coverUrl: item.thumbnailUrl || displayImage,
-          duration: item.duration,
-          source: collectionSource,
-          url: item.url,
-        }));
+        const queue: Song[] = entries.map((item) =>
+          toSongSnapshot(item, {
+            artist: displayAuthor,
+            coverUrl: displayImage,
+            source: collectionSource,
+          })
+        );
 
         const currentIndex = queue.findIndex((song) => song.id === entry.id);
 
         await resolveAndPlaySong(
-          {
-            id: entry.id,
-            title: entry.title,
-            artist:
-              entry.artist ||
-              entry.subtitle ||
-              displayAuthor ||
-              "Unknown Artist",
-            coverUrl: entry.thumbnailUrl || displayImage,
-            duration: entry.duration,
+          toSongSnapshot(entry, {
+            artist: displayAuthor,
+            coverUrl: displayImage,
             source: collectionSource,
-            url: entry.url,
-          },
+          }),
           {
             queue,
             currentIndex: currentIndex >= 0 ? currentIndex : 0,
@@ -1613,6 +1620,10 @@ export default function CollectionPage() {
 
               <div className="mt-2 space-y-1">
                 {filteredEntries.map((entry, index) => {
+                  const rowCoverUrl = resolveEntryCoverUrl(entry, {
+                    coverUrl: displayImage,
+                    source: collectionSource,
+                  });
                   const isActiveTrack = currentSong?.id === entry.id;
                   const isLoadingTrack = loadingSongId === entry.id;
                   const rowSong =
@@ -1738,9 +1749,9 @@ export default function CollectionPage() {
                       </div>
 
                       <div className="flex min-w-0 items-center gap-3">
-                        {entry.thumbnailUrl || displayImage ? (
+                        {rowCoverUrl ? (
                           <Image
-                            src={entry.thumbnailUrl || displayImage}
+                            src={rowCoverUrl}
                             alt=""
                             width={44}
                             height={44}
