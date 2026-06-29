@@ -156,7 +156,7 @@ export function normalizeYouTubeThumbnailUrl(input: {
     const thumbnailDetails = extractYouTubeThumbnailDetails(cleanedUrl);
     return buildYouTubeThumbnailApiUrl(videoId, {
       variant:
-        input.variant || DEFAULT_THUMBNAIL_VARIANT || thumbnailDetails.variant,
+        input.variant || thumbnailDetails.variant || DEFAULT_THUMBNAIL_VARIANT,
       useWebp: thumbnailDetails.useWebp,
       width: input.width,
       height: input.height,

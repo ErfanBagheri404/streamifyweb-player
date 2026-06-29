@@ -44,10 +44,18 @@ const MEDIA_SESSION_POSITION_MIN_DELTA_SECONDS = 1;
 const YOUTUBE_PROVIDER_HINT_CACHE_PREFIX = "streamifyYoutubeProviderHint";
 const YOUTUBE_PROVIDER_HINT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const SOUNDCLOUD_WIDGET_LOAD_TIMEOUT_MS = 8000;
+const DEFAULT_VOLUME = 1;
+const MAX_MEDIA_VOLUME = 2;
+const MAX_WIDGET_VOLUME = 1;
 let soundCloudRuntimeConfig =
   getCachedProviderEndpointsSnapshot().providers.soundcloud;
 let soundCloudRuntimeRefreshPromise: Promise<void> | null = null;
 let soundCloudRuntimeRefreshRequested = false;
+
+function clampVolume(value: number, max = MAX_MEDIA_VOLUME): number {
+  if (!Number.isFinite(value)) return DEFAULT_VOLUME;
+  return Math.max(0, Math.min(max, value));
+}
 
 function ensureSoundCloudRuntimeConfig() {
   if (
@@ -161,10 +169,12 @@ interface AudioContextType {
   dismissAutoRetryPrompt: () => void;
 }
 
-const AudioContext = createContext<AudioContextType | undefined>(undefined);
+const AudioPlayerContext = createContext<AudioContextType | undefined>(
+  undefined
+);
 
 export const useAudio = () => {
-  const context = useContext(AudioContext);
+  const context = useContext(AudioPlayerContext);
   if (!context) {
     throw new Error("useAudio must be used within an AudioProvider");
   }
@@ -738,7 +748,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolumeState] = useState(1);
+  const [volume, setVolumeState] = useState(DEFAULT_VOLUME);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
   const [autoRetryPreference, setAutoRetryPreference] =
@@ -765,7 +775,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const repeatModeRef = useRef<RepeatMode>("off");
   const playbackQueueRef = useRef<Song[]>([]);
   const queueIndexRef = useRef(-1);
-  const volumeRef = useRef(1);
+  const volumeRef = useRef(DEFAULT_VOLUME);
+  const audioProcessingContextRef = useRef<AudioContext | null>(null);
+  const audioGainNodeRef = useRef<GainNode | null>(null);
+  const audioSourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const lastMediaSessionPositionRef = useRef(0);
   const lastMediaSessionPositionUpdateRef = useRef(0);
   const lastPersistedSongIdRef = useRef<string | null>(null);
@@ -794,6 +807,78 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     async () => false
   );
   const isRepeat = repeatMode !== "off";
+  const ensureManagedAudioGraph = useCallback(() => {
+    if (typeof window === "undefined") return false;
+
+    const audio = audioRef.current;
+    if (!audio) return false;
+
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioContextCtor) return false;
+
+    try {
+      const context =
+        audioProcessingContextRef.current || new AudioContextCtor();
+      audioProcessingContextRef.current = context;
+
+      if (!audioGainNodeRef.current) {
+        audioGainNodeRef.current = context.createGain();
+      }
+
+      if (!audioSourceNodeRef.current) {
+        audioSourceNodeRef.current = context.createMediaElementSource(audio);
+        audioSourceNodeRef.current.connect(audioGainNodeRef.current);
+        audioGainNodeRef.current.connect(context.destination);
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error enabling boosted audio:", error);
+      return false;
+    }
+  }, []);
+  const resumeManagedAudioGraph = useCallback(() => {
+    const context = audioProcessingContextRef.current;
+    if (context && context.state === "suspended") {
+      void context.resume().catch(() => {});
+    }
+  }, []);
+  const applyManagedVolume = useCallback(
+    (nextVolume: number, song?: Song | null) => {
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      if (shouldUseSoundCloudWidget(song)) {
+        try {
+          soundCloudWidgetRef.current?.setVolume(
+            Math.round(clampVolume(nextVolume, MAX_WIDGET_VOLUME) * 100)
+          );
+        } catch (error) {
+          console.error("Error setting SoundCloud widget volume:", error);
+        }
+        return;
+      }
+
+      const effectiveVolume = clampVolume(nextVolume);
+      if (effectiveVolume > MAX_WIDGET_VOLUME && ensureManagedAudioGraph()) {
+        audio.volume = MAX_WIDGET_VOLUME;
+        audioGainNodeRef.current!.gain.value = effectiveVolume;
+        return;
+      }
+
+      if (audioGainNodeRef.current) {
+        audio.volume = MAX_WIDGET_VOLUME;
+        audioGainNodeRef.current.gain.value = effectiveVolume;
+        return;
+      }
+
+      audio.volume = clampVolume(effectiveVolume, MAX_WIDGET_VOLUME);
+    },
+    [ensureManagedAudioGraph]
+  );
   const getNextQueueIndex = useCallback(
     (
       mode: RepeatMode,
@@ -1136,6 +1221,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     song: Song,
     requestId = playbackRequestIdRef.current
   ) => {
+    resumeManagedAudioGraph();
     const attemptedAudioUrl = resolveAudioUrl(
       audio.currentSrc || audio.src || song.audioUrl
     );
@@ -1230,7 +1316,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           setQueueIndex(0);
           setCurrentTime(state.currentTime || 0);
           setDuration(state.duration || 0);
-          setVolumeState(state.volume || 1);
+          setVolumeState(
+            clampVolume(
+              typeof state.volume === "number" ? state.volume : DEFAULT_VOLUME
+            )
+          );
           setRepeatMode(nextRepeatMode);
           setIsPlaying(Boolean(state.isPlaying));
         }
@@ -1286,6 +1376,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     () => () => {
       if (autoRetryStatusTimerRef.current !== null) {
         window.clearTimeout(autoRetryStatusTimerRef.current);
+      }
+      audioSourceNodeRef.current = null;
+      audioGainNodeRef.current = null;
+      const audioContext = audioProcessingContextRef.current;
+      audioProcessingContextRef.current = null;
+      if (audioContext) {
+        void audioContext.close().catch(() => {});
       }
       destroyManagedPlayback();
       destroySoundCloudWidgetPlayback(true);
@@ -2543,19 +2640,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   }, [currentSong, isPlaying, syncSoundCloudWidgetProgress]);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.volume = volume;
-    }
-
-    if (!shouldUseSoundCloudWidget(currentSong)) return;
-
-    try {
-      soundCloudWidgetRef.current?.setVolume(Math.round(volume * 100));
-    } catch (error) {
-      console.error("Error setting SoundCloud widget volume:", error);
-    }
-  }, [currentSong, volume]);
+    applyManagedVolume(volume, currentSong);
+  }, [applyManagedVolume, currentSong, volume]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -3101,6 +3187,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       if (repeatModeRef.current === "one") {
         audio.currentTime = 0;
+        resumeManagedAudioGraph();
         audio.play().catch((error) => {
           console.error("Error repeating audio:", error);
         });
@@ -3354,6 +3441,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       setPlaybackError(null);
       setIsSongLoading(true);
       setIsPlaying(true);
+      resumeManagedAudioGraph();
       audioRef.current.play().catch((error) => {
         console.error("Error resuming audio:", error);
         setIsSongLoading(false);
@@ -3379,19 +3467,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   };
 
   const setVolume = (newVolume: number) => {
-    const clampedVolume = Math.max(0, Math.min(1, newVolume));
+    const clampedVolume = clampVolume(
+      newVolume,
+      shouldUseSoundCloudWidget(currentSong)
+        ? MAX_WIDGET_VOLUME
+        : MAX_MEDIA_VOLUME
+    );
     setVolumeState(clampedVolume);
-    if (shouldUseSoundCloudWidget(currentSong)) {
-      try {
-        soundCloudWidgetRef.current?.setVolume(Math.round(clampedVolume * 100));
-      } catch (error) {
-        console.error("Error setting SoundCloud widget volume:", error);
-      }
-      return;
-    }
-    if (audioRef.current) {
-      audioRef.current.volume = clampedVolume;
-    }
+    applyManagedVolume(clampedVolume, currentSong);
   };
 
   const toggleRepeat = () => {
@@ -3445,6 +3528,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
     if (queueIndex > 0) {
       playQueueIndex(queueIndex - 1);
+      return;
+    }
+
+    if (repeatMode === "queue" && playbackQueue.length > 1) {
+      playQueueIndex(playbackQueue.length - 1);
       return;
     }
 
@@ -3515,7 +3603,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       if (event.code === "ArrowUp") {
         event.preventDefault();
-        setVolume(Math.min(1, volume + 0.05));
+        setVolume(Math.min(MAX_MEDIA_VOLUME, volume + 0.05));
         return;
       }
 
@@ -3994,7 +4082,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   }, []);
 
   return (
-    <AudioContext.Provider value={value}>
+    <AudioPlayerContext.Provider value={value}>
       {children}
       <iframe
         ref={soundCloudWidgetIframeRef}
@@ -4009,6 +4097,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         crossOrigin="anonymous"
         preload="auto"
       />
-    </AudioContext.Provider>
+    </AudioPlayerContext.Provider>
   );
 };

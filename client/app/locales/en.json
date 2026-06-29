@@ -199,6 +199,7 @@
   "miniPlayer.volumeLow": "Low",
   "miniPlayer.volumeMedium": "Medium",
   "miniPlayer.volumeHigh": "High",
+  "miniPlayer.volumeBoosted": "Boosted",
   "miniPlayer.unmute": "Unmute",
   "miniPlayer.mute": "Mute",
   "miniPlayer.adjustVolume": "Adjust volume",

@@ -92,7 +92,7 @@ function getCollectionPageCacheKey(
   kind: string,
   source: string
 ): string {
-  return `collection-page:${source || "default"}:${kind}:${id}`;
+  return `collection-page:v2:${source || "default"}:${kind}:${id}`;
 }
 
 function readStoredCollectionItem(
@@ -487,7 +487,10 @@ function toSongSnapshot(
   };
 }
 
-function matchesCollectionEntrySong(entry: CollectionEntry, song: Song): boolean {
+function matchesCollectionEntrySong(
+  entry: CollectionEntry,
+  song: Song
+): boolean {
   if (song.id !== entry.id) return false;
 
   const normalizedEntryTitle = entry.title.trim().toLowerCase();
@@ -642,6 +645,13 @@ export default function CollectionPage() {
           (kind === "playlist" || kind === "album"))
     );
   }, [kind, source]);
+  const shouldHideStoredEntriesWhileFetching = useMemo(
+    () =>
+      shouldFetchRemote &&
+      isYouTubeCollectionSource(source) &&
+      !cachedRemoteCollection,
+    [cachedRemoteCollection, shouldFetchRemote, source]
+  );
 
   usePageLoadingToast({
     enabled: shouldFetchRemote,
@@ -683,7 +693,7 @@ export default function CollectionPage() {
         isLoading:
           previous.entries.length === 0 &&
           previous.collection == null &&
-          storedEntries.length === 0,
+          (storedEntries.length === 0 || shouldHideStoredEntriesWhileFetching),
       }));
 
       try {
@@ -810,17 +820,18 @@ export default function CollectionPage() {
       cancelled = true;
     };
   }, [
+    cachedRemoteCollection,
     collectionCacheKey,
     href,
     id,
     kind,
-    sourceUrl,
     shouldFetchRemote,
+    shouldHideStoredEntriesWhileFetching,
     source,
+    sourceUrl,
     storedItem?.href,
     storedItem?.url,
     storedEntries.length,
-    cachedRemoteCollection,
   ]);
 
   const entries = useMemo(() => {
@@ -838,8 +849,15 @@ export default function CollectionPage() {
       }));
     }
     if (remoteState.entries.length > 0) return remoteState.entries;
+    if (shouldHideStoredEntriesWhileFetching) return [];
     return storedEntries;
-  }, [id, localCollection, remoteState.entries, storedEntries]);
+  }, [
+    id,
+    localCollection,
+    remoteState.entries,
+    shouldHideStoredEntriesWhileFetching,
+    storedEntries,
+  ]);
 
   const backParams = new URLSearchParams();
   const searchQuery = searchParams.get("search_query");

@@ -16,6 +16,8 @@ import { spaceMono } from "../fonts";
 import { isStandaloneAuthPath } from "../lib/auth-routes";
 
 const STATIC_WAVEFORM_BAR_COUNT = 56;
+const DEFAULT_UNMUTED_VOLUME = 0.8;
+const BOOSTED_VOLUME_PRESETS = [25, 60, 100] as const;
 
 function PlayControlIcon({ className }: { className?: string }) {
   return (
@@ -98,7 +100,7 @@ const MiniPlayer: React.FC = () => {
 
   const compactWaveformRef = useRef<HTMLButtonElement>(null);
   const volumeControlRef = useRef<HTMLDivElement>(null);
-  const lastNonZeroVolumeRef = useRef(0.8);
+  const lastNonZeroVolumeRef = useRef(DEFAULT_UNMUTED_VOLUME);
   const isDraggingSeekRef = useRef(false);
   const seekDragPlaybackStateRef = useRef<{
     isPlaying: boolean;
@@ -150,7 +152,16 @@ const MiniPlayer: React.FC = () => {
     duration > 0 ? Math.min(Math.max(currentTime / duration, 0), 1) : 0;
   const progressPercent = progress * 100;
   const playedBars = Math.round(progress * waveformBars.length);
+  const supportsBoostedVolume = !(
+    currentSong?.source === "soundcloud" &&
+    currentSong?.playbackStrategy === "widget"
+  );
+  const maxVolumePercent = supportsBoostedVolume ? 200 : 100;
   const volumePercent = Math.round(volume * 100);
+  const volumeSliderProgressPercent = Math.min(
+    100,
+    (volumePercent / maxVolumePercent) * 100
+  );
   const isMuted = volumePercent === 0;
   const volumeLabel = isMuted
     ? t("miniPlayer.volumeMuted")
@@ -158,9 +169,14 @@ const MiniPlayer: React.FC = () => {
     ? t("miniPlayer.volumeLow")
     : volumePercent < 70
     ? t("miniPlayer.volumeMedium")
+    : volumePercent > 100
+    ? t("miniPlayer.volumeBoosted")
     : t("miniPlayer.volumeHigh");
   const canGoPrevious =
-    currentTime > 3 || queueIndex > 0 || recentSongs.length > 1;
+    currentTime > 3 ||
+    queueIndex > 0 ||
+    (repeatMode === "queue" && playbackQueue.length > 1) ||
+    recentSongs.length > 1;
   const canGoNext =
     (queueIndex >= 0 && queueIndex < playbackQueue.length - 1) ||
     (repeatMode === "queue" && playbackQueue.length > 1);
@@ -185,7 +201,7 @@ const MiniPlayer: React.FC = () => {
       : null;
   const toggleMute = () => {
     if (isMuted) {
-      setVolume(lastNonZeroVolumeRef.current || 0.8);
+      setVolume(lastNonZeroVolumeRef.current || DEFAULT_UNMUTED_VOLUME);
       return;
     }
 
@@ -573,10 +589,13 @@ const MiniPlayer: React.FC = () => {
               ) : null}
             </button>
 
-            <div ref={volumeControlRef} className="relative flex items-center">
+            <div
+              ref={volumeControlRef}
+              className="relative z-20 flex items-center"
+            >
               {isVolumeOpen ? (
                 <div
-                  className={`theme-overlay theme-shadow-strong absolute bottom-full mb-3 w-[min(85vw,220px)] rounded-2xl border px-4 py-4 backdrop-blur-xl lg:w-[220px] ${
+                  className={`theme-overlay theme-shadow-strong pointer-events-auto absolute bottom-full z-30 mb-3 w-[min(85vw,220px)] rounded-2xl border px-4 py-4 backdrop-blur-xl lg:w-[220px] ${
                     isRtl ? "left-0 lg:left-1" : "right-0 lg:right-1"
                   }`}
                 >
@@ -602,7 +621,7 @@ const MiniPlayer: React.FC = () => {
                     <input
                       type="range"
                       min="0"
-                      max="100"
+                      max={String(maxVolumePercent)}
                       value={volumePercent}
                       onChange={(event) =>
                         setVolume(Number(event.target.value) / 100)
@@ -610,15 +629,19 @@ const MiniPlayer: React.FC = () => {
                       className="volume-slider h-6 w-full cursor-pointer appearance-none bg-transparent"
                       style={
                         {
-                          "--volume-progress": `${volumePercent}%`,
+                          "--volume-progress": `${volumeSliderProgressPercent}%`,
                         } as React.CSSProperties
                       }
                       aria-label={t("miniPlayer.adjustVolume")}
                     />
-                    <span className="theme-muted text-xs">100</span>
+                    <span className="theme-muted text-xs">
+                      {maxVolumePercent}
+                    </span>
                   </div>
-                  <div className="mt-3 flex gap-2">
-                    {[25, 60, 100].map((preset) => (
+                  <div className="mt-3 flex justify-center gap-2">
+                    {BOOSTED_VOLUME_PRESETS.filter(
+                      (preset) => preset <= maxVolumePercent
+                    ).map((preset) => (
                       <button
                         key={preset}
                         type="button"

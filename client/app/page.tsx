@@ -711,15 +711,15 @@ export default function Home() {
       </div>
 
       <div className="space-y-5 md:space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-2xl font-bold tracking-tight text-[color:var(--foreground)]">
+        <div className="flex items-center justify-between gap-2 sm:gap-3">
+          <p className="min-w-0 flex-1 whitespace-nowrap text-base font-bold leading-tight tracking-[-0.02em] text-[color:var(--foreground)] sm:text-2xl">
             {greeting}
           </p>
-          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          <div className="flex shrink-0 items-center gap-2">
             {authUser ? (
               <Link
                 href="/settings"
-                className="theme-button-soft flex min-w-0 max-w-full items-center gap-2 rounded-full border px-2.5 py-1.5 text-xs font-medium transition sm:max-w-[240px]"
+                className="theme-button-soft flex min-w-0 max-w-[172px] items-center gap-2 rounded-full border px-2 py-1.5 text-[11px] font-medium transition sm:max-w-[240px] sm:px-2.5 sm:text-xs"
               >
                 {avatarUrl ? (
                   <img
