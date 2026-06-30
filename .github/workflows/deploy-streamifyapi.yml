@@ -1,0 +1,36 @@
+name: Deploy streamifyapi
+
+on:
+  push:
+    branches:
+      - backend-separation
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Worker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: cloudflare-api/package-lock.json
+
+      - name: Install cloudflare-api dependencies
+        run: npm ci
+        working-directory: cloudflare-api
+
+      - name: Deploy streamifyapi
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare-api
+          command: deploy

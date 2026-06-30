@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy:preview": "wrangler deploy --env preview",
-    "deploy:production": "wrangler deploy --env production",
+    "deploy": "wrangler deploy",
     "check": "tsc --noEmit"
   },
   "devDependencies": {
