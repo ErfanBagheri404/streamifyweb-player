@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { HorizontalScrollRow } from "./components/HorizontalScrollRow";
 import { type Song, useAudio } from "./contexts/AudioContext";
 import { useAppLanguage } from "./hooks/useAppLanguage";
+import { buildBackendRouteUrlAsync } from "./lib/backend-api";
 import { getUserAvatarUrl, getUserDisplayName } from "./lib/auth-user";
 import { buildArtistRouteHref, canOpenArtistRoute } from "./lib/artist-routing";
 import { INVIDIOUS_INSTANCES } from "./lib/media-providers";
@@ -538,9 +539,14 @@ export default function Home() {
           id: artistId,
           source: "youtube",
         });
-        const response = await fetch(`/api/artist?${params.toString()}`, {
+        const response = await fetch(
+          await buildBackendRouteUrlAsync("/artist", {
+            searchParams: params,
+          }),
+          {
           cache: "no-store",
-        });
+          }
+        );
         const payload = (await response.json()) as RemoteArtistPayload;
 
         if (!response.ok || cancelled) return;
@@ -611,9 +617,14 @@ export default function Home() {
             params.set("url", candidate.url);
           }
 
-          const response = await fetch(`/api/video?${params.toString()}`, {
+          const response = await fetch(
+            await buildBackendRouteUrlAsync("/video", {
+              searchParams: params,
+            }),
+            {
             cache: "no-store",
-          });
+            }
+          );
           const payload = (await response.json()) as Record<string, unknown>;
           if (!response.ok || cancelled) {
             continue;

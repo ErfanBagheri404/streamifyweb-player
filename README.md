@@ -58,9 +58,14 @@ Streamify Web Player is a desktop-first listening experience that brings togethe
 .
 |-- client/   Next.js app, routes, UI components, playback logic, local library, API endpoints
 |-- server/   Express service that aggregates and normalizes provider search responses
+|-- cloudflare-api/   Cloudflare Worker backend for the preview-first backend separation migration
 |-- README.md
 |-- LICENSE
 ```
+
+### Migration Notes
+
+- Cloudflare Worker backend migration and deployment notes live in `docs/cloudflare-backend-migration.md`
 
 ### Main Product Areas
 

@@ -9,6 +9,7 @@ import { useAppLanguage } from "../../hooks/useAppLanguage";
 import { usePageLoadingToast } from "../../hooks/usePageLoadingToast";
 import { HorizontalScrollRow } from "../../components/HorizontalScrollRow";
 import { isLightAppTheme } from "../../lib/app-settings";
+import { buildBackendRouteUrlAsync } from "../../lib/backend-api";
 import { findSavedArtistRouteContext } from "../../lib/navigation-state";
 import { readSessionCache, writeSessionCache } from "../../lib/session-cache";
 
@@ -203,7 +204,11 @@ export default function ArtistPage() {
       try {
         const nextParams = new URLSearchParams({ id });
         if (sourceParam) nextParams.set("source", sourceParam);
-        const res = await fetch(`/api/artist?${nextParams.toString()}`);
+        const res = await fetch(
+          await buildBackendRouteUrlAsync("/artist", {
+            searchParams: nextParams,
+          })
+        );
         const json = (await res.json()) as unknown;
         if (!res.ok) {
           const errorPayload =

@@ -6,10 +6,12 @@
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev:client": "npm run dev --prefix client",
     "dev:server": "npm run dev --prefix server",
+    "dev:cloudflare-api": "npm run dev --prefix cloudflare-api",
     "build": "npm run build:client && npm run build:server",
     "build:client": "npm install --prefix client && npm run build --prefix client",
     "build:server": "npm install --prefix server && npm run build --prefix server",
-    "install:all": "npm install && npm install --prefix client && npm install --prefix server",
+    "check:cloudflare-api": "npm run check --prefix cloudflare-api",
+    "install:all": "npm install && npm install --prefix client && npm install --prefix server && npm install --prefix cloudflare-api",
     "start": "next dev",
     "lint": "eslint"
   },

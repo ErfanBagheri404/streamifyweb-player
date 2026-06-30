@@ -5,6 +5,7 @@
 server/node_modules
 server/dist
 client/node_modules
+cloudflare-api/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -42,6 +43,7 @@ yarn-error.log*
 # vercel
 .vercel
 .netlify
+.wrangler
 
 # local tooling
 .turbo

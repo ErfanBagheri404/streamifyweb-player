@@ -1,6 +1,7 @@
 "use client";
 
 import type { Song } from "../contexts/AudioContext";
+import { buildBackendRouteUrlAsync } from "./backend-api";
 import { normalizeYouTubeThumbnailUrl } from "./youtube-thumbnails";
 
 export const PLAYLISTS_STORAGE_KEY = "libraryUserPlaylists";
@@ -633,7 +634,11 @@ async function resolveCloudTrackRef(
     if (knownSong?.url) {
       params.set("url", knownSong.url);
     }
-    const response = await fetch(`/api/video?${params.toString()}`);
+    const response = await fetch(
+      await buildBackendRouteUrlAsync("/video", {
+        searchParams: params,
+      })
+    );
     const payload = (await response.json()) as Record<string, unknown>;
 
     if (!response.ok) {

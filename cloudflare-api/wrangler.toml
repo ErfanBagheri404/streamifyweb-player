@@ -1,0 +1,18 @@
+name = "streamify-cloudflare-api"
+main = "src/index.ts"
+compatibility_date = "2026-06-30"
+
+[vars]
+WORKER_ENV = "local"
+
+[env.preview]
+name = "streamify-cloudflare-api-preview"
+
+[env.preview.vars]
+WORKER_ENV = "preview"
+
+[env.production]
+name = "streamify-cloudflare-api-production"
+
+[env.production.vars]
+WORKER_ENV = "production"

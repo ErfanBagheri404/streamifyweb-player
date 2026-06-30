@@ -101,7 +101,8 @@ export function isManagedRemoteAudioUrl(audioUrl: string): boolean {
   if (
     normalized.includes("videoplayback") ||
     normalized.includes("googlevideo.com") ||
-    normalized.includes("/api/audio-proxy?url=")
+    normalized.includes("/api/audio-proxy?url=") ||
+    normalized.includes("/audio-proxy?url=")
   ) {
     return true;
   }

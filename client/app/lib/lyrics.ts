@@ -1,5 +1,6 @@
 "use client";
 
+import { buildBackendRouteUrlAsync } from "./backend-api";
 import {
   buildTimedLyrics,
   findActiveLyricIndex,
@@ -89,17 +90,19 @@ export async function fetchLyrics(
 
   const request = (async () => {
     try {
-      const url = new URL("/api/lyrics", window.location.origin);
-      url.searchParams.set("id", track.id);
-      url.searchParams.set("title", track.title);
-      if (track.artist) {
-        url.searchParams.set("artist", track.artist);
-      }
-      if (track.duration && Number.isFinite(track.duration)) {
-        url.searchParams.set("duration", Math.round(track.duration).toString());
-      }
+      const url = await buildBackendRouteUrlAsync("/lyrics", {
+        searchParams: {
+          id: track.id,
+          title: track.title,
+          artist: track.artist,
+          duration:
+            track.duration && Number.isFinite(track.duration)
+              ? Math.round(track.duration)
+              : undefined,
+        },
+      });
 
-      const response = await fetch(url.toString(), {
+      const response = await fetch(url, {
         cache: "no-store",
       });
 

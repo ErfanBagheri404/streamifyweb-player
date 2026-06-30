@@ -7,6 +7,16 @@ export interface StreamifyRuntimeConfig {
     siteUrl: string;
     origin: string;
   };
+  api?: {
+    mode?: string;
+    baseUrl?: string;
+    allowedOrigins?: string[];
+    absoluteRoutes?: string[];
+    proxy?: {
+      allowedAudioHosts?: string[];
+      allowedLicenseHosts?: string[];
+    };
+  };
   instances: {
     client: {
       piped: string[];
@@ -37,6 +47,7 @@ export interface StreamifyRuntimeConfig {
       lyricsOvhBase: string;
     };
     soundcloud: {
+      clientId?: string;
       origin: string;
       mobileOrigin: string;
       apiBase: string;

@@ -13,6 +13,7 @@ import { useAudio } from "../contexts/AudioContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import type { PreferredSearchSource } from "../lib/app-settings";
+import { buildBackendRouteUrlAsync } from "../lib/backend-api";
 import {
   getSearchCategoryPlaylistHref,
   type SearchCategoryPlaylist,
@@ -710,14 +711,19 @@ function SearchPageInner() {
 
       try {
         const page = loadMore ? currentPage + 1 : 1;
-        let url = `/api/search?q=${encodeURIComponent(
-          queryToUse
-        )}&source=${sourceToUse}&filter=${filterToUse}&page=${page}&limit=20`;
+        const params = new URLSearchParams({
+          q: queryToUse,
+          source: sourceToUse,
+          filter: filterToUse,
+          page: String(page),
+          limit: "20",
+        });
         if (loadMore && paginationRef.current.nextpage) {
-          url += `&nextpage=${encodeURIComponent(
-            paginationRef.current.nextpage
-          )}`;
+          params.set("nextpage", paginationRef.current.nextpage);
         }
+        const url = await buildBackendRouteUrlAsync("/search", {
+          searchParams: params,
+        });
 
         console.log("🔍 Search URL:", url);
         const response = await fetch(url);

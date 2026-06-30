@@ -29,6 +29,7 @@ import {
 } from "../../../lib/session-cache";
 import { useAppLanguage } from "../../../hooks/useAppLanguage";
 import { usePageLoadingToast } from "../../../hooks/usePageLoadingToast";
+import { buildBackendRouteUrlAsync } from "../../../lib/backend-api";
 import { findSavedCollectionRouteContext } from "../../../lib/navigation-state";
 import { normalizeYouTubeThumbnailUrl } from "../../../lib/youtube-thumbnails";
 import PlaylistCreateModal from "../../../components/PlaylistCreateModal";
@@ -730,7 +731,11 @@ export default function CollectionPage() {
         );
         // #endregion
 
-        const response = await fetch(`/api/collection?${params.toString()}`);
+        const response = await fetch(
+          await buildBackendRouteUrlAsync("/collection", {
+            searchParams: params,
+          })
+        );
         const json = (await response.json()) as Record<string, unknown>;
 
         // #region debug-point B:collection-page-fetch-response
