@@ -1,9 +1,3 @@
-import {
-  getCachedRuntimeConfigSnapshot,
-  getRuntimeConfig,
-  type StreamifyRuntimeConfig,
-} from "./runtime-config";
-
 export type StreamifyBackendApiMode = "same-origin" | "absolute";
 
 export type StreamifyBackendApiSettings = {
@@ -21,31 +15,12 @@ type QueryValue =
   | undefined
   | Array<string | number | boolean>;
 
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
 function cleanUrl(value: string | undefined | null): string {
   return value?.trim().replace(/\/+$/, "") || "";
 }
 
 function cleanText(value: string | undefined | null): string {
   return value?.trim() || "";
-}
-
-function cleanOriginList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-
-  const seen = new Set<string>();
-  return value
-    .map((entry) => cleanUrl(typeof entry === "string" ? entry : ""))
-    .filter((entry) => {
-      if (!entry || seen.has(entry)) return false;
-      seen.add(entry);
-      return true;
-    });
 }
 
 function cleanPathList(value: unknown): string[] {
@@ -81,38 +56,6 @@ function normalizeMode(
   return value === "absolute" && Boolean(baseUrl) ? "absolute" : "same-origin";
 }
 
-function readRuntimeConfigApiSettings(
-  runtimeConfig: StreamifyRuntimeConfig | null
-): StreamifyBackendApiSettings {
-  const extra = toRecord(runtimeConfig?.extra);
-  const extraApi = toRecord(extra.api);
-  const topLevelApi = runtimeConfig?.api || {};
-  const baseUrl = cleanUrl(
-    topLevelApi.baseUrl ||
-      (typeof extraApi.baseUrl === "string" ? extraApi.baseUrl : "")
-  );
-  const mode = normalizeMode(
-    cleanText(
-      topLevelApi.mode ||
-        (typeof extraApi.mode === "string" ? extraApi.mode : "")
-    ).toLowerCase(),
-    baseUrl
-  );
-  const allowedOrigins = cleanOriginList(
-    topLevelApi.allowedOrigins || extraApi.allowedOrigins
-  );
-  const absoluteRoutes = cleanPathList(
-    topLevelApi.absoluteRoutes || extraApi.absoluteRoutes
-  );
-
-  return {
-    mode,
-    baseUrl: mode === "absolute" ? baseUrl : null,
-    allowedOrigins,
-    absoluteRoutes,
-  };
-}
-
 function readEnvApiSettings(): StreamifyBackendApiSettings {
   const baseUrl = cleanUrl(
     process.env.NEXT_PUBLIC_STREAMIFY_API_BASE_URL ||
@@ -140,34 +83,6 @@ function readEnvApiSettings(): StreamifyBackendApiSettings {
         process.env.NEXT_PUBLIC_API_ROUTES ||
         process.env.API_ROUTES
     ),
-  };
-}
-
-function mergeApiSettings(
-  runtimeConfig: StreamifyRuntimeConfig | null
-): StreamifyBackendApiSettings {
-  const runtimeSettings = readRuntimeConfigApiSettings(runtimeConfig);
-  const envSettings = readEnvApiSettings();
-
-  if (runtimeSettings.mode === "absolute" && runtimeSettings.baseUrl) {
-    return runtimeSettings;
-  }
-
-  if (envSettings.mode === "absolute" && envSettings.baseUrl) {
-    return envSettings;
-  }
-
-  return {
-    mode: "same-origin",
-    baseUrl: null,
-    allowedOrigins:
-      runtimeSettings.allowedOrigins.length > 0
-        ? runtimeSettings.allowedOrigins
-        : envSettings.allowedOrigins,
-    absoluteRoutes:
-      runtimeSettings.absoluteRoutes.length > 0
-        ? runtimeSettings.absoluteRoutes
-        : envSettings.absoluteRoutes,
   };
 }
 
@@ -226,17 +141,14 @@ function appendSearchParams(
 }
 
 export function getCachedBackendApiSettings(): StreamifyBackendApiSettings {
-  return mergeApiSettings(getCachedRuntimeConfigSnapshot());
+  return readEnvApiSettings();
 }
 
 export async function getBackendApiSettings(options?: {
   revalidate?: boolean;
 }): Promise<StreamifyBackendApiSettings> {
-  try {
-    return mergeApiSettings(await getRuntimeConfig(options));
-  } catch {
-    return getCachedBackendApiSettings();
-  }
+  void options;
+  return getCachedBackendApiSettings();
 }
 
 export function buildBackendRouteUrl(

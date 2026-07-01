@@ -1,5 +1,5 @@
 import { getWorkerConfig, type WorkerEnv } from "./config";
-import { applyCorsHeaders, json } from "./http";
+import { applyCorsHeaders, isAuthorizedApiRequest, json } from "./http";
 import { handleArtist } from "./routes/artist";
 import { handleAudioProxy } from "./routes/audio-proxy";
 import { handleCollection } from "./routes/collection";
@@ -45,6 +45,39 @@ export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     try {
       const config = await getWorkerConfig(env);
+      const pathname = new URL(request.url).pathname;
+      const serverSecret =
+        env.STREAMIFY_SERVER_FETCH_SECRET || env.SERVER_FETCH_SECRET || "";
+      const isPublicRoute = pathname === "/health";
+
+      if (
+        !isPublicRoute &&
+        !isAuthorizedApiRequest(request, config, serverSecret)
+      ) {
+        return applyCorsHeaders(
+          json(
+            {
+              error:
+                "This API is only available from approved Streamify origins.",
+            },
+            { status: 403 }
+          ),
+          request,
+          config,
+          {
+            methods: ["GET", "POST", "HEAD", "OPTIONS"],
+            headers: [
+              "Content-Type",
+              "Origin",
+              "Referer",
+              "Authorization",
+              "Range",
+              "x-streamify-server-secret",
+            ],
+          }
+        );
+      }
+
       const response = await routeRequest(request, env, config);
       return applyCorsHeaders(response, request, config, {
         methods: ["GET", "POST", "HEAD", "OPTIONS"],
@@ -54,6 +87,7 @@ export default {
           "Referer",
           "Authorization",
           "Range",
+          "x-streamify-server-secret",
         ],
         exposeHeaders: [
           "Content-Length",
@@ -91,6 +125,7 @@ export default {
             "Referer",
             "Authorization",
             "Range",
+            "x-streamify-server-secret",
           ],
         }
       );

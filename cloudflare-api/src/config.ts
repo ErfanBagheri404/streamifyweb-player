@@ -120,8 +120,7 @@ export type WorkerConfig = {
   };
 };
 
-const DEFAULT_CONFIG_URL =
-  "https://streamifyinstances.erfannodes.workers.dev/config";
+const DEFAULT_CONFIG_URL = "https://instances.streamify.workers.dev/config";
 const CONFIG_TTL_MS = 5 * 60 * 1000;
 
 const DEFAULT_CONFIG: WorkerConfig = {

@@ -2,6 +2,23 @@ import type { WorkerConfig } from "./config";
 
 type CorsConfig = Pick<WorkerConfig, "api">;
 
+function normalizeOrigin(value: string | null): string | null {
+  if (!value) return null;
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function getRequestOrigin(request: Request): string | null {
+  const origin = normalizeOrigin(request.headers.get("origin"));
+  if (origin) return origin;
+
+  return normalizeOrigin(request.headers.get("referer"));
+}
+
 export function withTimeout(
   signal: AbortSignal | undefined,
   timeoutMs: number
@@ -49,7 +66,7 @@ export function getAllowedOrigin(
   request: Request,
   config: CorsConfig
 ): string | null {
-  const origin = request.headers.get("origin");
+  const origin = getRequestOrigin(request);
   if (!origin) return null;
 
   if (config.api.allowedOrigins.length === 0) {
@@ -57,6 +74,20 @@ export function getAllowedOrigin(
   }
 
   return config.api.allowedOrigins.includes(origin) ? origin : null;
+}
+
+export function isAuthorizedApiRequest(
+  request: Request,
+  config: CorsConfig,
+  serverSecret?: string
+): boolean {
+  const providedSecret =
+    request.headers.get("x-streamify-server-secret")?.trim() || "";
+  if (serverSecret && providedSecret === serverSecret.trim()) {
+    return true;
+  }
+
+  return Boolean(getAllowedOrigin(request, config));
 }
 
 export function applyCorsHeaders(
