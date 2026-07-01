@@ -10,10 +10,10 @@ import { handleVideo } from "./routes/video";
 
 async function routeRequest(
   request: Request,
-  env: WorkerEnv
+  env: WorkerEnv,
+  config: Awaited<ReturnType<typeof getWorkerConfig>>
 ): Promise<Response> {
   const url = new URL(request.url);
-  const config = await getWorkerConfig(env);
 
   switch (url.pathname) {
     case "/health":
@@ -43,9 +43,9 @@ async function routeRequest(
 
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
-    const config = await getWorkerConfig(env);
     try {
-      const response = await routeRequest(request, env);
+      const config = await getWorkerConfig(env);
+      const response = await routeRequest(request, env, config);
       return applyCorsHeaders(response, request, config, {
         methods: ["GET", "POST", "HEAD", "OPTIONS"],
         headers: [
@@ -63,6 +63,16 @@ export default {
         ],
       });
     } catch (error) {
+      const fallbackConfig = {
+        api: {
+          allowedOrigins: [],
+          proxy: {
+            allowedAudioHosts: [],
+            allowedLicenseHosts: [],
+          },
+        },
+      };
+
       return applyCorsHeaders(
         json(
           {
@@ -72,7 +82,7 @@ export default {
           { status: 500 }
         ),
         request,
-        config,
+        fallbackConfig,
         {
           methods: ["GET", "POST", "HEAD", "OPTIONS"],
           headers: [

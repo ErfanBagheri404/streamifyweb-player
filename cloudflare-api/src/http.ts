@@ -1,5 +1,7 @@
 import type { WorkerConfig } from "./config";
 
+type CorsConfig = Pick<WorkerConfig, "api">;
+
 export function withTimeout(
   signal: AbortSignal | undefined,
   timeoutMs: number
@@ -45,7 +47,7 @@ export function json(
 
 export function getAllowedOrigin(
   request: Request,
-  config: WorkerConfig
+  config: CorsConfig
 ): string | null {
   const origin = request.headers.get("origin");
   if (!origin) return null;
@@ -60,7 +62,7 @@ export function getAllowedOrigin(
 export function applyCorsHeaders(
   response: Response,
   request: Request,
-  config: WorkerConfig,
+  config: CorsConfig,
   options?: {
     methods?: string[];
     headers?: string[];
@@ -93,7 +95,7 @@ export function applyCorsHeaders(
 
 export function createOptionsResponse(
   request: Request,
-  config: WorkerConfig,
+  config: CorsConfig,
   options: {
     methods: string[];
     headers: string[];
