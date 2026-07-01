@@ -5,7 +5,7 @@ const previewBackendApiEnv =
           process.env.NEXT_PUBLIC_STREAMIFY_API_MODE || "absolute",
         NEXT_PUBLIC_STREAMIFY_API_BASE_URL:
           process.env.NEXT_PUBLIC_STREAMIFY_API_BASE_URL ||
-          "https://streamifyapi.helloify.workers.dev",
+          "https://api.streamify.workers.dev",
         NEXT_PUBLIC_STREAMIFY_API_ROUTES:
           process.env.NEXT_PUBLIC_STREAMIFY_API_ROUTES ||
           "/video,/audio-proxy,/license-proxy,/search,/artist,/collection,/lyrics",

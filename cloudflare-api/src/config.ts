@@ -1,6 +1,7 @@
 export interface WorkerEnv {
   CONFIG_URL?: string;
   STREAMIFY_SERVER_FETCH_SECRET?: string;
+  SERVER_FETCH_SECRET?: string;
   ALLOWED_ORIGINS?: string;
   WORKER_ENV?: string;
 }
@@ -127,72 +128,58 @@ const DEFAULT_CONFIG: WorkerConfig = {
   api: {
     allowedOrigins: [],
     proxy: {
-      allowedAudioHosts: [
-        "googlevideo.com",
-        "sndcdn.com",
-        "media-streaming.soundcloud.cloud",
-        "media-streaming.soundcloud.com",
-        "saavncdn.com",
-      ],
-      allowedLicenseHosts: [
-        "license.media-streaming.soundcloud.cloud",
-        "license.media-streaming.soundcloud.com",
-      ],
+      allowedAudioHosts: [],
+      allowedLicenseHosts: [],
     },
   },
   instances: {
-    piped: ["https://api.piped.private.coffee"],
-    invidious: [
-      "https://yt.omada.cafe",
-      "https://invidious.schenkel.eti.br",
-      "https://invidious.kemonomimi.nl",
-      "https://lekker.gay",
-    ],
+    piped: [],
+    invidious: [],
   },
   providers: {
     search: {
-      ytifyInstance: "https://api.ytify.workers.dev",
-      soundcloudSearchProxyBase: "https://proxy.searchsoundcloud.com",
+      ytifyInstance: "",
+      soundcloudSearchProxyBase: "",
     },
     beatseek: {
-      apiBase: "https://beatseek.io/api",
+      apiBase: "",
     },
     jiosaavn: {
-      apiBase: "https://streamifyjiosaavn.vercel.app",
-      fallbackSearchBase: "https://jiosaavn-api.vercel.app",
-      webOrigin: "https://www.jiosaavn.com",
+      apiBase: "",
+      fallbackSearchBase: "",
+      webOrigin: "",
     },
     lyrics: {
-      lrclibBase: "https://lrclib.net/api",
-      lyricsOvhBase: "https://api.lyrics.ovh/v1",
+      lrclibBase: "",
+      lyricsOvhBase: "",
     },
     soundcloud: {
       clientId: "",
-      origin: "https://soundcloud.com",
-      mobileOrigin: "https://m.soundcloud.com",
-      apiBase: "https://api.soundcloud.com",
-      apiV2Base: "https://api-v2.soundcloud.com",
-      widgetBase: "https://w.soundcloud.com",
-      licenseBase: "https://license.media-streaming.soundcloud.cloud",
-      oembedBase: "https://soundcloud.com/oembed",
+      origin: "",
+      mobileOrigin: "",
+      apiBase: "",
+      apiV2Base: "",
+      widgetBase: "",
+      licenseBase: "",
+      oembedBase: "",
     },
     youtube: {
-      webBase: "https://www.youtube.com",
-      musicBase: "https://music.youtube.com",
-      oembedBase: "https://www.youtube.com/oembed",
-      imageBase: "https://i.ytimg.com",
+      webBase: "",
+      musicBase: "",
+      oembedBase: "",
+      imageBase: "",
     },
   },
   headers: {
     origins: {
-      soundcloud: "https://soundcloud.com",
-      youtube: "https://www.youtube.com",
-      jiosaavn: "https://www.jiosaavn.com",
+      soundcloud: "",
+      youtube: "",
+      jiosaavn: "",
     },
     referers: {
-      soundcloud: "https://soundcloud.com/",
-      youtube: "https://www.youtube.com/",
-      jiosaavn: "https://www.jiosaavn.com/",
+      soundcloud: "",
+      youtube: "",
+      jiosaavn: "",
     },
   },
 };
@@ -283,7 +270,9 @@ async function fetchRemoteConfig(
 ): Promise<WorkerRuntimeConfig | null> {
   const configUrl = cleanUrl(env.CONFIG_URL) || DEFAULT_CONFIG_URL;
   const headers = new Headers({ Accept: "application/json" });
-  const serverSecret = cleanText(env.STREAMIFY_SERVER_FETCH_SECRET);
+  const serverSecret = cleanText(
+    env.STREAMIFY_SERVER_FETCH_SECRET || env.SERVER_FETCH_SECRET
+  );
   if (serverSecret) {
     headers.set("x-streamify-server-secret", serverSecret);
   }

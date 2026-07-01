@@ -1,8 +1,8 @@
-name = "streamifyapi"
+name = "api"
 main = "src/index.ts"
 compatibility_date = "2026-06-30"
 
 [vars]
 WORKER_ENV = "preview"
-CONFIG_URL = "https://streamifyinstances.erfannodes.workers.dev/config"
-ALLOWED_ORIGINS = "https://streamifypreview.vercel.app"
+CONFIG_URL = "https://instances.streamify.workers.dev/config"
+ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,https://streamifypreview.vercel.app,https://streamify-player.netlify.app,https://streamify-player.vercel.app"
