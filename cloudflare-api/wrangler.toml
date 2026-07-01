@@ -1,6 +1,7 @@
 name = "api"
 main = "src/index.ts"
 compatibility_date = "2026-06-30"
+compatibility_flags = ["global_fetch_strictly_public"]
 
 [vars]
 WORKER_ENV = "preview"
