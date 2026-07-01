@@ -265,9 +265,18 @@ export function buildProviderUrlCandidates(
   return [...new Set(candidates)];
 }
 
-async function fetchRemoteConfig(
-  env: WorkerEnv
-): Promise<WorkerRuntimeConfig | null> {
+function readConfigErrorText(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === "object" && "error" in payload) {
+    const errorValue = (payload as { error?: unknown }).error;
+    if (typeof errorValue === "string" && errorValue.trim()) {
+      return errorValue.trim();
+    }
+  }
+
+  return fallback;
+}
+
+async function fetchRemoteConfig(env: WorkerEnv): Promise<WorkerRuntimeConfig> {
   const configUrl = cleanUrl(env.CONFIG_URL) || DEFAULT_CONFIG_URL;
   const headers = new Headers({ Accept: "application/json" });
   const serverSecret = cleanText(
@@ -277,15 +286,33 @@ async function fetchRemoteConfig(
     headers.set("x-streamify-server-secret", serverSecret);
   }
 
-  try {
-    const response = await fetch(configUrl, {
-      headers,
-    });
-    if (!response.ok) return null;
-    return (await response.json()) as WorkerRuntimeConfig;
-  } catch {
-    return null;
+  const response = await fetch(configUrl, { headers });
+  const rawBody = await response.text();
+  let parsedBody: unknown = null;
+
+  if (rawBody) {
+    try {
+      parsedBody = JSON.parse(rawBody);
+    } catch {
+      parsedBody = null;
+    }
   }
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch runtime config from ${configUrl}: ${response.status} ${
+        response.statusText
+      } (${readConfigErrorText(parsedBody, rawBody || "No response body")})`
+    );
+  }
+
+  if (!parsedBody || typeof parsedBody !== "object") {
+    throw new Error(
+      `Runtime config from ${configUrl} did not return a valid JSON object`
+    );
+  }
+
+  return parsedBody as WorkerRuntimeConfig;
 }
 
 function mergeConfig(
