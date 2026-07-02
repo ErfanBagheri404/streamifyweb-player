@@ -14,8 +14,8 @@ import { useSettings } from "./SettingsContext";
 import { formatNumberByLanguage, translate } from "../lib/i18n";
 import {
   buildAudioProxyUrl,
-  buildBackendRouteUrlAsync,
   buildLicenseProxyUrl,
+  fetchBackendRoute,
 } from "../lib/backend-api";
 import { isManagedRemoteAudioUrl } from "../lib/media-providers";
 import {
@@ -2669,11 +2669,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   useEffect(() => {
     ensureSoundCloudRuntimeConfig();
     void loadSoundCloudWidgetApi().catch(() => {});
-    void buildBackendRouteUrlAsync("/video", {
+    void fetchBackendRoute("/video", {
       searchParams: { source: "soundcloud", prewarm: 1 },
-    })
-      .then((url) => fetch(url))
-      .catch(() => {});
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -2965,11 +2963,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       }
     );
     // #endregion
-    const response = await fetch(
-      await buildBackendRouteUrlAsync("/video", {
-        searchParams: params,
-      })
-    );
+    const response = await fetchBackendRoute("/video", {
+      searchParams: params,
+    });
     const payload = (await response.json()) as Record<string, unknown>;
 
     // #region debug-point H4:resolve-response
@@ -4009,13 +4005,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       };
 
       try {
-        const probe = await fetch(
-          await buildBackendRouteUrlAsync("/license-proxy"),
-          {
+        const probe = await fetchBackendRoute("/license-proxy", {
+          init: {
             method: "GET",
             cache: "no-store",
-          }
-        );
+          },
+        });
         out.proxyReachable = probe.ok;
         out.proxyInfo = await probe.json();
         notes.push(
@@ -4029,12 +4024,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       if (licenseUrl) {
         try {
-          const diag = await fetch(
-            await buildBackendRouteUrlAsync("/license-proxy", {
-              searchParams: { url: licenseUrl },
-            }),
-            { method: "GET", cache: "no-store" }
-          );
+          const diag = await fetchBackendRoute("/license-proxy", {
+            searchParams: { url: licenseUrl },
+            init: { method: "GET", cache: "no-store" },
+          });
           const json = (await diag.json()) as {
             ok?: boolean;
             status?: number;
@@ -4059,17 +4052,15 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           if (typeof crypto !== "undefined" && crypto.getRandomValues) {
             crypto.getRandomValues(dummy);
           }
-          const post = await fetch(
-            await buildBackendRouteUrlAsync("/license-proxy", {
-              searchParams: { url: licenseUrl, _t: Date.now() },
-            }),
-            {
+          const post = await fetchBackendRoute("/license-proxy", {
+            searchParams: { url: licenseUrl, _t: Date.now() },
+            init: {
               method: "POST",
               headers: { "Content-Type": "application/octet-stream" },
               body: dummy,
               cache: "no-store",
-            }
-          );
+            },
+          });
           out.postReachable = true;
           out.postStatus = post.status;
           const buf = await post.arrayBuffer();

@@ -20,7 +20,7 @@ import {
   findActiveLyricIndex,
   TimedLyricLine,
 } from "../lib/lyrics";
-import { buildBackendRouteUrlAsync } from "../lib/backend-api";
+import { fetchBackendRoute } from "../lib/backend-api";
 import { normalizeYouTubeThumbnailUrl } from "../lib/youtube-thumbnails";
 
 const DEFAULT_PALETTE = {
@@ -557,14 +557,12 @@ export default function FullscreenPlayer() {
         if (currentSong.source) params.set("source", currentSong.source);
         if (currentSong.url) params.set("url", currentSong.url);
 
-        const response = await fetch(
-          await buildBackendRouteUrlAsync("/video", {
-            searchParams: params,
-          }),
-          {
+        const response = await fetchBackendRoute("/video", {
+          searchParams: params,
+          init: {
             cache: "no-store",
-          }
-        );
+          },
+        });
         const payload = (await response.json()) as Record<string, unknown>;
         if (!response.ok || cancelled) return;
 

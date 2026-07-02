@@ -1,6 +1,6 @@
 "use client";
 
-import { buildBackendRouteUrlAsync } from "./backend-api";
+import { fetchBackendRoute } from "./backend-api";
 import {
   buildTimedLyrics,
   findActiveLyricIndex,
@@ -90,7 +90,7 @@ export async function fetchLyrics(
 
   const request = (async () => {
     try {
-      const url = await buildBackendRouteUrlAsync("/lyrics", {
+      const response = await fetchBackendRoute("/lyrics", {
         searchParams: {
           id: track.id,
           title: track.title,
@@ -100,10 +100,9 @@ export async function fetchLyrics(
               ? Math.round(track.duration)
               : undefined,
         },
-      });
-
-      const response = await fetch(url, {
-        cache: "no-store",
+        init: {
+          cache: "no-store",
+        },
       });
 
       if (!response.ok) {

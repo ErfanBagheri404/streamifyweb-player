@@ -13,7 +13,10 @@ import { useAudio } from "../contexts/AudioContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import type { PreferredSearchSource } from "../lib/app-settings";
-import { buildBackendRouteUrlAsync } from "../lib/backend-api";
+import {
+  buildBackendRouteUrlAsync,
+  fetchBackendRoute,
+} from "../lib/backend-api";
 import {
   getSearchCategoryPlaylistHref,
   type SearchCategoryPlaylist,
@@ -726,7 +729,9 @@ function SearchPageInner() {
         });
 
         console.log("🔍 Search URL:", url);
-        const response = await fetch(url);
+        const response = await fetchBackendRoute("/search", {
+          searchParams: params,
+        });
         const data: {
           items: RawPipedItem[];
           nextpage?: string | null;
