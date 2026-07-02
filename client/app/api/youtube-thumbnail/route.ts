@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
     );
     headers.set(
       "Cache-Control",
-      "public, max-age=3600, stale-while-revalidate=86400"
+      "public, max-age=31536000, immutable"
     );
 
     return new NextResponse(response.body, {

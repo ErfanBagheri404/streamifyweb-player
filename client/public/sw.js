@@ -1,5 +1,6 @@
-const SHELL_CACHE = "streamify-shell-v1";
-const ASSET_CACHE = "streamify-assets-v1";
+const SHELL_CACHE = "streamify-shell-v2";
+const ASSET_CACHE = "streamify-assets-v2";
+const THUMBNAIL_CACHE = "streamify-thumbnails-v1";
 const SHELL_ROUTES = [
   "/",
   "/search",
@@ -33,7 +34,12 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== SHELL_CACHE && key !== ASSET_CACHE)
+            .filter(
+              (key) =>
+                key !== SHELL_CACHE &&
+                key !== ASSET_CACHE &&
+                key !== THUMBNAIL_CACHE
+            )
             .map((key) => caches.delete(key))
         )
       )
@@ -57,6 +63,25 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  if (url.pathname === "/api/youtube-thumbnail") {
+    event.respondWith(
+      caches.open(THUMBNAIL_CACHE).then(async (cache) => {
+        const cachedResponse = await cache.match(request);
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+
+        const response = await fetch(request);
+        if (response && response.ok) {
+          void cache.put(request, response.clone());
+        }
+        return response;
+      })
+    );
+    return;
+  }
+
   if (url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
