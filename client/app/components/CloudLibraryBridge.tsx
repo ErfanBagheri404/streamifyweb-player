@@ -3,6 +3,8 @@
 import { useEffect, useMemo } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabase/browser";
 import {
+  createCloudLibrarySnapshot,
+  mergeCloudLibrarySnapshots,
   readLikedSongs,
   readStoredPlaylists,
   restoreCloudLibrary,
@@ -67,6 +69,23 @@ function hasLocalLibraryData(): boolean {
   return readStoredPlaylists().length > 0 || readLikedSongs().length > 0;
 }
 
+function buildLocalLibrarySnapshot() {
+  const playlists = readStoredPlaylists();
+  const likedSongs = readLikedSongs();
+
+  return createCloudLibrarySnapshot(playlists, likedSongs);
+}
+
+function hasCloudLibraryData(snapshot: {
+  playlists?: unknown[];
+  likedSongs?: unknown[];
+}): boolean {
+  return Array.isArray(snapshot.playlists) || Array.isArray(snapshot.likedSongs)
+    ? (snapshot.playlists?.length || 0) > 0 ||
+        (snapshot.likedSongs?.length || 0) > 0
+    : false;
+}
+
 export default function CloudLibraryBridge() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
 
@@ -82,12 +101,6 @@ export default function CloudLibraryBridge() {
         return;
       }
 
-      // Keep the local browser library authoritative once it already contains
-      // data, otherwise an older cloud snapshot can wipe newly added songs.
-      if (hasLocalLibraryData()) {
-        return;
-      }
-
       try {
         const response = await fetch("/api/library/sync", {
           method: "GET",
@@ -95,10 +108,29 @@ export default function CloudLibraryBridge() {
         });
         if (!response.ok) return;
 
-        const payload = (await response.json()) as unknown;
+        const payload = (await response.json()) as {
+          playlists?: unknown[];
+          likedSongs?: unknown[];
+        };
         if (!isMounted) return;
 
-        await restoreCloudLibrary(payload);
+        if (!hasCloudLibraryData(payload)) {
+          markCloudLibraryRestored(userId);
+          return;
+        }
+
+        const remoteSnapshot = payload as Parameters<
+          typeof mergeCloudLibrarySnapshots
+        >[1];
+        const hasLocalData = hasLocalLibraryData();
+        const nextSnapshot = hasLocalData
+          ? mergeCloudLibrarySnapshots(
+              buildLocalLibrarySnapshot(),
+              remoteSnapshot
+            )
+          : remoteSnapshot;
+
+        await restoreCloudLibrary(nextSnapshot);
         markCloudLibraryRestored(userId);
       } catch {}
     };
