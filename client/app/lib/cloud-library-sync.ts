@@ -1,5 +1,6 @@
 import {
   createCloudLibrarySnapshot,
+  mergeCloudLibrarySnapshots,
   readLikedSongs,
   readStoredPlaylists,
   restoreCloudLibrary,
@@ -75,7 +76,29 @@ export async function pushCloudLibrarySnapshot(snapshot: CloudLibrarySnapshot) {
 }
 
 export async function syncCloudLibrarySnapshot() {
+  const localSource = buildCurrentLocalLibrarySyncSource();
   const remoteSnapshot = await pullCloudLibrarySnapshot();
+
+  if (
+    hasSnapshotData(remoteSnapshot) &&
+    hasSnapshotData(localSource.snapshot)
+  ) {
+    const mergedSnapshot = mergeCloudLibrarySnapshots(
+      localSource.snapshot,
+      remoteSnapshot
+    );
+
+    await restoreCloudLibrary(mergedSnapshot, {
+      deferSongMetadataRefresh: true,
+    });
+
+    const uploadResult = await pushCloudLibrarySnapshot(mergedSnapshot);
+    return {
+      syncedPlaylists: uploadResult.syncedPlaylists,
+      syncedLikes: uploadResult.syncedLikes,
+      source: "merged" as const,
+    };
+  }
 
   if (hasSnapshotData(remoteSnapshot)) {
     await restoreCloudLibrary(remoteSnapshot, {
@@ -89,7 +112,6 @@ export async function syncCloudLibrarySnapshot() {
     };
   }
 
-  const localSource = buildCurrentLocalLibrarySyncSource();
   if (!hasSnapshotData(localSource.snapshot)) {
     return {
       syncedPlaylists: 0,
