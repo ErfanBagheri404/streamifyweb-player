@@ -29,8 +29,7 @@ import {
   canOpenArtistRoute,
 } from "../lib/artist-routing";
 import {
-  buildCurrentLocalLibrarySyncSource,
-  pushCloudLibrarySnapshot,
+  syncCloudLibrarySnapshot,
 } from "../lib/cloud-library-sync";
 import { getSupabaseBrowserClient } from "../lib/supabase/browser";
 import { normalizeYouTubeThumbnailUrl } from "../lib/youtube-thumbnails";
@@ -1152,17 +1151,6 @@ export default function LibraryPage() {
   };
 
   const handleSyncLibrary = async () => {
-    const { playlists, likedSongs, snapshot } =
-      buildCurrentLocalLibrarySyncSource();
-
-    if (playlists.length === 0 && likedSongs.length === 0) {
-      showToast({
-        tone: "error",
-        message: t("settings.syncEmpty"),
-      });
-      return;
-    }
-
     setIsSyncing(true);
     showToast({
       message: t("settings.syncInProgress"),
@@ -1171,8 +1159,19 @@ export default function LibraryPage() {
     });
 
     try {
-      const result = await pushCloudLibrarySnapshot(snapshot);
-      await refreshLocalLibrarySongMetadata();
+      const result = await syncCloudLibrarySnapshot();
+      if (
+        result.source === "empty" &&
+        result.syncedPlaylists === 0 &&
+        result.syncedLikes === 0
+      ) {
+        showToast({
+          tone: "error",
+          message: t("settings.syncEmpty"),
+        });
+        return;
+      }
+
       showToast({
         tone: "success",
         message: t("settings.syncSuccess", {

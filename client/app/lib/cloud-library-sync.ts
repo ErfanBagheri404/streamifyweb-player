@@ -2,6 +2,7 @@ import {
   createCloudLibrarySnapshot,
   readLikedSongs,
   readStoredPlaylists,
+  restoreCloudLibrary,
   type CloudLibrarySnapshot,
 } from "./local-library";
 
@@ -19,6 +20,32 @@ export function buildCurrentLocalLibrarySyncSource(): LocalLibrarySyncSource {
     playlists,
     likedSongs,
     snapshot: createCloudLibrarySnapshot(playlists, likedSongs),
+  };
+}
+
+function hasSnapshotData(snapshot: CloudLibrarySnapshot): boolean {
+  return snapshot.playlists.length > 0 || snapshot.likedSongs.length > 0;
+}
+
+export async function pullCloudLibrarySnapshot(): Promise<CloudLibrarySnapshot> {
+  const response = await fetch("/api/library/sync", {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  const payload = (await response.json()) as {
+    error?: string;
+    playlists?: CloudLibrarySnapshot["playlists"];
+    likedSongs?: CloudLibrarySnapshot["likedSongs"];
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Library sync failed");
+  }
+
+  return {
+    playlists: Array.isArray(payload.playlists) ? payload.playlists : [],
+    likedSongs: Array.isArray(payload.likedSongs) ? payload.likedSongs : [],
   };
 }
 
@@ -44,5 +71,37 @@ export async function pushCloudLibrarySnapshot(snapshot: CloudLibrarySnapshot) {
   return {
     syncedPlaylists: payload.syncedPlaylists ?? snapshot.playlists.length,
     syncedLikes: payload.syncedLikes ?? snapshot.likedSongs.length,
+  };
+}
+
+export async function syncCloudLibrarySnapshot() {
+  const remoteSnapshot = await pullCloudLibrarySnapshot();
+
+  if (hasSnapshotData(remoteSnapshot)) {
+    await restoreCloudLibrary(remoteSnapshot, {
+      deferSongMetadataRefresh: true,
+    });
+
+    return {
+      syncedPlaylists: remoteSnapshot.playlists.length,
+      syncedLikes: remoteSnapshot.likedSongs.length,
+      source: "cloud" as const,
+    };
+  }
+
+  const localSource = buildCurrentLocalLibrarySyncSource();
+  if (!hasSnapshotData(localSource.snapshot)) {
+    return {
+      syncedPlaylists: 0,
+      syncedLikes: 0,
+      source: "empty" as const,
+    };
+  }
+
+  const uploadResult = await pushCloudLibrarySnapshot(localSource.snapshot);
+  return {
+    syncedPlaylists: uploadResult.syncedPlaylists,
+    syncedLikes: uploadResult.syncedLikes,
+    source: "local" as const,
   };
 }

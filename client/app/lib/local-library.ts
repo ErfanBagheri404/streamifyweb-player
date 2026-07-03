@@ -52,6 +52,10 @@ export interface LocalCollectionData {
   songs: Song[];
 }
 
+export interface RestoreCloudLibraryOptions {
+  deferSongMetadataRefresh?: boolean;
+}
+
 function emitLocalLibraryUpdated() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(LOCAL_LIBRARY_UPDATED_EVENT));
@@ -587,6 +591,14 @@ function createPlaceholderSong(ref: CloudTrackRef): Song {
     title: ref.id,
     artist: ref.source,
   };
+}
+
+function createRestoredSongSnapshot(
+  ref: CloudTrackRef,
+  knownSong?: Song | null
+): Song {
+  const placeholder = createPlaceholderSong(ref);
+  return knownSong ? mergeSongSnapshots(placeholder, knownSong) : placeholder;
 }
 
 function buildKnownSongMetadataMap(): Map<string, Song> {
@@ -1127,9 +1139,35 @@ export function findStoredPlaylistForSourceCollection(
   );
 }
 
-export async function restoreCloudLibrary(snapshot: unknown) {
+export async function restoreCloudLibrary(
+  snapshot: unknown,
+  options: RestoreCloudLibraryOptions = {}
+) {
   const normalized = normalizeCloudLibrarySnapshot(snapshot);
   const knownSongsByKey = buildKnownSongMetadataMap();
+  if (options.deferSongMetadataRefresh) {
+    const restoredPlaylists = normalized.playlists.map((playlist) => ({
+      id: playlist.id,
+      name: playlist.name,
+      description: playlist.description,
+      createdAt: playlist.createdAt,
+      songs: playlist.songs.map((ref) =>
+        createRestoredSongSnapshot(
+          ref,
+          knownSongsByKey.get(getCloudTrackRefKey(ref))
+        )
+      ),
+    }));
+    const restoredLikedSongs = normalized.likedSongs.map((ref) =>
+      createRestoredSongSnapshot(ref, knownSongsByKey.get(getCloudTrackRefKey(ref)))
+    );
+
+    writeStoredPlaylists(restoredPlaylists);
+    writeLikedSongs(restoredLikedSongs);
+    void refreshLocalLibrarySongMetadata().catch(() => {});
+    return;
+  }
+
   const restoredPlaylists = await Promise.all(
     normalized.playlists.map(async (playlist) => ({
       id: playlist.id,

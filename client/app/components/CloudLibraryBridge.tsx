@@ -130,7 +130,9 @@ export default function CloudLibraryBridge() {
             )
           : remoteSnapshot;
 
-        await restoreCloudLibrary(nextSnapshot);
+        await restoreCloudLibrary(nextSnapshot, {
+          deferSongMetadataRefresh: true,
+        });
         markCloudLibraryRestored(userId);
       } catch {}
     };

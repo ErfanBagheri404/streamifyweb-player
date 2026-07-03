@@ -14,10 +14,8 @@ import {
   type PreferredSearchSource,
 } from "../lib/app-settings";
 import {
-  buildCurrentLocalLibrarySyncSource,
-  pushCloudLibrarySnapshot,
+  syncCloudLibrarySnapshot,
 } from "../lib/cloud-library-sync";
-import { refreshLocalLibrarySongMetadata } from "../lib/local-library";
 import {
   getUserAvatarUrl,
   getUserDisplayName,
@@ -592,17 +590,6 @@ export default function SettingsPage() {
       return;
     }
 
-    const { playlists, likedSongs, snapshot } =
-      buildCurrentLocalLibrarySyncSource();
-
-    if (playlists.length === 0 && likedSongs.length === 0) {
-      showToast({
-        tone: "error",
-        message: t("settings.syncEmpty"),
-      });
-      return;
-    }
-
     setIsSyncing(true);
     showToast({
       message: t("settings.syncInProgress"),
@@ -611,8 +598,19 @@ export default function SettingsPage() {
     });
 
     try {
-      const payload = await pushCloudLibrarySnapshot(snapshot);
-      await refreshLocalLibrarySongMetadata();
+      const payload = await syncCloudLibrarySnapshot();
+
+      if (
+        payload.source === "empty" &&
+        payload.syncedPlaylists === 0 &&
+        payload.syncedLikes === 0
+      ) {
+        showToast({
+          tone: "error",
+          message: t("settings.syncEmpty"),
+        });
+        return;
+      }
 
       showToast({
         tone: "success",
