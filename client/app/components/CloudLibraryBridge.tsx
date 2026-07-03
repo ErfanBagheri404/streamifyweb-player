@@ -3,6 +3,10 @@
 import { useEffect, useMemo } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabase/browser";
 import {
+  clearLastSyncedCloudLibrarySnapshot,
+  saveLastSyncedCloudLibrarySnapshot,
+} from "../lib/cloud-library-sync";
+import {
   createCloudLibrarySnapshot,
   mergeCloudLibrarySnapshots,
   readLikedSongs,
@@ -115,6 +119,10 @@ export default function CloudLibraryBridge() {
         if (!isMounted) return;
 
         if (!hasCloudLibraryData(payload)) {
+          saveLastSyncedCloudLibrarySnapshot({
+            playlists: [],
+            likedSongs: [],
+          });
           markCloudLibraryRestored(userId);
           return;
         }
@@ -133,6 +141,7 @@ export default function CloudLibraryBridge() {
         await restoreCloudLibrary(nextSnapshot, {
           deferSongMetadataRefresh: true,
         });
+        saveLastSyncedCloudLibrarySnapshot(nextSnapshot);
         markCloudLibraryRestored(userId);
       } catch {}
     };
@@ -153,6 +162,7 @@ export default function CloudLibraryBridge() {
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") {
         clearAllCloudLibraryRestoreMarks();
+        clearLastSyncedCloudLibrarySnapshot();
         return;
       }
 
