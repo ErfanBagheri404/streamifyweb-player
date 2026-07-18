@@ -26,8 +26,10 @@ function reportDebugEvent(
   _hypothesisId: string,
   _location: string,
   _msg: string,
-  _data: Record<string, unknown>
-) {}
+  _data: Record<string, unknown>,
+) {
+  // Debug event reporting disabled. Kept as a no-op so call sites stay intact.
+}
 
 interface ProxiedAudioResponse {
   statusCode: number;
@@ -53,7 +55,7 @@ function isRetryableError(error: unknown): boolean {
 
 function readHeader(
   headers: IncomingHttpHeaders,
-  name: keyof IncomingHttpHeaders
+  name: keyof IncomingHttpHeaders,
 ): string | null {
   const value = headers[name];
   if (Array.isArray(value)) return value[0] ?? null;
@@ -105,12 +107,12 @@ async function requestAudioStreamViaFetch(
   audioUrl: string,
   headers: Record<string, string>,
   retryCount = 0,
-  redirectChain: string[] = []
+  redirectChain: string[] = [],
 ): Promise<ProxiedAudioResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(),
-    AUDIO_REQUEST_TIMEOUT_MS
+    AUDIO_REQUEST_TIMEOUT_MS,
   );
 
   try {
@@ -145,7 +147,7 @@ async function requestAudioStreamViaFetch(
         audioUrl,
         headers,
         retryCount + 1,
-        redirectChain
+        redirectChain,
       );
     }
 
@@ -160,7 +162,7 @@ async function requestAudioStream(
   headers: Record<string, string>,
   redirectCount = 0,
   retryCount = 0,
-  redirectChain: string[] = []
+  redirectChain: string[] = [],
 ): Promise<ProxiedAudioResponse> {
   const url = new URL(audioUrl);
   if (isGoogleVideoHost(url.hostname)) {
@@ -168,7 +170,7 @@ async function requestAudioStream(
       audioUrl,
       headers,
       retryCount,
-      redirectChain
+      redirectChain,
     );
   }
 
@@ -177,8 +179,8 @@ async function requestAudioStream(
   const maxRetries = url.hostname.includes("saavncdn.com")
     ? JIOSAAVN_MAX_RETRIES
     : isGoogleVideoHost(url.hostname)
-    ? GOOGLEVIDEO_MAX_RETRIES
-    : DEFAULT_MAX_RETRIES;
+      ? GOOGLEVIDEO_MAX_RETRIES
+      : DEFAULT_MAX_RETRIES;
 
   return new Promise((resolve, reject) => {
     const req = transport.request(
@@ -212,8 +214,8 @@ async function requestAudioStream(
               headers,
               redirectCount + 1,
               retryCount,
-              [...redirectChain, redirectUrl]
-            )
+              [...redirectChain, redirectUrl],
+            ),
           );
           return;
         }
@@ -225,7 +227,7 @@ async function requestAudioStream(
           finalUrl: audioUrl,
           redirectChain,
         });
-      }
+      },
     );
 
     req.setTimeout(AUDIO_REQUEST_TIMEOUT_MS, () => {
@@ -242,8 +244,8 @@ async function requestAudioStream(
               headers,
               redirectCount,
               retryCount + 1,
-              redirectChain
-            )
+              redirectChain,
+            ),
           );
         }, delayMs);
         return;
@@ -308,7 +310,7 @@ function summarizeAudioUrl(audioUrl: string) {
 
 function isHlsPlaylistResponse(
   finalUrl: string,
-  headers: IncomingHttpHeaders
+  headers: IncomingHttpHeaders,
 ): boolean {
   const contentType = readHeader(headers, "content-type") || "";
   return (
@@ -327,10 +329,10 @@ function rewriteHlsAttributeUris(line: string, playlistUrl: string): string {
         typeof doubleQuoted === "string" && doubleQuoted
           ? doubleQuoted
           : typeof singleQuoted === "string" && singleQuoted
-          ? singleQuoted
-          : typeof bare === "string" && bare
-          ? bare
-          : "";
+            ? singleQuoted
+            : typeof bare === "string" && bare
+              ? bare
+              : "";
 
       if (!uri || /^data:/i.test(uri)) return `URI="${uri}"`;
       const absoluteUrl = new URL(uri, playlistUrl).toString();
@@ -338,7 +340,7 @@ function rewriteHlsAttributeUris(line: string, playlistUrl: string): string {
         ? buildLicenseProxyUrl(absoluteUrl)
         : buildProxyAudioUrl(absoluteUrl);
       return `URI="${proxied}"`;
-    }
+    },
   );
 }
 
@@ -358,7 +360,7 @@ function rewriteHlsPlaylist(playlistText: string, playlistUrl: string): string {
 }
 
 async function readResponseBodyAsText(
-  body: Readable | ReadableStream
+  body: Readable | ReadableStream,
 ): Promise<string> {
   const stream =
     body instanceof Readable ? (Readable.toWeb(body) as ReadableStream) : body;
@@ -396,7 +398,7 @@ export async function GET(request: NextRequest) {
       audioHost: audioUrl ? new URL(audioUrl).host : null,
       hasRange: Boolean(request.headers.get("range")),
       urlSummary: audioUrl ? summarizeAudioUrl(audioUrl) : null,
-    }
+    },
   );
   // #endregion
 
@@ -407,7 +409,7 @@ export async function GET(request: NextRequest) {
       "H4",
       "app/api/audio-proxy/route.ts:GET:missing-url",
       "[DEBUG] /api/audio-proxy missing url",
-      {}
+      {},
     );
     // #endregion
     return new NextResponse("Audio URL is required", { status: 400 });
@@ -485,7 +487,7 @@ export async function GET(request: NextRequest) {
           secFetchSite: headers["Sec-Fetch-Site"] || null,
           range: headers.Range || null,
         },
-      }
+      },
     );
     // #endregion
     const response = await requestAudioStream(audioUrl, headers);
@@ -503,7 +505,7 @@ export async function GET(request: NextRequest) {
           status: response.statusCode,
           redirectChain: response.redirectChain,
           finalUrlSummary: summarizeAudioUrl(response.finalUrl),
-        }
+        },
       );
       // #endregion
     }
@@ -522,13 +524,13 @@ export async function GET(request: NextRequest) {
           finalUrlSummary: summarizeAudioUrl(response.finalUrl),
           redirectChain: response.redirectChain,
           headers: readInterestingHeaders(response.headers),
-        }
+        },
       );
       // #endregion
       console.error(`Audio proxy failed with status: ${response.statusCode}`);
       return new NextResponse(
         `Failed to fetch audio stream: ${response.statusCode}`,
-        { status: response.statusCode }
+        { status: response.statusCode },
       );
     }
 
@@ -542,7 +544,7 @@ export async function GET(request: NextRequest) {
       const playlistText = await readResponseBodyAsText(response.body);
       const rewrittenPlaylist = rewriteHlsPlaylist(
         playlistText,
-        response.finalUrl
+        response.finalUrl,
       );
       responseHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
       responseHeaders.delete("Content-Length");
@@ -566,14 +568,14 @@ export async function GET(request: NextRequest) {
           lineCount: playlistText.split(/\r?\n/).length,
           extXKeyLineCount: rewrittenKeyLines.length,
           extXKeySample: rewrittenKeyLines[0] || null,
-        })
+        }),
       );
 
       responseHeaders.set("X-Streamify-RunId", runId);
       responseHeaders.set("X-Streamify-HlsRewrite", "1");
       responseHeaders.set(
         "X-Streamify-HasExtXKey",
-        String(rewrittenKeyLines.length)
+        String(rewrittenKeyLines.length),
       );
 
       reportDebugEvent(
@@ -588,7 +590,7 @@ export async function GET(request: NextRequest) {
           lineCount: playlistText.split(/\r?\n/).length,
           extXKeyLineCount: rewrittenKeyLines.length,
           extXKeySample: rewrittenKeyLines[0] || null,
-        }
+        },
       );
 
       return new NextResponse(rewrittenPlaylist, {
@@ -612,7 +614,7 @@ export async function GET(request: NextRequest) {
         redirectChain: response.redirectChain,
         contentRange: readHeader(response.headers, "content-range"),
         contentLength: readHeader(response.headers, "content-length"),
-      }
+      },
     );
     // #endregion
     return new NextResponse(
@@ -622,7 +624,7 @@ export async function GET(request: NextRequest) {
       {
         status: response.statusCode,
         headers: responseHeaders,
-      }
+      },
     );
   } catch (error) {
     // #region debug-point H4:audio-proxy-exception
@@ -639,7 +641,7 @@ export async function GET(request: NextRequest) {
           error && typeof error === "object" && "code" in error
             ? String((error as { code?: unknown }).code)
             : null,
-      }
+      },
     );
     // #endregion
     console.error("Audio proxy error:", error);

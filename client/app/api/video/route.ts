@@ -41,8 +41,10 @@ function reportDebugEvent(
   _hypothesisId: string,
   _location: string,
   _msg: string,
-  _data: Record<string, unknown>
-) {}
+  _data: Record<string, unknown>,
+) {
+  // Debug event reporting disabled. Kept as a no-op so call sites stay intact.
+}
 
 function normalizeYouTubeSourceKey(source?: string): string {
   return source === "youtubemusic" ? "youtubemusic" : "youtube";
@@ -61,7 +63,7 @@ function readPreferredYouTubeProvider(source?: string): string | null {
 
 function writePreferredYouTubeProvider(
   source: string | undefined,
-  label: string
+  label: string,
 ) {
   if (!label) return;
   preferredYouTubeProviders.set(normalizeYouTubeSourceKey(source), {
@@ -72,7 +74,7 @@ function writePreferredYouTubeProvider(
 
 function parseYouTubeProviderHints(
   hintValue: string | undefined,
-  source?: string
+  source?: string,
 ): string[] {
   const requestedHints = (hintValue || "")
     .split(",")
@@ -84,15 +86,15 @@ function parseYouTubeProviderHints(
 
 function prioritizeVideoProviders(
   providers: VideoProvider[],
-  preferredHints: string[]
+  preferredHints: string[],
 ): VideoProvider[] {
   if (preferredHints.length === 0) return providers;
 
   const preferred = providers.filter((provider) =>
-    preferredHints.includes(provider.label)
+    preferredHints.includes(provider.label),
   );
   const fallback = providers.filter(
-    (provider) => !preferredHints.includes(provider.label)
+    (provider) => !preferredHints.includes(provider.label),
   );
   return [...preferred, ...fallback];
 }
@@ -100,7 +102,7 @@ function prioritizeVideoProviders(
 async function tryVideoProvidersSequentially(
   providers: VideoProvider[],
   runId: string,
-  source?: string
+  source?: string,
 ): Promise<Record<string, unknown> | null> {
   const errors: string[] = [];
 
@@ -126,7 +128,7 @@ async function tryVideoProvidersSequentially(
           source: source || "youtube",
           provider: provider.label,
           error: message,
-        }
+        },
       );
     }
   }
@@ -152,7 +154,7 @@ function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
     () => {
       clearTimeout(timer);
     },
-    { once: true }
+    { once: true },
   );
 
   return controller.signal;
@@ -192,7 +194,7 @@ function toNumber(value: unknown): number | undefined {
 
 function parseJsonText(
   text: string,
-  errorMessage = "Invalid JSON response"
+  errorMessage = "Invalid JSON response",
 ): unknown {
   const normalized = text.replace(/^\uFEFF/, "").trim();
   if (!normalized) return null;
@@ -203,7 +205,7 @@ function parseJsonText(
     const firstObject = normalized.indexOf("{");
     const firstArray = normalized.indexOf("[");
     const startCandidates = [firstObject, firstArray].filter(
-      (value) => value >= 0
+      (value) => value >= 0,
     );
     const lastObject = normalized.lastIndexOf("}");
     const lastArray = normalized.lastIndexOf("]");
@@ -223,7 +225,7 @@ function parseJsonText(
 async function fetchTextWithHeaders(
   url: string,
   headers: Record<string, string>,
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<string> {
   try {
     const res = await fetch(url, {
@@ -234,7 +236,7 @@ async function fetchTextWithHeaders(
     const text = await res.text();
     if (!res.ok) {
       throw new Error(
-        `HTTP ${res.status}${text ? `: ${text.slice(0, 160)}` : ""}`
+        `HTTP ${res.status}${text ? `: ${text.slice(0, 160)}` : ""}`,
       );
     }
     return text;
@@ -243,7 +245,7 @@ async function fetchTextWithHeaders(
     const shouldTryPowerShell =
       process.platform === "win32" &&
       (/fetch failed|ECONNRESET|aborted|UND_ERR_CONNECT_TIMEOUT/i.test(
-        message
+        message,
       ) ||
         message.includes("This operation was aborted"));
 
@@ -262,7 +264,7 @@ function buildDirectProxyAudioUrl(streamUrl: string | null): string | null {
 
 function buildSoundCloudWidevineLicenseUrl(
   licenseBase: string,
-  licenseAuthToken: string
+  licenseAuthToken: string,
 ): string {
   return (
     buildProviderUrlCandidates(licenseBase, ["/playback/widevine"], {
@@ -321,7 +323,7 @@ function getJioSaavnRecords(payload: unknown): Record<string, any>[] {
       record.song,
       record.songs,
       record.results,
-      record.more_info
+      record.more_info,
     );
   }
 
@@ -336,7 +338,7 @@ function pickJioSaavnImage(value: unknown): string | undefined {
     images
       .sort(
         (a, b) =>
-          qualityScore(b.quality || b.size) - qualityScore(a.quality || a.size)
+          qualityScore(b.quality || b.size) - qualityScore(a.quality || a.size),
       )
       .map((entry) => pickArrayString(entry, ["url", "link"]))
       .find(Boolean) || undefined
@@ -344,7 +346,7 @@ function pickJioSaavnImage(value: unknown): string | undefined {
 }
 
 function pickJioSaavnArtistNames(
-  record: Record<string, any>
+  record: Record<string, any>,
 ): string | undefined {
   const direct = pickArrayString(record, [
     "primary_artists",
@@ -374,7 +376,7 @@ function normalizeForMatch(value?: string): string {
     .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
     .replace(
       /\b(feat|ft|featuring|official|video|lyrics|audio|visualizer)\b/g,
-      " "
+      " ",
     )
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
@@ -398,7 +400,7 @@ function titleMatchScore(expectedTitle: string, actualTitle: string): number {
 
 function authorMatchScore(
   expectedAuthor?: string,
-  actualAuthor?: string
+  actualAuthor?: string,
 ): number {
   const expected = normalizeForMatch(expectedAuthor);
   const actual = normalizeForMatch(actualAuthor);
@@ -427,10 +429,15 @@ function extractJioSaavnAudioUrl(payload: unknown): string | null {
         .sort(
           (a, b) =>
             qualityScore(b.quality || b.bitrate || b.kbps) -
-            qualityScore(a.quality || a.bitrate || a.kbps)
+            qualityScore(a.quality || a.bitrate || a.kbps),
         )
         .map((entry) =>
-          pickArrayString(entry, ["url", "link", "downloadUrl", "download_url"])
+          pickArrayString(entry, [
+            "url",
+            "link",
+            "downloadUrl",
+            "download_url",
+          ]),
         )
         .find(Boolean);
       if (best) return best;
@@ -450,7 +457,7 @@ function extractJioSaavnAudioUrl(payload: unknown): string | null {
 }
 
 function normalizeJioSaavnPayload(
-  payload: unknown
+  payload: unknown,
 ): Record<string, unknown> | null {
   const records = getJioSaavnRecords(payload);
   const root =
@@ -465,8 +472,8 @@ function normalizeJioSaavnPayload(
             "song",
             "primaryArtists",
             "primary_artists",
-          ])
-        )
+          ]),
+        ),
     ) || toRecord(payload);
   const moreInfo = toRecord(root.more_info);
   const audioStream = extractJioSaavnAudioUrl(payload);
@@ -493,7 +500,7 @@ function normalizeJioSaavnPayload(
 }
 
 async function fetchJioSaavnFromEndpoints(
-  endpoints: string[]
+  endpoints: string[],
 ): Promise<Record<string, unknown> | null> {
   for (const endpoint of endpoints) {
     try {
@@ -510,7 +517,7 @@ async function fetchJioSaavnFromEndpoints(
 function buildJioSaavnSongEndpoints(
   id: string,
   apiBase: string,
-  urlHint?: string
+  urlHint?: string,
 ): string[] {
   const candidates = new Set<string>();
   const addId = (value?: string) => {
@@ -547,7 +554,7 @@ function buildJioSaavnSongEndpoints(
 }
 
 function extractSearchCandidates(
-  payload: unknown
+  payload: unknown,
 ): Array<Record<string, unknown>> {
   if (Array.isArray(payload)) {
     return payload
@@ -576,7 +583,7 @@ function extractSearchCandidates(
 
 async function findJioSaavnMatch(
   title: string,
-  artist?: string
+  artist?: string,
 ): Promise<{ id: string; url?: string } | null> {
   const query = [title, artist].filter(Boolean).join(" ").trim();
   if (!query) return null;
@@ -586,12 +593,12 @@ async function findJioSaavnMatch(
     ...buildProviderUrlCandidates(
       providerEndpoints.providers.jiosaavn.apiBase,
       ["/api/search", "/search"],
-      { query }
+      { query },
     ),
     ...buildProviderUrlCandidates(
       providerEndpoints.providers.jiosaavn.fallbackSearchBase,
       ["/search"],
-      { query }
+      { query },
     ),
   ];
 
@@ -649,7 +656,7 @@ async function getSoundCloudClientId(reset = false): Promise<string> {
     const oembedUrls = buildProviderUrlCandidates(
       soundcloud.oembedBase,
       ["/oembed"],
-      { url: `${soundcloud.origin}/lil-durk/back-again` }
+      { url: `${soundcloud.origin}/lil-durk/back-again` },
     );
     for (const apiUrl of oembedUrls) {
       try {
@@ -660,12 +667,12 @@ async function getSoundCloudClientId(reset = false): Promise<string> {
             Referer: `${soundcloud.origin}/`,
             Origin: soundcloud.origin,
           },
-          12000
+          12000,
         );
 
         // Try to extract client ID from oembed response
         const clientIdMatch = oembedResponse.match(
-          /client_id["\s:]+([a-zA-Z0-9]+)/
+          /client_id["\s:]+([a-zA-Z0-9]+)/,
         );
         if (clientIdMatch?.[1]) {
           soundCloudClientId = clientIdMatch[1];
@@ -687,7 +694,7 @@ async function getSoundCloudClientId(reset = false): Promise<string> {
         Referer: `${soundcloud.origin}/`,
         Origin: soundcloud.origin,
       },
-      12000
+      12000,
     );
 
     const scriptUrls = desktopHtml.match(/https?:\/\/[^\s"]+\.js/g) || [];
@@ -696,7 +703,7 @@ async function getSoundCloudClientId(reset = false): Promise<string> {
         const script = await fetchTextWithHeaders(
           scriptUrl,
           { "User-Agent": USER_AGENT, Referer: `${soundcloud.origin}/` },
-          12000
+          12000,
         );
         const match = script.match(/[{,]client_id:"(\w+)"/);
         if (match?.[1]) {
@@ -718,7 +725,7 @@ async function getSoundCloudClientId(reset = false): Promise<string> {
         "User-Agent":
           "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/99.0.4844.47 Mobile/15E148 Safari/604.1",
       },
-      12000
+      12000,
     );
     const mobileMatch = mobileHtml.match(/"clientId":"(\w+?)"/);
     if (mobileMatch?.[1]) {
@@ -780,7 +787,7 @@ function extractSoundCloudTrackId(value?: string): string | undefined {
   if (apiTrackMatch?.[1]) return apiTrackMatch[1];
 
   const apiV2TrackMatch = value.match(
-    /api-v2\.soundcloud\.com\/tracks\/(\d+)/i
+    /api-v2\.soundcloud\.com\/tracks\/(\d+)/i,
   );
   if (apiV2TrackMatch?.[1]) return apiV2TrackMatch[1];
 
@@ -807,13 +814,13 @@ function soundCloudTranscodingScore(entry: Record<string, any>): number {
 
 async function fetchSoundCloudStreamPayload(
   transcodings: Record<string, any>[],
-  trackAuthorization: string | null
+  trackAuthorization: string | null,
 ): Promise<{
   streamPayload: Record<string, any>;
   transcoding: Record<string, any>;
 }> {
   const candidates = [...transcodings].sort(
-    (a, b) => soundCloudTranscodingScore(b) - soundCloudTranscodingScore(a)
+    (a, b) => soundCloudTranscodingScore(b) - soundCloudTranscodingScore(a),
   );
   const errors: string[] = [];
 
@@ -829,7 +836,7 @@ async function fetchSoundCloudStreamPayload(
       }
 
       const streamPayload = toRecord(
-        await fetchSoundCloudJson(requestUrl.toString())
+        await fetchSoundCloudJson(requestUrl.toString()),
       );
       if (typeof streamPayload.url === "string" && streamPayload.url) {
         return { streamPayload, transcoding: candidate };
@@ -838,13 +845,13 @@ async function fetchSoundCloudStreamPayload(
       errors.push(
         `${
           toRecord(candidate.format).protocol || "unknown"
-        }: missing stream url`
+        }: missing stream url`,
       );
     } catch (error) {
       errors.push(
         `${toRecord(candidate.format).protocol || "unknown"}: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
     }
   }
@@ -852,13 +859,13 @@ async function fetchSoundCloudStreamPayload(
   throw new Error(
     `SoundCloud stream URL lookup failed${
       errors.length ? ` (${errors.join(" | ")})` : ""
-    }`
+    }`,
   );
 }
 
 async function fetchSoundCloudDetails(
   id: string,
-  urlHint?: string
+  urlHint?: string,
 ): Promise<Record<string, unknown>> {
   const providerEndpoints = await getProviderEndpoints();
   const soundcloud = providerEndpoints.providers.soundcloud;
@@ -879,7 +886,7 @@ async function fetchSoundCloudDetails(
       urlHint: normalizedUrlHint || null,
       hintedTrackId: hintedTrackId || null,
       resolveTarget,
-    }
+    },
   );
   // #endregion
 
@@ -887,12 +894,12 @@ async function fetchSoundCloudDetails(
     ? await fetchSoundCloudJson(
         buildProviderUrlCandidates(soundcloud.apiV2Base, ["/resolve"], {
           url: resolveTarget,
-        })[0] || ""
+        })[0] || "",
       )
     : await fetchSoundCloudJson(
         buildProviderUrlCandidates(soundcloud.apiV2Base, [
           `/tracks/${encodeURIComponent(resolvedTrackId)}`,
-        ])[0] || ""
+        ])[0] || "",
       );
 
   const track = toRecord(payload);
@@ -913,12 +920,12 @@ async function fetchSoundCloudDetails(
         typeof track.permalink_url === "string" ? track.permalink_url : null,
       mediaPresent: Boolean(toRecord(track.media).transcodings),
       duration: toNumber(track.duration) ?? null,
-    }
+    },
   );
   // #endregion
 
   const transcodings = toArray(toRecord(track.media).transcodings).map(
-    (entry) => toRecord(entry)
+    (entry) => toRecord(entry),
   );
   if (!transcodings.length) {
     throw new Error("SoundCloud track did not expose a playable transcoding");
@@ -957,7 +964,7 @@ async function fetchSoundCloudDetails(
           ? toRecord(bestTranscoding?.format).mime_type
           : null,
       transcodingCount: transcodings.length,
-    }
+    },
   );
   // #endregion
 
@@ -990,7 +997,7 @@ async function fetchSoundCloudDetails(
         streamPayload && typeof streamPayload === "object"
           ? Object.keys(streamPayload).slice(0, 12)
           : [],
-    }
+    },
   );
   // #endregion
 
@@ -1008,7 +1015,7 @@ async function fetchSoundCloudDetails(
   if (isEncrypted) {
     if (!licenseAuthToken) {
       throw new Error(
-        "SoundCloud encrypted stream did not include a licenseAuthToken"
+        "SoundCloud encrypted stream did not include a licenseAuthToken",
       );
     }
     return {
@@ -1022,7 +1029,7 @@ async function fetchSoundCloudDetails(
       audioUrl: streamUrl,
       drmLicenseUrl: buildSoundCloudWidevineLicenseUrl(
         soundcloud.licenseBase,
-        licenseAuthToken
+        licenseAuthToken,
       ),
       drmScheme: "com.widevine.alpha",
       drmProvider: "soundcloud",
@@ -1049,7 +1056,7 @@ async function fetchSoundCloudDetails(
 
 async function fetchJsonViaPowerShell(
   url: string,
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<unknown> {
   const escapedUrl = url.replace(/'/g, "''");
   const escapedUserAgent = USER_AGENT.replace(/'/g, "''");
@@ -1059,7 +1066,7 @@ async function fetchJsonViaPowerShell(
     `$headers = @{ 'User-Agent' = '${escapedUserAgent}'; 'Accept' = 'application/json, text/plain;q=0.9, */*;q=0.8'; 'Accept-Language' = 'en-US,en;q=0.9'; 'Cache-Control' = 'no-cache'; 'Pragma' = 'no-cache' }`,
     `$response = Invoke-RestMethod -Uri '${escapedUrl}' -Headers $headers -TimeoutSec ${Math.max(
       1,
-      Math.ceil(timeoutMs / 1000)
+      Math.ceil(timeoutMs / 1000),
     )}`,
     "$response | ConvertTo-Json -Depth 100 -Compress",
   ].join("; ");
@@ -1070,24 +1077,24 @@ async function fetchJsonViaPowerShell(
     {
       timeout: timeoutMs + 3000,
       maxBuffer: 1024 * 1024 * 5,
-    }
+    },
   );
 
   return parseJsonText(
     stdout,
-    "Invalid JSON response from PowerShell fallback"
+    "Invalid JSON response from PowerShell fallback",
   );
 }
 
 async function fetchTextViaPowerShell(
   url: string,
   headers: Record<string, string>,
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<string> {
   const escapedUrl = url.replace(/'/g, "''");
   const headerEntries = Object.entries(headers).map(
     ([key, value]) =>
-      `'${key.replace(/'/g, "''")}' = '${value.replace(/'/g, "''")}'`
+      `'${key.replace(/'/g, "''")}' = '${value.replace(/'/g, "''")}'`,
   );
   const headerScript = headerEntries.length
     ? `@{ ${headerEntries.join("; ")} }`
@@ -1098,7 +1105,7 @@ async function fetchTextViaPowerShell(
     `$headers = ${headerScript}`,
     `$response = Invoke-WebRequest -UseBasicParsing -Uri '${escapedUrl}' -Headers $headers -TimeoutSec ${Math.max(
       1,
-      Math.ceil(timeoutMs / 1000)
+      Math.ceil(timeoutMs / 1000),
     )}`,
     "$response.Content",
   ].join("; ");
@@ -1109,7 +1116,7 @@ async function fetchTextViaPowerShell(
     {
       timeout: timeoutMs + 3000,
       maxBuffer: 1024 * 1024 * 5,
-    }
+    },
   );
 
   return stdout;
@@ -1118,7 +1125,7 @@ async function fetchTextViaPowerShell(
 async function fetchJson(
   url: string,
   signal?: AbortSignal,
-  timeoutMs = INVIDIOUS_TIMEOUT_MS
+  timeoutMs = INVIDIOUS_TIMEOUT_MS,
 ): Promise<unknown> {
   try {
     const res = await fetch(url, {
@@ -1136,7 +1143,7 @@ async function fetchJson(
     const text = await res.text();
     if (!res.ok) {
       throw new Error(
-        `HTTP ${res.status}${text ? `: ${text.slice(0, 160)}` : ""}`
+        `HTTP ${res.status}${text ? `: ${text.slice(0, 160)}` : ""}`,
       );
     }
 
@@ -1146,7 +1153,7 @@ async function fetchJson(
     const shouldTryPowerShell =
       process.platform === "win32" &&
       (/fetch failed|ECONNRESET|aborted|UND_ERR_CONNECT_TIMEOUT/i.test(
-        message
+        message,
       ) ||
         message.includes("This operation was aborted"));
 
@@ -1160,7 +1167,7 @@ async function fetchJson(
 
 function pickBestStreamUrl(
   candidates: unknown[],
-  base?: string
+  base?: string,
 ): string | null {
   const items = Array.isArray(candidates) ? candidates : [];
 
@@ -1177,10 +1184,10 @@ function pickBestStreamUrl(
 
   const preferred =
     audioCandidates.find((f: any) =>
-      String(f.type || f.mimeType || "").includes("mp4")
+      String(f.type || f.mimeType || "").includes("mp4"),
     ) ||
     audioCandidates.find((f: any) =>
-      String(f.type || f.mimeType || "").includes("opus")
+      String(f.type || f.mimeType || "").includes("opus"),
     ) ||
     audioCandidates[0];
 
@@ -1192,7 +1199,7 @@ function pickBestStreamUrl(
 
 function buildInvidiousRelayUrl(
   streamUrl: string,
-  base: string
+  base: string,
 ): string | null {
   try {
     const resolvedStreamUrl = new URL(streamUrl, base);
@@ -1214,7 +1221,7 @@ function buildInvidiousRelayUrl(
 
 function buildPlayableAudioUrl(
   streamUrl: string | null,
-  base: string
+  base: string,
 ): string | null {
   if (!streamUrl) return null;
 
@@ -1229,7 +1236,7 @@ function buildPlayableAudioUrl(
 }
 
 function summarizeAudioCandidates(
-  candidates: unknown[]
+  candidates: unknown[],
 ): Record<string, unknown>[] {
   const items = Array.isArray(candidates) ? candidates : [];
 
@@ -1266,7 +1273,7 @@ function extractVideoIdFromUrl(value: string): string {
 }
 
 async function fetchYouTubeOEmbedMetadata(
-  videoId: string
+  videoId: string,
 ): Promise<Record<string, unknown> | null> {
   try {
     const providerEndpoints = await getProviderEndpoints();
@@ -1277,7 +1284,7 @@ async function fetchYouTubeOEmbedMetadata(
         format: "json",
       })[0] || "",
       undefined,
-      8000
+      8000,
     )) as Record<string, unknown>;
 
     const title =
@@ -1304,7 +1311,7 @@ async function fetchYouTubeOEmbedMetadata(
             })
           : normalizeYouTubeThumbnailUrl({
               url: `${youtube.imageBase}/vi/${encodeURIComponent(
-                videoId
+                videoId,
               )}/hqdefault.jpg`,
               videoId,
             }),
@@ -1336,26 +1343,26 @@ function extractChannelIdFromUrl(value: string): string {
 
 function pickThumbnailUrl(
   record: Record<string, unknown>,
-  base: string
+  base: string,
 ): string {
   const rawUrl =
     typeof record.url === "string"
       ? record.url
       : typeof record.videoUrl === "string"
-      ? record.videoUrl
-      : "";
+        ? record.videoUrl
+        : "";
   const videoId =
     typeof record.videoId === "string"
       ? record.videoId
       : typeof record.id === "string"
-      ? record.id
-      : extractYouTubeVideoId(rawUrl);
+        ? record.id
+        : extractYouTubeVideoId(rawUrl);
   const directThumbnail =
     typeof record.thumbnailUrl === "string"
       ? record.thumbnailUrl
       : typeof record.thumbnail === "string"
-      ? record.thumbnail
-      : null;
+        ? record.thumbnail
+        : null;
 
   if (directThumbnail) {
     return (
@@ -1387,14 +1394,14 @@ function pickThumbnailUrl(
 
 function pickArtistImageUrl(
   record: Record<string, unknown>,
-  base: string
+  base: string,
 ): string | undefined {
   const directImage =
     typeof record.uploaderAvatar === "string"
       ? record.uploaderAvatar
       : typeof record.authorImage === "string"
-      ? record.authorImage
-      : null;
+        ? record.authorImage
+        : null;
 
   if (directImage) {
     return absolutizeUrl(directImage, base);
@@ -1417,7 +1424,7 @@ function pickArtistImageUrl(
 function normalizeRelatedSongs(
   value: unknown,
   base: string,
-  source: string
+  source: string,
 ): Array<Record<string, unknown>> {
   const items = toArray(value);
   const seen = new Set<string>();
@@ -1429,20 +1436,20 @@ function normalizeRelatedSongs(
         typeof record.url === "string"
           ? record.url
           : typeof record.videoUrl === "string"
-          ? record.videoUrl
-          : "";
+            ? record.videoUrl
+            : "";
       const id =
         typeof record.videoId === "string"
           ? record.videoId
           : typeof record.id === "string"
-          ? record.id
-          : extractVideoIdFromUrl(rawUrl);
+            ? record.id
+            : extractVideoIdFromUrl(rawUrl);
       const title =
         typeof record.title === "string"
           ? record.title
           : typeof record.name === "string"
-          ? record.name
-          : "";
+            ? record.name
+            : "";
 
       if (!id || !title || seen.has(id)) {
         return null;
@@ -1457,15 +1464,17 @@ function normalizeRelatedSongs(
           typeof record.author === "string"
             ? record.author
             : typeof record.uploaderName === "string"
-            ? record.uploaderName
-            : typeof record.uploader === "string"
-            ? record.uploader
-            : "Unknown Artist",
+              ? record.uploaderName
+              : typeof record.uploader === "string"
+                ? record.uploader
+                : "Unknown Artist",
         artistId:
           typeof record.authorId === "string"
             ? record.authorId
             : extractChannelIdFromUrl(
-                typeof record.uploaderUrl === "string" ? record.uploaderUrl : ""
+                typeof record.uploaderUrl === "string"
+                  ? record.uploaderUrl
+                  : "",
               ) || undefined,
         artistImage: pickArtistImageUrl(record, base),
         coverUrl: pickThumbnailUrl(record, base),
@@ -1477,10 +1486,10 @@ function normalizeRelatedSongs(
           typeof record.uploadedDate === "string"
             ? record.uploadedDate
             : typeof record.publishedText === "string"
-            ? record.publishedText
-            : typeof record.uploaded === "string"
-            ? record.uploaded
-            : undefined,
+              ? record.publishedText
+              : typeof record.uploaded === "string"
+                ? record.uploaded
+                : undefined,
         source,
         url: rawUrl ? absolutizeUrl(rawUrl, base) : `/watch?v=${id}`,
       };
@@ -1491,7 +1500,7 @@ function normalizeRelatedSongs(
 function normalizeVideoPayload(
   data: unknown,
   base: string,
-  source = "youtube"
+  source = "youtube",
 ): Record<string, unknown> | null {
   const record = toRecord(data);
   const adaptiveFormats = toArray(record.adaptiveFormats);
@@ -1508,19 +1517,21 @@ function normalizeVideoPayload(
     typeof record.videoId === "string"
       ? record.videoId
       : typeof record.id === "string"
-      ? record.id
-      : extractYouTubeVideoId(typeof record.url === "string" ? record.url : "");
+        ? record.id
+        : extractYouTubeVideoId(
+            typeof record.url === "string" ? record.url : "",
+          );
 
   const thumbs = toArray(record.videoThumbnails).map((entry) =>
-    toRecord(entry)
+    toRecord(entry),
   );
   const maxThumb = thumbs.find((t) => t.quality === "maxres")?.url;
   const anyThumb =
     typeof record.thumbnailUrl === "string"
       ? record.thumbnailUrl
       : typeof record.thumbnail === "string"
-      ? record.thumbnail
-      : thumbs[0]?.url;
+        ? record.thumbnail
+        : thumbs[0]?.url;
 
   const audioUrl = buildPlayableAudioUrl(preferredUrl, base);
 
@@ -1546,8 +1557,8 @@ function normalizeVideoPayload(
       adaptiveFormats.length > 0
         ? adaptiveFormats
         : audioStreams.length > 0
-        ? audioStreams
-        : undefined,
+          ? audioStreams
+          : undefined,
     audioUrl,
     thumbnailUrl:
       normalizeYouTubeThumbnailUrl({
@@ -1557,7 +1568,7 @@ function normalizeVideoPayload(
     relatedSongs: normalizeRelatedSongs(
       record.recommendedVideos || record.relatedStreams,
       base,
-      source
+      source,
     ),
   };
 }
@@ -1566,18 +1577,18 @@ async function fetchVideoFromInvidious(
   instance: string,
   videoId: string,
   source?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ) {
   const base = instance.replace(/\/+$/, "");
   const data = await fetchJson(
     `${base}/api/v1/videos/${videoId}`,
     signal,
-    INVIDIOUS_TIMEOUT_MS
+    INVIDIOUS_TIMEOUT_MS,
   );
   const normalized = normalizeVideoPayload(data, base, source);
   if (!normalized?.audioUrl) {
     throw new Error(
-      "Invidious response did not include a playable audio stream"
+      "Invidious response did not include a playable audio stream",
     );
   }
   return normalized;
@@ -1587,13 +1598,13 @@ async function fetchVideoFromPiped(
   instance: string,
   videoId: string,
   source?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ) {
   const base = instance.replace(/\/+$/, "");
   const data = await fetchJson(
     `${base}/streams/${videoId}`,
     signal,
-    PIPED_TIMEOUT_MS
+    PIPED_TIMEOUT_MS,
   );
   const normalized = normalizeVideoPayload(data, base, source);
   if (!normalized?.audioUrl) {
@@ -1611,13 +1622,13 @@ async function fetchVideoDetails(
     artist?: string;
     urlHint?: string;
     providerHint?: string;
-  }
+  },
 ): Promise<Record<string, unknown>> {
   if (source === "youtubemusic") {
     const providerEndpoints = await getProviderEndpoints();
     const matchedJioSaavnSong = await findJioSaavnMatch(
       options?.title || "",
-      options?.artist
+      options?.artist,
     );
 
     if (matchedJioSaavnSong?.id) {
@@ -1625,8 +1636,8 @@ async function fetchVideoDetails(
         buildJioSaavnSongEndpoints(
           matchedJioSaavnSong.id,
           providerEndpoints.providers.jiosaavn.apiBase,
-          matchedJioSaavnSong.url
-        )
+          matchedJioSaavnSong.url,
+        ),
       );
       if (jioSaavnPayload?.audioUrl) {
         return jioSaavnPayload;
@@ -1642,7 +1653,7 @@ async function fetchVideoDetails(
     ]);
     const preferredHints = parseYouTubeProviderHints(
       options?.providerHint,
-      source
+      source,
     );
     const providers = prioritizeVideoProviders(
       [
@@ -1657,14 +1668,14 @@ async function fetchVideoDetails(
             fetchVideoFromPiped(instance, videoId, source, signal),
         })),
       ],
-      preferredHints
+      preferredHints,
     );
 
     try {
       const value = await tryVideoProvidersSequentially(
         providers,
         runId,
-        source
+        source,
       );
       if (value) {
         return value;
@@ -1686,8 +1697,8 @@ async function fetchVideoDetails(
       buildJioSaavnSongEndpoints(
         videoId,
         providerEndpoints.providers.jiosaavn.apiBase,
-        options?.urlHint
-      )
+        options?.urlHint,
+      ),
     );
     if (jioSaavnPayload?.audioUrl) return jioSaavnPayload;
     throw new Error("Failed to fetch JioSaavn audio stream");
@@ -1729,7 +1740,7 @@ export async function GET(request: NextRequest) {
       videoId,
       originalVideoId: videoId,
       source,
-    }
+    },
   );
   // #endregion
 
@@ -1757,12 +1768,12 @@ export async function GET(request: NextRequest) {
       "[DEBUG] /api/video missing id",
       {
         url: request.url,
-      }
+      },
     );
     // #endregion
     return NextResponse.json(
       { error: "Video ID is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -1792,7 +1803,7 @@ export async function GET(request: NextRequest) {
         videoId,
         source,
         ageMs: Date.now() - cached.at,
-      }
+      },
     );
     // #endregion
     return NextResponse.json(cached.value);
@@ -1827,7 +1838,7 @@ export async function GET(request: NextRequest) {
           source,
           ageMs: Date.now() - cached.at,
           error: error instanceof Error ? error.message : String(error),
-        }
+        },
       );
       return NextResponse.json(cached.value);
     }
@@ -1842,7 +1853,7 @@ export async function GET(request: NextRequest) {
         videoId,
         source,
         error: error instanceof Error ? error.message : String(error),
-      }
+      },
     );
     // #endregion
     console.error("Failed to fetch video details:", error);
@@ -1850,6 +1861,6 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(
     { error: "Failed to fetch video details" },
-    { status: 500 }
+    { status: 500 },
   );
 }

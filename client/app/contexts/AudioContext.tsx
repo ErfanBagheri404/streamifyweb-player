@@ -93,13 +93,13 @@ function getYouTubeProviderHintCacheKey(source?: string): string {
 function readCachedYouTubeProviderHint(source?: string): string | null {
   return readSessionCache<string>(
     getYouTubeProviderHintCacheKey(source),
-    YOUTUBE_PROVIDER_HINT_CACHE_TTL_MS
+    YOUTUBE_PROVIDER_HINT_CACHE_TTL_MS,
   );
 }
 
 function writeCachedYouTubeProviderHint(
   source: string | undefined,
-  hint: string
+  hint: string,
 ) {
   if (!hint) return;
   writeSessionCache(getYouTubeProviderHintCacheKey(source), hint);
@@ -175,7 +175,7 @@ interface AudioContextType {
 }
 
 const AudioPlayerContext = createContext<AudioContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const useAudio = () => {
@@ -217,12 +217,14 @@ interface SoundCloudWidgetApi {
 let soundCloudWidgetApiPromise: Promise<SoundCloudWidgetApi> | null = null;
 
 function reportDebugEvent(
-  _runId: string,
-  _hypothesisId: string,
-  _location: string,
-  _msg: string,
-  _data: Record<string, unknown>
-) {}
+  runId: string,
+  hypothesisId: string,
+  location: string,
+  msg: string,
+  data: Record<string, unknown>,
+) {
+  if (typeof window === "undefined") return;
+}
 
 function resolveAudioUrl(audioUrl?: string): string {
   if (!audioUrl) return "";
@@ -250,7 +252,7 @@ async function loadSoundCloudWidgetApi(): Promise<SoundCloudWidgetApi> {
   soundCloudWidgetApiPromise = new Promise<SoundCloudWidgetApi>(
     (resolve, reject) => {
       const existingScript = document.getElementById(
-        "soundcloud-widget-api"
+        "soundcloud-widget-api",
       ) as HTMLScriptElement | null;
       let settled = false;
 
@@ -260,8 +262,8 @@ async function loadSoundCloudWidgetApi(): Promise<SoundCloudWidgetApi> {
         soundCloudWidgetApiPromise = null;
         reject(
           new Error(
-            "SoundCloud widget API request timed out. SoundCloud may be restricted in your network or country."
-          )
+            "SoundCloud widget API request timed out. SoundCloud may be restricted in your network or country.",
+          ),
         );
       }, SOUNDCLOUD_WIDGET_LOAD_TIMEOUT_MS);
 
@@ -287,15 +289,15 @@ async function loadSoundCloudWidgetApi(): Promise<SoundCloudWidgetApi> {
           return;
         }
         finalizeReject(
-          new Error("SoundCloud widget API loaded without SC.Widget")
+          new Error("SoundCloud widget API loaded without SC.Widget"),
         );
       };
 
       const handleError = () => {
         finalizeReject(
           new Error(
-            "Failed to load SoundCloud widget API. SoundCloud may be restricted in your network or country."
-          )
+            "Failed to load SoundCloud widget API. SoundCloud may be restricted in your network or country.",
+          ),
         );
       };
 
@@ -313,7 +315,7 @@ async function loadSoundCloudWidgetApi(): Promise<SoundCloudWidgetApi> {
       script.onload = handleReady;
       script.onerror = handleError;
       document.head.appendChild(script);
-    }
+    },
   );
 
   return soundCloudWidgetApiPromise;
@@ -358,7 +360,7 @@ function extractOriginAudioUrl(audioUrl?: string): string | null {
   try {
     const resolved = new URL(
       audioUrl,
-      typeof window !== "undefined" ? window.location.href : "http://localhost"
+      typeof window !== "undefined" ? window.location.href : "http://localhost",
     );
     return resolved.searchParams.get("url");
   } catch {
@@ -385,7 +387,7 @@ function getSoundCloudWidgetTrackUrl(song: Song): string | null {
   }
   if (typeof song.id === "string" && song.id.trim()) {
     return `${soundCloudRuntimeConfig.apiBase}/tracks/${encodeURIComponent(
-      song.id
+      song.id,
     )}`;
   }
   return null;
@@ -465,39 +467,39 @@ function describeShakaErrorPayload(error: unknown): Record<string, unknown> {
     typeof record.category === "number" || typeof record.category === "string"
       ? record.category
       : typeof detail?.category === "number" ||
-        typeof detail?.category === "string"
-      ? detail.category
-      : null;
+          typeof detail?.category === "string"
+        ? detail.category
+        : null;
 
   const severity =
     typeof record.severity === "number" || typeof record.severity === "string"
       ? record.severity
       : typeof detail?.severity === "number" ||
-        typeof detail?.severity === "string"
-      ? detail.severity
-      : null;
+          typeof detail?.severity === "string"
+        ? detail.severity
+        : null;
 
   return {
     message:
       typeof record.message === "string"
         ? record.message
         : typeof detail?.message === "string"
-        ? detail.message
-        : null,
+          ? detail.message
+          : null,
     code:
       typeof record.code === "number" || typeof record.code === "string"
         ? record.code
         : typeof detail?.code === "number" || typeof detail?.code === "string"
-        ? detail.code
-        : null,
+          ? detail.code
+          : null,
     category,
     severity,
     data:
       Array.isArray(record.data) || typeof record.data === "string"
         ? record.data
         : Array.isArray(detail?.data) || typeof detail?.data === "string"
-        ? detail.data
-        : null,
+          ? detail.data
+          : null,
     innerError: inner
       ? {
           message: typeof inner.message === "string" ? inner.message : null,
@@ -560,7 +562,7 @@ function normalizeAudioCandidates(song: Song): string[] {
     ...(Array.isArray(song.audioUrls) ? song.audioUrls : []),
   ].filter(
     (value): value is string =>
-      typeof value === "string" && Boolean(value.trim())
+      typeof value === "string" && Boolean(value.trim()),
   );
 
   const uniqueCandidates: string[] = [];
@@ -593,7 +595,7 @@ function normalizeSong(song: Song): Song {
 
 function normalizeRelatedSongsPayload(
   value: unknown,
-  fallbackSource?: string
+  fallbackSource?: string,
 ): Song[] {
   if (!Array.isArray(value)) return [];
 
@@ -640,8 +642,8 @@ function normalizeRelatedSongsPayload(
           typeof record.duration === "number"
             ? record.duration
             : typeof record.duration === "string"
-            ? Number.parseInt(record.duration, 10) || undefined
-            : undefined,
+              ? Number.parseInt(record.duration, 10) || undefined
+              : undefined,
         source:
           typeof record.source === "string" && record.source.trim()
             ? record.source
@@ -650,7 +652,7 @@ function normalizeRelatedSongsPayload(
           typeof record.url === "string" && record.url.trim()
             ? record.url
             : undefined,
-      })
+      }),
     );
   }
 
@@ -690,11 +692,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const playbackText = useCallback(
     (key: string, params?: Record<string, string | number | undefined>) =>
       translate(settings.language, key, params),
-    [settings.language]
+    [settings.language],
   );
   const defaultPlaybackError = playbackText("playback.errorDefault");
   const soundCloudRestrictedPlaybackError = playbackText(
-    "playback.soundcloudRestricted"
+    "playback.soundcloudRestricted",
   );
   const autoRetryMessage = playbackText("playback.autoRetryStatus");
   const localizePlaybackErrorMessage = useCallback(
@@ -716,7 +718,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           return message;
       }
     },
-    [defaultPlaybackError, playbackText, soundCloudRestrictedPlaybackError]
+    [defaultPlaybackError, playbackText, soundCloudRestrictedPlaybackError],
   );
   const getSoundCloudPlaybackErrorMessage = useCallback(
     (error: unknown): string => {
@@ -734,7 +736,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       defaultPlaybackError,
       localizePlaybackErrorMessage,
       soundCloudRestrictedPlaybackError,
-    ]
+    ],
   );
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [recentSongs, setRecentSongs] = useState<Song[]>([]);
@@ -770,6 +772,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const autoRetryPreferenceRef = useRef<AutoRetryPreference>("unknown");
   const playbackRunIdRef = useRef("pre-fix");
   const repeatModeRef = useRef<RepeatMode>("off");
+  const isSongLoadingRef = useRef(false);
   const playbackQueueRef = useRef<Song[]>([]);
   const queueIndexRef = useRef(-1);
   const volumeRef = useRef(DEFAULT_VOLUME);
@@ -790,20 +793,29 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const soundCloudWidgetRef = useRef<SoundCloudWidgetController | null>(null);
   const soundCloudWidgetSourceRef = useRef<string | null>(null);
   const soundCloudWidgetReadyRef = useRef(false);
+  const soundCloudWidgetForcePlayOnReadyRef = useRef(false);
+  const soundCloudWidgetRepeatGuardRef = useRef(false);
+  const soundCloudWidgetRepeatReplayTimerRef = useRef<number | null>(null);
+  const soundCloudWidgetPlayStateTimerRef = useRef<number | null>(null);
+  const soundCloudWidgetPlayStatePendingRef = useRef<boolean | null>(null);
   const shakaInitInFlightRef = useRef<{
     songId: string;
     audioUrl: string;
   } | null>(null);
   const resolveSongForPlaybackRef = useRef<(song: Song) => Promise<Song>>(
-    async (song) => normalizeSong(song)
+    async (song) => normalizeSong(song),
   );
   const resolveAndPlaySongRef = useRef<
     (song: Song, options?: PlaybackOptions) => Promise<void>
   >(async () => {});
+  const playSongRef = useRef<
+    (song: Song, options?: PlaybackOptions, requestId?: number) => void
+  >(() => {});
   const playRecommendedSongRef = useRef<(seedSong: Song) => Promise<boolean>>(
-    async () => false
+    async () => false,
   );
   const isRepeat = repeatMode !== "off";
+  const isPlayingRef = useRef(false);
   const ensureManagedAudioGraph = useCallback(() => {
     if (typeof window === "undefined") return false;
 
@@ -851,7 +863,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       if (shouldUseSoundCloudWidget(song)) {
         try {
           soundCloudWidgetRef.current?.setVolume(
-            Math.round(clampVolume(nextVolume, MAX_WIDGET_VOLUME) * 100)
+            Math.round(clampVolume(nextVolume, MAX_WIDGET_VOLUME) * 100),
           );
         } catch (error) {
           console.error("Error setting SoundCloud widget volume:", error);
@@ -874,13 +886,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       audio.volume = clampVolume(effectiveVolume, MAX_WIDGET_VOLUME);
     },
-    [ensureManagedAudioGraph]
+    [ensureManagedAudioGraph],
   );
   const getNextQueueIndex = useCallback(
     (
       mode: RepeatMode,
       queue = playbackQueueRef.current,
-      activeIndex = queueIndexRef.current
+      activeIndex = queueIndexRef.current,
     ) => {
       if (queue.length === 0 || activeIndex < 0) {
         return -1;
@@ -896,7 +908,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       return -1;
     },
-    []
+    [],
   );
 
   const pauseManagedAudio = useCallback((suppressPauseEvent = false) => {
@@ -924,15 +936,15 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       setCurrentTime((previous) =>
         Math.abs(previous - nextTime) >= PLAYBACK_PROGRESS_MIN_DELTA_SECONDS
           ? nextTime
-          : previous
+          : previous,
       );
       setDuration((previous) =>
         Math.abs(previous - nextDuration) >= PLAYBACK_DURATION_MIN_DELTA_SECONDS
           ? nextDuration
-          : previous
+          : previous,
       );
     },
-    []
+    [],
   );
 
   const setTransientAutoRetryStatus = useCallback((message: string | null) => {
@@ -961,10 +973,27 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       nextSong: Song,
       nextQueue: Song[],
       nextIndex: number,
-      errorLabel: string
+      errorLabel: string,
     ) => {
       const audio = audioRef.current;
       const activeSong = currentSongRef.current;
+
+      // #region debug-point E:queue-transition-start
+      reportDebugEvent(
+        playbackRunIdRef.current,
+        "E",
+        "app/contexts/AudioContext.tsx:startQueueTransition",
+        "[DEBUG] queue transition started",
+        {
+          fromSongId: activeSong?.id || null,
+          toSongId: nextSong.id,
+          nextIndex,
+          nextQueueLength: nextQueue.length,
+          audioHadSrc: Boolean(audio?.currentSrc || audio?.src),
+          usesWidget: shouldUseSoundCloudWidget(activeSong),
+        },
+      );
+      // #endregion
 
       if (audio && !shouldUseSoundCloudWidget(activeSong)) {
         pauseManagedAudio(true);
@@ -990,11 +1019,23 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           console.error(errorLabel, error);
         });
     },
-    [pauseManagedAudio]
+    [pauseManagedAudio],
   );
 
   const createPlaybackRequest = () => {
     playbackRequestIdRef.current += 1;
+    // #region debug-point B:playback-request-created
+    reportDebugEvent(
+      "request-tracker",
+      "B",
+      "app/contexts/AudioContext.tsx:createPlaybackRequest",
+      "[DEBUG] playback request created",
+      {
+        requestId: playbackRequestIdRef.current,
+        currentSongId: currentSongRef.current?.id || null,
+      },
+    );
+    // #endregion
     return playbackRequestIdRef.current;
   };
 
@@ -1088,7 +1129,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const tryNextAudioCandidate = (
     song: Song | null,
     reason: string,
-    failedAudioUrl?: string
+    failedAudioUrl?: string,
   ): boolean => {
     if (!song || !isYouTubeSource(song.source)) return false;
 
@@ -1097,10 +1138,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
     const failedResolved = resolveAudioUrl(failedAudioUrl || song.audioUrl);
     const currentIndex = candidates.findIndex(
-      (candidate) => resolveAudioUrl(candidate) === failedResolved
+      (candidate) => resolveAudioUrl(candidate) === failedResolved,
     );
     const nextCandidates = candidates.slice(
-      currentIndex >= 0 ? currentIndex + 1 : 1
+      currentIndex >= 0 ? currentIndex + 1 : 1,
     );
     if (nextCandidates.length === 0) return false;
 
@@ -1119,7 +1160,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         failedAudioUrl: failedAudioUrl || song.audioUrl || null,
         nextAudioUrl,
         remainingCandidates: nextCandidates.length,
-      }
+      },
     );
 
     setCurrentSong((prev) =>
@@ -1129,7 +1170,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             audioUrl: nextAudioUrl,
             audioUrls: nextCandidates,
           }
-        : prev
+        : prev,
     );
     setPlaybackError(null);
     setIsSongLoading(true);
@@ -1153,7 +1194,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         setDuration(seconds || fallbackDuration || 0);
       });
     },
-    []
+    [],
   );
 
   const destroyHlsPlayback = () => {
@@ -1183,12 +1224,17 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         widgetSource: soundCloudWidgetSourceRef.current,
         widgetReady: soundCloudWidgetReadyRef.current,
         iframeSrc: soundCloudWidgetIframeRef.current?.src || null,
-      }
+      },
     );
     // #endregion
     soundCloudWidgetRef.current = null;
     soundCloudWidgetSourceRef.current = null;
     soundCloudWidgetReadyRef.current = false;
+    soundCloudWidgetForcePlayOnReadyRef.current = false;
+    if (soundCloudWidgetRepeatReplayTimerRef.current !== null) {
+      window.clearTimeout(soundCloudWidgetRepeatReplayTimerRef.current);
+      soundCloudWidgetRepeatReplayTimerRef.current = null;
+    }
     if (widget) {
       try {
         widget.pause();
@@ -1216,14 +1262,63 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const attemptAudioPlay = (
     audio: HTMLAudioElement,
     song: Song,
-    requestId = playbackRequestIdRef.current
+    requestId = playbackRequestIdRef.current,
   ) => {
     resumeManagedAudioGraph();
     const attemptedAudioUrl = resolveAudioUrl(
-      audio.currentSrc || audio.src || song.audioUrl
+      audio.currentSrc || audio.src || song.audioUrl,
     );
+    // #region debug-point B:attempt-audio-play
+    reportDebugEvent(
+      `request-${requestId}`,
+      "B",
+      "app/contexts/AudioContext.tsx:attemptAudioPlay:start",
+      "[DEBUG] attemptAudioPlay invoked",
+      {
+        songId: song.id,
+        attemptedAudioUrl: attemptedAudioUrl || null,
+        audioPaused: audio.paused,
+        audioEnded: audio.ended,
+        audioReadyState: audio.readyState,
+        audioNetworkState: audio.networkState,
+        currentRequestId: playbackRequestIdRef.current,
+      },
+    );
+    // #endregion
     const playPromise = audio.play();
-    if (playPromise === undefined) return;
+    if (playPromise === undefined) {
+      // #region debug-point B:attempt-audio-play-no-promise
+      reportDebugEvent(
+        `request-${requestId}`,
+        "B",
+        "app/contexts/AudioContext.tsx:attemptAudioPlay:no-promise",
+        "[DEBUG] audio.play returned no promise",
+        {
+          songId: song.id,
+          attemptedAudioUrl: attemptedAudioUrl || null,
+        },
+      );
+      // #endregion
+      return;
+    }
+
+    void playPromise.then(() => {
+      // #region debug-point B:attempt-audio-play-resolved
+      reportDebugEvent(
+        `request-${requestId}`,
+        "B",
+        "app/contexts/AudioContext.tsx:attemptAudioPlay:resolved",
+        "[DEBUG] audio.play() resolved",
+        {
+          songId: song.id,
+          attemptedAudioUrl: attemptedAudioUrl || null,
+          audioPaused: audio.paused,
+          audioEnded: audio.ended,
+          audioReadyState: audio.readyState,
+        },
+      );
+      // #endregion
+    });
 
     playPromise.catch((error: Error & { name?: string }) => {
       if (error.name === "AbortError") return;
@@ -1234,7 +1329,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         return;
       }
       const currentResolvedSongAudioUrl = resolveAudioUrl(
-        currentSongRef.current?.audioUrl
+        currentSongRef.current?.audioUrl,
       );
       if (
         attemptedAudioUrl &&
@@ -1247,7 +1342,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         tryNextAudioCandidate(
           song,
           "play-rejected",
-          attemptedAudioUrl || song.audioUrl
+          attemptedAudioUrl || song.audioUrl,
         )
       ) {
         return;
@@ -1266,7 +1361,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           currentSrc: audio.currentSrc || audio.src || null,
           networkState: audio.networkState,
           readyState: audio.readyState,
-        }
+        },
       );
 
       setPlaybackError(defaultPlaybackError);
@@ -1280,7 +1375,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   useEffect(() => {
     const savedState = localStorage.getItem("audioPlayerState");
     const savedAutoRetryPreference = localStorage.getItem(
-      AUTO_RETRY_STORAGE_KEY
+      AUTO_RETRY_STORAGE_KEY,
     );
     if (
       savedAutoRetryPreference === "enabled" ||
@@ -1295,8 +1390,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         const savedRecentSongs = Array.isArray(state.recentSongs)
           ? state.recentSongs
           : state.currentSong
-          ? [state.currentSong]
-          : [];
+            ? [state.currentSong]
+            : [];
 
         setRecentSongs(savedRecentSongs);
 
@@ -1306,8 +1401,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             state.repeatMode === "queue" || state.repeatMode === "one"
               ? state.repeatMode
               : state.isRepeat
-              ? "one"
-              : "off";
+                ? "one"
+                : "off";
           setCurrentSong(hydratedSong);
           setPlaybackQueue([hydratedSong]);
           setQueueIndex(0);
@@ -1315,8 +1410,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           setDuration(state.duration || 0);
           setVolumeState(
             clampVolume(
-              typeof state.volume === "number" ? state.volume : DEFAULT_VOLUME
-            )
+              typeof state.volume === "number" ? state.volume : DEFAULT_VOLUME,
+            ),
           );
           setRepeatMode(nextRepeatMode);
           setIsPlaying(Boolean(state.isPlaying));
@@ -1384,7 +1479,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       destroyManagedPlayback();
       destroySoundCloudWidgetPlayback(true);
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -1415,6 +1510,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   useEffect(() => {
     volumeRef.current = volume;
   }, [volume]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    isSongLoadingRef.current = isSongLoading;
+  }, [isSongLoading]);
 
   useEffect(() => {
     if (!currentSong) {
@@ -1460,7 +1563,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           playbackError,
           showAutoRetryPrompt,
           autoRetryStatusMessage,
-        }
+        },
       );
       // #endregion
     };
@@ -1514,7 +1617,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           source: currentSong?.source || null,
           audioType: currentSong?.audioType || null,
           crossOrigin: audio.getAttribute("crossorigin"),
-        })
+        }),
       );
     }
   }, [currentSong?.audioType, currentSong?.source]);
@@ -1535,21 +1638,82 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     const nextAudioUrl = resolveAudioUrl(currentSong.audioUrl);
     const nextAudioType = inferAudioType(
       currentSong.audioUrl,
-      currentSong.audioType
+      currentSong.audioType,
     );
     let cancelled = false;
     const requestId = playbackRequestIdRef.current;
 
     const handleWidgetFinish = () => {
+      // #region debug-point A:widget-finish-entry
+      reportDebugEvent(
+        playbackRunIdRef.current,
+        "A",
+        "app/contexts/AudioContext.tsx:handleWidgetFinish:entry",
+        "[DEBUG] SoundCloud widget finish handler entered",
+        {
+          songId: currentSongRef.current?.id || null,
+          repeatMode: repeatModeRef.current,
+          isPlaying: isPlayingRef.current,
+          isSongLoading,
+          widgetReady: soundCloudWidgetReadyRef.current,
+          repeatGuard: soundCloudWidgetRepeatGuardRef.current,
+        },
+      );
+      // #endregion
       if (repeatModeRef.current === "one") {
-        const widget = soundCloudWidgetRef.current;
-        if (widget) {
+        // Guard against the SoundCloud widget re-firing FINISH in a tight
+        // loop while we restart the same track. Without this the
+        // PLAY/PAUSE events spam and the player flickers rapidly.
+        if (soundCloudWidgetRepeatGuardRef.current) {
+          // #region debug-point A:widget-finish-guard-skip
+          reportDebugEvent(
+            playbackRunIdRef.current,
+            "A",
+            "app/contexts/AudioContext.tsx:handleWidgetFinish:guard-skip",
+            "[DEBUG] SoundCloud widget repeat skipped because guard is active",
+            {
+              songId: currentSongRef.current?.id || null,
+              isPlaying: isPlayingRef.current,
+              isSongLoading,
+            },
+          );
+          // #endregion
+          return;
+        }
+        soundCloudWidgetRepeatGuardRef.current = true;
+
+        const activeSong = currentSongRef.current;
+        if (activeSong) {
           try {
+            const widget = soundCloudWidgetRef.current;
+            if (!widget) {
+              throw new Error("SoundCloud widget is unavailable for repeat");
+            }
+            soundCloudWidgetForcePlayOnReadyRef.current = false;
+            if (soundCloudWidgetRepeatReplayTimerRef.current !== null) {
+              window.clearTimeout(soundCloudWidgetRepeatReplayTimerRef.current);
+              soundCloudWidgetRepeatReplayTimerRef.current = null;
+            }
+            setPlaybackError(null);
+            setCurrentTime(0);
+            setDuration(activeSong.duration || duration || 0);
+            setIsSongLoading(false);
             widget.seekTo(0);
             widget.play();
           } catch (error) {
             console.error("Error repeating SoundCloud widget audio:", error);
+            setIsSongLoading(false);
+            setIsPlaying(false);
+          } finally {
+            // Release the guard after the widget has had time to (re)start,
+            // so a legitimate future finish (real track end) can still
+            // trigger a repeat.
+            window.setTimeout(() => {
+              soundCloudWidgetRepeatGuardRef.current = false;
+            }, 500);
           }
+        } else {
+          soundCloudWidgetRepeatGuardRef.current = false;
         }
         return;
       }
@@ -1562,7 +1726,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       const nextQueueIndex = getNextQueueIndex(
         repeatModeRef.current,
         queuedSongs,
-        queueIndexRef.current
+        queueIndexRef.current,
       );
       if (nextQueueIndex >= 0 && nextQueueIndex < queuedSongs.length) {
         const nextSong = queuedSongs[nextQueueIndex];
@@ -1571,7 +1735,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           nextSong,
           queuedSongs,
           nextQueueIndex,
-          "Error playing next queued SoundCloud song:"
+          "Error playing next queued SoundCloud song:",
         );
         return;
       }
@@ -1599,7 +1763,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           isPlaying,
           widgetSourceRef: soundCloudWidgetSourceRef.current,
           widgetReadyRef: soundCloudWidgetReadyRef.current,
-        }
+        },
       );
       // #endregion
       const api = await loadSoundCloudWidgetApi();
@@ -1611,7 +1775,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       }
 
       const widgetBootstrapUrl = buildSoundCloudWidgetBootstrapUrl(
-        soundCloudWidgetTrackUrl as string
+        soundCloudWidgetTrackUrl as string,
       );
       const shouldBootstrapIframe =
         !soundCloudWidgetRef.current && iframe.src === "about:blank";
@@ -1622,8 +1786,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             iframe.removeEventListener("load", handleLoad);
             reject(
               new Error(
-                "SoundCloud widget iframe request timed out. SoundCloud may be restricted in your network or country."
-              )
+                "SoundCloud widget iframe request timed out. SoundCloud may be restricted in your network or country.",
+              ),
             );
           }, SOUNDCLOUD_WIDGET_LOAD_TIMEOUT_MS);
 
@@ -1669,19 +1833,99 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             songId: currentSong.id,
             trackUrl: soundCloudWidgetTrackUrl,
             isPlaying,
-          }
+            currentTime,
+            duration,
+          },
         );
         // #endregion
         if (cancelled) return;
         soundCloudWidgetReadyRef.current = true;
         setPlaybackError(null);
-        setIsSongLoading(false);
         widget.setVolume(Math.round(volumeRef.current * 100));
         syncSoundCloudWidgetProgress(currentSong.duration);
-        if (isPlaying) {
+        const shouldAutoPlayWidget =
+          soundCloudWidgetForcePlayOnReadyRef.current || isPlayingRef.current;
+        if (shouldAutoPlayWidget) {
+          setIsSongLoading(true);
           widget.play();
+          if (soundCloudWidgetRepeatReplayTimerRef.current !== null) {
+            window.clearTimeout(soundCloudWidgetRepeatReplayTimerRef.current);
+          }
+          soundCloudWidgetRepeatReplayTimerRef.current = window.setTimeout(
+            () => {
+              soundCloudWidgetRepeatReplayTimerRef.current = null;
+              if (
+                cancelled ||
+                !soundCloudWidgetReadyRef.current ||
+                !isPlayingRef.current
+              ) {
+                return;
+              }
+              // #region debug-point B:widget-play-retry
+              reportDebugEvent(
+                playbackRunIdRef.current,
+                "B",
+                "app/contexts/AudioContext.tsx:configureSoundCloudWidgetPlayback:play-retry",
+                "[DEBUG] SoundCloud widget PLAY watchdog retry fired",
+                {
+                  songId: currentSong.id,
+                  trackUrl: soundCloudWidgetTrackUrl,
+                  isSongLoading,
+                  repeatMode: repeatModeRef.current,
+                },
+              );
+              // #endregion
+              try {
+                widget.play();
+              } catch (error) {
+                console.error(
+                  "Error retrying SoundCloud widget playback:",
+                  error,
+                );
+              }
+            },
+            350,
+          );
+        } else {
+          setIsSongLoading(false);
         }
       });
+
+      const flushWidgetPlayState = () => {
+        soundCloudWidgetPlayStateTimerRef.current = null;
+        const next = soundCloudWidgetPlayStatePendingRef.current;
+        soundCloudWidgetPlayStatePendingRef.current = null;
+        if (next === null || cancelled) return;
+        // #region debug-point B:widget-playstate-flush
+        reportDebugEvent(
+          playbackRunIdRef.current,
+          "B",
+          "app/contexts/AudioContext.tsx:flushWidgetPlayState",
+          "[DEBUG] SoundCloud widget coalesced play state applied",
+          {
+            songId: currentSong.id,
+            nextIsPlaying: next,
+            isSongLoading,
+            widgetReady: soundCloudWidgetReadyRef.current,
+          },
+        );
+        // #endregion
+        setIsPlaying(next);
+      };
+
+      const scheduleWidgetPlayState = (nextPlaying: boolean) => {
+        soundCloudWidgetPlayStatePendingRef.current = nextPlaying;
+        if (soundCloudWidgetPlayStateTimerRef.current !== null) {
+          window.clearTimeout(soundCloudWidgetPlayStateTimerRef.current);
+        }
+        // Coalesce rapid PLAY/PAUSE bursts (e.g. when the SoundCloud widget
+        // repeats a track) into a single, stable state update so the player
+        // does not flicker super fast between play and pause.
+        soundCloudWidgetPlayStateTimerRef.current = window.setTimeout(
+          flushWidgetPlayState,
+          120,
+        );
+      };
 
       widget.bind(PLAY, () => {
         // #region debug-point D:widget-play
@@ -1693,14 +1937,23 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           {
             songId: currentSong.id,
             trackUrl: soundCloudWidgetTrackUrl,
-          }
+            currentTime,
+            duration,
+            isSongLoading,
+            repeatMode: repeatModeRef.current,
+          },
         );
         // #endregion
         if (cancelled) return;
+        if (soundCloudWidgetRepeatReplayTimerRef.current !== null) {
+          window.clearTimeout(soundCloudWidgetRepeatReplayTimerRef.current);
+          soundCloudWidgetRepeatReplayTimerRef.current = null;
+        }
+        soundCloudWidgetForcePlayOnReadyRef.current = false;
         setPlaybackError(null);
-        setIsPlaying(true);
         setIsSongLoading(false);
         syncSoundCloudWidgetProgress(currentSong.duration);
+        scheduleWidgetPlayState(true);
       });
 
       widget.bind(PAUSE, () => {
@@ -1713,11 +1966,26 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           {
             songId: currentSong.id,
             trackUrl: soundCloudWidgetTrackUrl,
-          }
+            currentTime,
+            duration,
+            isSongLoading,
+            repeatMode: repeatModeRef.current,
+          },
         );
         // #endregion
         if (cancelled) return;
-        setIsPlaying(false);
+        if (
+          soundCloudWidgetRepeatGuardRef.current &&
+          repeatModeRef.current === "one"
+        ) {
+          syncSoundCloudWidgetProgress(currentSong.duration);
+          return;
+        }
+        if (soundCloudWidgetRepeatReplayTimerRef.current !== null) {
+          window.clearTimeout(soundCloudWidgetRepeatReplayTimerRef.current);
+          soundCloudWidgetRepeatReplayTimerRef.current = null;
+        }
+        scheduleWidgetPlayState(false);
         syncSoundCloudWidgetProgress(currentSong.duration);
       });
 
@@ -1753,7 +2021,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             trackUrl: soundCloudWidgetTrackUrl,
             widgetSourceRef: soundCloudWidgetSourceRef.current,
             widgetReadyRef: soundCloudWidgetReadyRef.current,
-          }
+          },
         );
         // #endregion
         if (cancelled) return;
@@ -1776,17 +2044,18 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             trackUrl: soundCloudWidgetTrackUrl,
             isPlaying,
             previousWidgetSource: soundCloudWidgetSourceRef.current,
-          }
+          },
         );
         // #endregion
         soundCloudWidgetReadyRef.current = false;
+        soundCloudWidgetRepeatGuardRef.current = false;
         soundCloudWidgetSourceRef.current = soundCloudWidgetTrackUrl;
         setCurrentTime(0);
         setDuration(currentSong.duration || 0);
         setPlaybackError(null);
         setIsSongLoading(true);
         widget.load(soundCloudWidgetTrackUrl as string, {
-          auto_play: isPlaying,
+          auto_play: isPlayingRef.current,
           show_artwork: false,
           callback: true,
         });
@@ -1795,7 +2064,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       if (soundCloudWidgetReadyRef.current) {
         syncSoundCloudWidgetProgress(currentSong.duration);
-        if (isPlaying) {
+        if (isPlayingRef.current) {
           widget.play();
         } else {
           widget.pause();
@@ -1819,13 +2088,33 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           widgetSourceRef: soundCloudWidgetSourceRef.current,
           widgetReadyRef: soundCloudWidgetReadyRef.current,
           audioUrl: currentSong.audioUrl || null,
-        }
+        },
       );
       // #endregion
       if (!soundCloudWidgetTrackUrl) {
         setPlaybackError(playbackText("playback.soundcloudTrackUnavailable"));
         setIsSongLoading(false);
         setIsPlaying(false);
+        return;
+      }
+
+      // If the widget is already bound to this exact track, an `isPlaying`
+      // (or other) change should only sync play/pause state, never reload
+      // the widget. Reloading on every play/pause toggle re-fetches the
+      // track and can trigger the rapid PLAY/PAUSE flicker loop.
+      if (
+        soundCloudWidgetRef.current &&
+        soundCloudWidgetSourceRef.current === soundCloudWidgetTrackUrl
+      ) {
+        if (isPlayingRef.current) {
+          try {
+            soundCloudWidgetRef.current.play();
+          } catch {}
+        } else {
+          try {
+            soundCloudWidgetRef.current.pause();
+          } catch {}
+        }
         return;
       }
 
@@ -1847,7 +2136,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             songId: currentSong.id,
             trackUrl: soundCloudWidgetTrackUrl,
             error: error instanceof Error ? error.message : String(error),
-          }
+          },
         );
         // #endregion
         console.error("Error initializing SoundCloud widget playback:", error);
@@ -1864,7 +2153,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     destroySoundCloudWidgetPlayback();
 
     if (!nextAudioUrl) {
-      if (isSongLoading) {
+      if (isSongLoadingRef.current) {
         return;
       }
       // #region debug-point H4:audio-missing-url
@@ -1877,7 +2166,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           songId: currentSong.id,
           source: currentSong.source || null,
           hasAudioUrl: Boolean(currentSong.audioUrl),
-        }
+        },
       );
       // #endregion
       setPlaybackError(defaultPlaybackError);
@@ -1909,7 +2198,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           songId: currentSong.id,
           source: currentSong.source || null,
           audioUrl: nextAudioUrl,
-        }
+        },
       );
 
       const hls = new Hls({
@@ -1933,7 +2222,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           tryNextAudioCandidate(
             currentSong,
             "hls-fatal-error",
-            audio.currentSrc || audio.src || currentSong.audioUrl
+            audio.currentSrc || audio.src || currentSong.audioUrl,
           )
         ) {
           return;
@@ -1950,7 +2239,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             audioUrl: nextAudioUrl,
             errorType: data.type || null,
             errorDetails: data.details || null,
-          }
+          },
         );
 
         setPlaybackError(defaultPlaybackError);
@@ -1977,14 +2266,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             detach: () => Promise<void>;
             addEventListener: (
               type: string,
-              listener: (event: unknown) => void
+              listener: (event: unknown) => void,
             ) => void;
             getNetworkingEngine?: () => {
               registerRequestFilter?: (
                 filter: (
                   type: number,
-                  request: { headers: Record<string, string>; uris: string[] }
-                ) => void
+                  request: { headers: Record<string, string>; uris: string[] },
+                ) => void,
               ) => void;
               registerResponseFilter?: (
                 filter: (
@@ -1993,8 +2282,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                     status?: number;
                     headers: Record<string, string>;
                     data?: ArrayBuffer;
-                  }
-                ) => void
+                  },
+                ) => void,
               ) => void;
             } | null;
             isLive?: () => boolean;
@@ -2050,7 +2339,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           hasMediaSource:
             typeof window !== "undefined" &&
             ("MediaSource" in window || "ManagedMediaSource" in window),
-        })
+        }),
       );
 
       if (!shaka.Player?.isBrowserSupported?.()) {
@@ -2070,7 +2359,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       // on every play, so the #EXT-X-KEY URI always points at the current
       // license-proxy implementation and not a stale cached rewrite.
       const soundCloudManifestUrl = resolveAudioUrl(
-        buildAudioProxyUrl(nextAudioUrl) + `&_ts=${Date.now()}`
+        buildAudioProxyUrl(nextAudioUrl) + `&_ts=${Date.now()}`,
       );
 
       // The Widevine license server rejects CORS preflights from the
@@ -2080,7 +2369,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       const proxiedLicenseUrl = resolveAudioUrl(
         isSoundCloudLicenseUrl(upstreamLicenseUrl)
           ? buildLicenseProxyUrl(upstreamLicenseUrl)
-          : upstreamLicenseUrl
+          : upstreamLicenseUrl,
       );
 
       console.log(
@@ -2091,7 +2380,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           manifestUrl: soundCloudManifestUrl,
           licenseUrl: proxiedLicenseUrl,
           proxiedLicense: proxiedLicenseUrl !== upstreamLicenseUrl,
-        })
+        }),
       );
 
       reportDebugEvent(
@@ -2106,7 +2395,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           manifestUrl: soundCloudManifestUrl,
           licenseUrl: proxiedLicenseUrl,
           drmScheme: currentSong.drmScheme,
-        }
+        },
       );
 
       const player = new shaka.Player();
@@ -2120,7 +2409,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         JSON.stringify({
           licenseRequestType,
           knownTypes: shaka.net?.NetworkingEngine?.RequestType || null,
-        })
+        }),
       );
 
       const net = player.getNetworkingEngine?.();
@@ -2143,7 +2432,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                     : null,
                 requestHeaderKeys: Object.keys(request.headers || {}),
                 uris: request.uris,
-              }
+              },
             );
             // #endregion
 
@@ -2179,13 +2468,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                   response.data instanceof ArrayBuffer
                     ? response.data.byteLength
                     : null,
-              }
+              },
             );
           });
         }
       } else {
         console.warn(
-          "[SoundCloud DRM] Networking engine unavailable; filters skipped"
+          "[SoundCloud DRM] Networking engine unavailable; filters skipped",
         );
       }
 
@@ -2244,7 +2533,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                 eventName === "error" || eventName === "warning"
                   ? shakaErrorMeaning(payload.category, payload.code)
                   : null,
-            })
+            }),
           );
 
           if (eventName === "error" || eventName === "warning") {
@@ -2264,7 +2553,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                 message: payload.message,
                 innerError: payload.innerError,
                 meaning: shakaErrorMeaning(payload.category, payload.code),
-              }
+              },
             );
           }
         });
@@ -2325,7 +2614,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           crossOrigin: audio.crossOrigin,
           isSecureContext:
             typeof window !== "undefined" ? window.isSecureContext : null,
-        })
+        }),
       );
 
       reportDebugEvent(
@@ -2343,7 +2632,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           manifestUrl: soundCloudManifestUrl,
           isSecureContext:
             typeof window !== "undefined" ? window.isSecureContext : null,
-        }
+        },
       );
 
       try {
@@ -2355,7 +2644,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       console.log(
         "[SoundCloud DRM] Shaka attached, now loading manifest",
-        soundCloudManifestUrl
+        soundCloudManifestUrl,
       );
 
       try {
@@ -2379,7 +2668,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                 return String(loadError);
               }
             })(),
-          })
+          }),
         );
         throw loadError;
       }
@@ -2391,7 +2680,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           isLive: typeof player.isLive === "function" ? player.isLive() : null,
           audioDuration: audio.duration || null,
           audioReadyState: audio.readyState,
-        })
+        }),
       );
 
       setPlaybackError(null);
@@ -2419,7 +2708,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             songId: currentSong.id,
             source: currentSong.source || null,
             isPlaying,
-          }
+          },
         );
         // #endregion
         return;
@@ -2440,7 +2729,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             audioPaused: audio.paused,
             audioNetworkState: audio.networkState,
             audioReadyState: audio.readyState,
-          }
+          },
         );
         // #endregion
         pauseManagedAudio(true);
@@ -2475,7 +2764,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                 errorDetails: errorPayload,
                 meaning: shakaErrorMeaning(
                   errorPayload.category,
-                  errorPayload.code
+                  errorPayload.code,
                 ),
                 audioCurrentSrc: audio.currentSrc || audio.src || null,
                 audioPaused: audio.paused,
@@ -2484,7 +2773,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                 isSecureContext:
                   typeof window !== "undefined" ? window.isSecureContext : null,
                 audioCrossOrigin: audio.crossOrigin,
-              }
+              },
             );
             // #endregion
             console.error(
@@ -2494,7 +2783,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                 payload: errorPayload,
                 meaning: shakaErrorMeaning(
                   errorPayload.category,
-                  errorPayload.code
+                  errorPayload.code,
                 ),
                 audio: {
                   src: audio.currentSrc || audio.src || null,
@@ -2516,10 +2805,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                     return String(error);
                   }
                 })(),
-              })
+              }),
             );
             setPlaybackError(
-              localizePlaybackErrorMessage(errorMessage || defaultPlaybackError)
+              localizePlaybackErrorMessage(
+                errorMessage || defaultPlaybackError,
+              ),
             );
             setIsSongLoading(false);
             setIsPlaying(false);
@@ -2559,7 +2850,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           setPlaybackError(
             error instanceof Error
               ? localizePlaybackErrorMessage(error.message)
-              : defaultPlaybackError
+              : defaultPlaybackError,
           );
           setIsSongLoading(false);
           setIsPlaying(false);
@@ -2585,7 +2876,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             songId: currentSong.id,
             source: currentSong.source || null,
             audioUrl: nextAudioUrl,
-          }
+          },
         );
         // #endregion
         pauseManagedAudio(true);
@@ -2594,6 +2885,23 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         audio.load();
         setCurrentTime(0);
         setDuration(currentSong.duration || 0);
+      } else {
+        // #region debug-point D:audio-src-reused
+        reportDebugEvent(
+          playbackRunIdRef.current,
+          "D",
+          "app/contexts/AudioContext.tsx:playback-effect:reuse-src",
+          "[DEBUG] playback audio src reused without reload",
+          {
+            songId: currentSong.id,
+            audioUrl: nextAudioUrl,
+            audioCurrentSrc: audio.currentSrc || audio.src || null,
+            isPlaying,
+            isSongLoading,
+            requestId,
+          },
+        );
+        // #endregion
       }
 
       if (isPlaying) {
@@ -2605,14 +2913,17 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
     return () => {
       cancelled = true;
+      if (soundCloudWidgetRepeatReplayTimerRef.current !== null) {
+        window.clearTimeout(soundCloudWidgetRepeatReplayTimerRef.current);
+        soundCloudWidgetRepeatReplayTimerRef.current = null;
+      }
+      if (soundCloudWidgetPlayStateTimerRef.current !== null) {
+        window.clearTimeout(soundCloudWidgetPlayStateTimerRef.current);
+        soundCloudWidgetPlayStateTimerRef.current = null;
+      }
+      soundCloudWidgetPlayStatePendingRef.current = null;
     };
-  }, [
-    currentSong,
-    isPlaying,
-    isSongLoading,
-    pauseManagedAudio,
-    syncSoundCloudWidgetProgress,
-  ]);
+  }, [currentSong, isPlaying, pauseManagedAudio, syncSoundCloudWidgetProgress]);
 
   useEffect(() => {
     if (soundCloudWidgetProgressIntervalRef.current !== null) {
@@ -2690,7 +3001,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         {
           songId: currentSong?.id || null,
           currentSrc: audio.currentSrc || audio.src || null,
-        }
+        },
       );
       // #endregion
       setIsPlaying(true);
@@ -2720,7 +3031,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           currentSrc: audio.currentSrc || audio.src || null,
           networkState: audio.networkState,
           readyState: audio.readyState,
-        }
+        },
       );
       // #endregion
       if (!audio.paused) {
@@ -2739,7 +3050,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         {
           songId: currentSong?.id || null,
           currentSrc: audio.currentSrc || audio.src || null,
-        }
+        },
       );
       // #endregion
       setIsPlaying(true);
@@ -2758,7 +3069,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           songId: currentSong?.id || null,
           currentSrc: audio.currentSrc || audio.src || null,
           readyState: audio.readyState,
-        }
+        },
       );
       // #endregion
       setIsSongLoading(false);
@@ -2774,7 +3085,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         {
           songId: currentSong?.id || null,
           currentSrc: audio.currentSrc || audio.src || null,
-        }
+        },
       );
       // #endregion
       // Keep the player in loading state while audio sources are being swapped
@@ -2789,7 +3100,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       const activeSong = currentSongRef.current;
       const expectedAudioUrl = resolveAudioUrl(activeSong?.audioUrl);
       const currentElementAudioUrl = resolveAudioUrl(
-        audio.currentSrc || audio.src
+        audio.currentSrc || audio.src,
       );
       if (
         isSongLoading &&
@@ -2805,7 +3116,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         tryNextAudioCandidate(
           activeSong,
           "audio-element-error",
-          audio.currentSrc || audio.src || activeSong?.audioUrl
+          audio.currentSrc || audio.src || activeSong?.audioUrl,
         )
       ) {
         return;
@@ -2823,7 +3134,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           readyState: audio.readyState,
           mediaErrorCode: mediaError?.code ?? null,
           mediaErrorMessage: mediaError?.message ?? null,
-        }
+        },
       );
       // #endregion
       setPlaybackError(defaultPlaybackError);
@@ -2865,7 +3176,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     syncPlaybackProgress();
     const timer = window.setInterval(
       syncPlaybackProgress,
-      PLAYBACK_PROGRESS_UPDATE_MS
+      PLAYBACK_PROGRESS_UPDATE_MS,
     );
 
     return () => {
@@ -2880,11 +3191,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
   const applyPlaybackOptions = (
     song: Song,
-    options?: PlaybackOptions
+    options?: PlaybackOptions,
   ): void => {
     if (options?.queue && options.queue.length > 0) {
       const normalizedQueue = options.queue.map((entry) =>
-        normalizeSong(entry)
+        normalizeSong(entry),
       );
       const shouldEnableQueueRepeat =
         normalizedQueue.length > 1 &&
@@ -2930,7 +3241,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           songId: song.id,
           source: song.source || null,
           audioUrl: song.audioUrl,
-        }
+        },
       );
       // #endregion
       return normalizeSong(song);
@@ -2960,7 +3271,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         title: song.title,
         source: song.source || null,
         hasInputAudioUrl: Boolean(song.audioUrl),
-      }
+      },
     );
     // #endregion
     const response = await fetchBackendRoute("/video", {
@@ -2985,14 +3296,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           : 0,
         resolvedAudioUrl:
           typeof payload.audioUrl === "string" ? payload.audioUrl : null,
-      }
+      },
     );
     // #endregion
 
     const payloadAudioUrls = Array.isArray(payload.audioUrls)
       ? payload.audioUrls.filter(
           (value): value is string =>
-            typeof value === "string" && Boolean(value.trim())
+            typeof value === "string" && Boolean(value.trim()),
         )
       : [];
     const resolvedAudioType =
@@ -3076,8 +3387,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           ? Object.fromEntries(
               Object.entries(payload.drmHeaders).filter(
                 (entry): entry is [string, string] =>
-                  typeof entry[1] === "string"
-              )
+                  typeof entry[1] === "string",
+              ),
             )
           : undefined,
       audioUrls: normalizeAudioCandidates({
@@ -3091,7 +3402,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           : song.duration,
       relatedSongs: normalizeRelatedSongsPayload(
         payload.relatedSongs,
-        resolvedSource
+        resolvedSource,
       ),
     });
   };
@@ -3119,10 +3430,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       if (!nextSong) return false;
 
       const baseQueue = playbackQueueRef.current.map((entry) =>
-        normalizeSong(entry)
+        normalizeSong(entry),
       );
       const dedupedQueue = baseQueue.filter(
-        (entry) => entry.id !== nextSong.id
+        (entry) => entry.id !== nextSong.id,
       );
       const nextQueue = [...dedupedQueue, nextSong];
       const nextIndex = nextQueue.length - 1;
@@ -3143,8 +3454,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
         setPlaybackQueue(
           nextQueue.map((entry, index) =>
-            index === nextIndex ? { ...entry, ...resolvedSong } : entry
-          )
+            index === nextIndex ? { ...entry, ...resolvedSong } : entry,
+          ),
         );
         setQueueIndex(nextIndex);
         setCurrentSong(resolvedSong);
@@ -3158,7 +3469,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         setPlaybackError(
           error instanceof Error
             ? localizePlaybackErrorMessage(error.message)
-            : defaultPlaybackError
+            : defaultPlaybackError,
         );
         setIsSongLoading(false);
         setIsPlaying(false);
@@ -3166,7 +3477,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         return false;
       }
     },
-    [settings.autoplayRecommendations]
+    [settings.autoplayRecommendations],
   );
   playRecommendedSongRef.current = playRecommendedSong;
 
@@ -3186,11 +3497,56 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       const activeSong = currentSongRef.current;
       if (!activeSong) return;
 
+      // #region debug-point E:audio-ended-entry
+      reportDebugEvent(
+        playbackRunIdRef.current,
+        "E",
+        "app/contexts/AudioContext.tsx:handleEnded:entry",
+        "[DEBUG] audio element ended handler entered",
+        {
+          songId: activeSong.id,
+          repeatMode: repeatModeRef.current,
+          queueIndex: queueIndexRef.current,
+          queueLength: playbackQueueRef.current.length,
+          audioCurrentSrc: audio.currentSrc || audio.src || null,
+          audioReadyState: audio.readyState,
+          isPlaying: isPlayingRef.current,
+          isSongLoading: isSongLoadingRef.current,
+        },
+      );
+      // #endregion
+
       if (repeatModeRef.current === "one") {
-        audio.currentTime = 0;
-        resumeManagedAudioGraph();
-        audio.play().catch((error) => {
-          console.error("Error repeating audio:", error);
+        // Restart through the normal song-start flow so the ended element and
+        // React playback state do not drift out of sync on repeat-one.
+        const repeatQueue =
+          playbackQueueRef.current.length > 0
+            ? playbackQueueRef.current
+            : [activeSong];
+        const repeatIndex =
+          queueIndexRef.current >= 0
+            ? queueIndexRef.current
+            : Math.max(
+                0,
+                repeatQueue.findIndex((entry) => entry.id === activeSong.id),
+              );
+        // #region debug-point E:audio-ended-repeat-restart
+        reportDebugEvent(
+          playbackRunIdRef.current,
+          "E",
+          "app/contexts/AudioContext.tsx:handleEnded:repeat-restart",
+          "[DEBUG] audio repeat-one restarting through playSong",
+          {
+            songId: activeSong.id,
+            repeatIndex,
+            repeatQueueLength: repeatQueue.length,
+            audioCurrentSrc: audio.currentSrc || audio.src || null,
+          },
+        );
+        // #endregion
+        playSongRef.current(activeSong, {
+          queue: repeatQueue,
+          currentIndex: repeatIndex,
         });
         return;
       }
@@ -3199,7 +3555,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       const nextQueueIndex = getNextQueueIndex(
         repeatModeRef.current,
         queuedSongs,
-        queueIndexRef.current
+        queueIndexRef.current,
       );
       const nextSong =
         nextQueueIndex >= 0 ? queuedSongs[nextQueueIndex] : undefined;
@@ -3208,7 +3564,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           nextSong,
           queuedSongs,
           nextQueueIndex,
-          "Error playing next queued audio:"
+          "Error playing next queued audio:",
         );
         return;
       }
@@ -3230,7 +3586,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const playSong = (
     song: Song,
     options?: PlaybackOptions,
-    requestId?: number
+    requestId?: number,
   ) => {
     const audio = audioRef.current;
     const normalizedSong = normalizeSong(song);
@@ -3238,6 +3594,19 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       typeof requestId === "number" ? requestId : createPlaybackRequest();
 
     if (!isPlaybackRequestCurrent(activeRequestId)) {
+      // #region debug-point B:play-song-stale-request
+      reportDebugEvent(
+        `request-${activeRequestId}`,
+        "B",
+        "app/contexts/AudioContext.tsx:playSong:stale-request",
+        "[DEBUG] playSong skipped because request is stale",
+        {
+          songId: normalizedSong.id,
+          activeRequestId,
+          currentRequestId: playbackRequestIdRef.current,
+        },
+      );
+      // #endregion
       return;
     }
 
@@ -3280,11 +3649,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       setIsFullscreenOpen(true);
     }
   };
+  playSongRef.current = playSong;
 
   const beginSongLoad = (
     song: Song,
     options?: PlaybackOptions,
-    requestId?: number
+    requestId?: number,
   ) => {
     const audio = audioRef.current;
     const normalizedSong = normalizeSong(song);
@@ -3347,7 +3717,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         source: normalizedSong.source || null,
         hasAudioUrl: Boolean(normalizedSong.audioUrl),
         queueLength: options?.queue?.length ?? playbackQueue.length,
-      }
+      },
     );
     // #endregion
   };
@@ -3371,7 +3741,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           songId: resolvedSong.id,
           source: resolvedSong.source || null,
           hasAudioUrl: Boolean(resolvedSong.audioUrl),
-        }
+        },
       );
       // #endregion
       playSong(resolvedSong, options, requestId);
@@ -3389,13 +3759,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           songId: song.id,
           source: song.source || null,
           error: error instanceof Error ? error.message : String(error),
-        }
+        },
       );
       // #endregion
       setPlaybackError(
         error instanceof Error
           ? localizePlaybackErrorMessage(error.message)
-          : defaultPlaybackError
+          : defaultPlaybackError,
       );
       clearSongLoading();
       throw error;
@@ -3409,6 +3779,20 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   };
 
   const pauseSong = () => {
+    // #region debug-point B:pause-song
+    reportDebugEvent(
+      playbackRunIdRef.current,
+      "B",
+      "app/contexts/AudioContext.tsx:pauseSong",
+      "[DEBUG] pauseSong invoked",
+      {
+        songId: currentSong?.id || null,
+        usesWidget: shouldUseSoundCloudWidget(currentSong),
+        isPlaying,
+        isSongLoading,
+      },
+    );
+    // #endregion
     setIsPlaying(false);
     if (shouldUseSoundCloudWidget(currentSong)) {
       try {
@@ -3425,9 +3809,24 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
   const resumeSong = () => {
     if (!currentSong) return;
+    // #region debug-point C:resume-song
+    reportDebugEvent(
+      playbackRunIdRef.current,
+      "C",
+      "app/contexts/AudioContext.tsx:resumeSong",
+      "[DEBUG] resumeSong invoked",
+      {
+        songId: currentSong.id,
+        usesWidget: shouldUseSoundCloudWidget(currentSong),
+        isPlaying,
+        isSongLoading,
+        widgetReady: soundCloudWidgetReadyRef.current,
+        repeatMode: repeatModeRef.current,
+      },
+    );
+    // #endregion
     if (shouldUseSoundCloudWidget(currentSong)) {
       setPlaybackError(null);
-      setIsSongLoading(true);
       setIsPlaying(true);
       try {
         soundCloudWidgetRef.current?.play();
@@ -3472,7 +3871,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       newVolume,
       shouldUseSoundCloudWidget(currentSong)
         ? MAX_WIDGET_VOLUME
-        : MAX_MEDIA_VOLUME
+        : MAX_MEDIA_VOLUME,
     );
     setVolumeState(clampedVolume);
     applyManagedVolume(clampedVolume, currentSong);
@@ -3484,11 +3883,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         ? prev === "off"
           ? "queue"
           : prev === "queue"
-          ? "one"
-          : "off"
+            ? "one"
+            : "off"
         : prev === "one"
-        ? "off"
-        : "one"
+          ? "off"
+          : "one",
     );
   };
 
@@ -3596,8 +3995,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             duration ||
               currentSong.duration ||
               currentTime + settings.seekStepSeconds,
-            currentTime + settings.seekStepSeconds
-          )
+            currentTime + settings.seekStepSeconds,
+          ),
         );
         return;
       }
@@ -3687,17 +4086,17 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           ? settings.language === "fa"
             ? `صف ${formatNumberByLanguage(
                 settings.language,
-                queueIndex + 1
+                queueIndex + 1,
               )} از ${formatNumberByLanguage(
                 settings.language,
-                playbackQueue.length
+                playbackQueue.length,
               )}`
             : `Queue ${formatNumberByLanguage(
                 settings.language,
-                queueIndex + 1
+                queueIndex + 1,
               )} of ${formatNumberByLanguage(
                 settings.language,
-                playbackQueue.length
+                playbackQueue.length,
               )}`
           : currentSong.source || "Streamify",
       artwork: buildSongArtwork(currentSong),
@@ -3723,7 +4122,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         hidden: typeof document !== "undefined" ? document.hidden : null,
         visibilityState:
           typeof document !== "undefined" ? document.visibilityState : null,
-      }
+      },
     );
     // #endregion
 
@@ -3731,7 +4130,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
     const setHandler = (
       action: MediaSessionAction,
-      handler: MediaSessionActionHandler | null
+      handler: MediaSessionActionHandler | null,
     ) => {
       try {
         mediaSession.setActionHandler(action, handler);
@@ -3746,9 +4145,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       seekTo(
         Math.max(
           0,
-          currentTime - (details.seekOffset || settings.seekStepSeconds)
-        )
-      )
+          currentTime - (details.seekOffset || settings.seekStepSeconds),
+        ),
+      ),
     );
     setHandler("seekforward", (details) =>
       seekTo(
@@ -3756,9 +4155,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           duration ||
             currentSong.duration ||
             currentTime + settings.seekStepSeconds,
-          currentTime + (details.seekOffset || settings.seekStepSeconds)
-        )
-      )
+          currentTime + (details.seekOffset || settings.seekStepSeconds),
+        ),
+      ),
     );
     setHandler("seekto", (details) => {
       if (typeof details.seekTime === "number") {
@@ -3809,12 +4208,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
     const safePosition = Math.min(
       Math.max(currentTime, 0),
-      Math.max(effectiveDuration, 0)
+      Math.max(effectiveDuration, 0),
     );
     const now = Date.now();
     const elapsedMs = now - lastMediaSessionPositionUpdateRef.current;
     const deltaSeconds = Math.abs(
-      safePosition - lastMediaSessionPositionRef.current
+      safePosition - lastMediaSessionPositionRef.current,
     );
     const shouldForceUpdate =
       !isPlaying ||
@@ -3849,7 +4248,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           songId: currentSong.id,
           error:
             error instanceof Error ? error.message : String(error || "unknown"),
-        }
+        },
       );
       // #endregion
     }
@@ -3879,7 +4278,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         hidden: typeof document !== "undefined" ? document.hidden : null,
         visibilityState:
           typeof document !== "undefined" ? document.visibilityState : null,
-      }
+      },
     );
     // #endregion
   }, [
@@ -3966,7 +4365,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       disableAutoRetry,
       resetAutoRetryPreference,
       dismissAutoRetryPrompt,
-    ]
+    ],
   );
 
   // Browser-console diagnostic so the user can verify the proxy is
@@ -4016,7 +4415,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         notes.push(
           `Proxy route is ${probe.ok ? "reachable" : "unreachable"} (${
             probe.status
-          })`
+          })`,
         );
       } catch (e) {
         notes.push(`Proxy route fetch failed: ${String(e)}`);
@@ -4037,7 +4436,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           out.upstreamStatus = json.status ?? null;
           out.upstreamContentType = json.contentType ?? null;
           notes.push(
-            `Upstream HEAD: status=${json.status} contentType=${json.contentType}`
+            `Upstream HEAD: status=${json.status} contentType=${json.contentType}`,
           );
         } catch (e) {
           notes.push(`Upstream diagnostic fetch failed: ${String(e)}`);
@@ -4066,14 +4465,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           const buf = await post.arrayBuffer();
           out.postBodyBytes = buf.byteLength;
           notes.push(
-            `POST path returned ${post.status} with ${buf.byteLength} bytes (an HTTP status from the upstream, not a network error, means the proxy pipeline is working)`
+            `POST path returned ${post.status} with ${buf.byteLength} bytes (an HTTP status from the upstream, not a network error, means the proxy pipeline is working)`,
           );
         } catch (e) {
           notes.push(`POST path fetch failed: ${String(e)}`);
         }
       } else {
         notes.push(
-          "Pass the SoundCloud license URL as an argument to also test the upstream connection, e.g. __streamifyTestLicenseProxy('https://license.media-streaming.soundcloud.cloud/playback/widevine?license_token=...')"
+          "Pass the SoundCloud license URL as an argument to also test the upstream connection, e.g. __streamifyTestLicenseProxy('https://license.media-streaming.soundcloud.cloud/playback/widevine?license_token=...')",
         );
       }
 
