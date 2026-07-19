@@ -5,7 +5,9 @@ export type PreferredSearchSource =
   | "youtube"
   | "youtubemusic"
   | "soundcloud"
-  | "jiosaavn";
+  | "jiosaavn"
+  | "itunes"
+  | "deezer";
 
 export type AppTheme =
   | "default"
@@ -139,19 +141,21 @@ export function isLightAppTheme(theme: AppTheme): boolean {
 }
 
 function isPreferredSearchSource(
-  value: unknown
+  value: unknown,
 ): value is PreferredSearchSource {
   return (
     value === "mixed" ||
     value === "youtube" ||
     value === "youtubemusic" ||
     value === "soundcloud" ||
-    value === "jiosaavn"
+    value === "jiosaavn" ||
+    value === "itunes" ||
+    value === "deezer"
   );
 }
 
 function isSeekStepSeconds(
-  value: unknown
+  value: unknown,
 ): value is (typeof SEEK_STEP_OPTIONS)[number] {
   return (
     typeof value === "number" &&

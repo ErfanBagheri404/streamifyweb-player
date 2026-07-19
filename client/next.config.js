@@ -5,7 +5,7 @@ const previewBackendApiEnv =
           process.env.NEXT_PUBLIC_STREAMIFY_API_MODE || "absolute",
         NEXT_PUBLIC_STREAMIFY_API_BASE_URL:
           process.env.NEXT_PUBLIC_STREAMIFY_API_BASE_URL ||
-          "https://helloify-api.hf.space,https://api.streamify.workers.dev",
+          "https://helloify-api.hf.space, https://api.streamify.workers.dev",
         NEXT_PUBLIC_STREAMIFY_API_ROUTES:
           process.env.NEXT_PUBLIC_STREAMIFY_API_ROUTES ||
           "/video,/audio-proxy,/license-proxy,/search,/artist,/collection,/lyrics",
@@ -37,10 +37,6 @@ const nextConfig = {
         protocol: "https",
         hostname: "proxy.piped.private.coffee",
         pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "i.scdn.co",
       },
       {
         protocol: "https",

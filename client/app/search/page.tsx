@@ -36,6 +36,26 @@ import {
 const SEARCH_STATE_UPDATED_EVENT = "streamify-search-state-updated";
 const SEARCH_HISTORY_STORAGE_KEY = "searchHistory";
 const SEARCH_PAGE_SESSION_STATE_KEY = "streamify-search-page-session-state";
+const SEARCH_SOURCE_IDS = new Set<SourceType>(
+  defaultSourceFilters.map((source) => source.id)
+);
+
+function normalizeSelectableSource(
+  value: string | null | undefined
+): SourceType {
+  if (!value) return "mixed";
+  if (!SEARCH_SOURCE_IDS.has(value as SourceType)) return "mixed";
+  return value === "spotify" ? "mixed" : (value as SourceType);
+}
+
+function moveEnabledSourceToFront(
+  filters: typeof defaultSourceFilters,
+  sourceId: SourceType
+) {
+  const selected = filters.find((entry) => entry.id === sourceId);
+  if (!selected || selected.disabled) return filters;
+  return [selected, ...filters.filter((entry) => entry.id !== sourceId)];
+}
 
 function readStoredSearchHistory(): string[] {
   if (typeof window === "undefined") return [];
@@ -130,6 +150,7 @@ interface RawPipedItem {
   subCount?: number;
   source?: string;
   name?: string;
+  coverUrl?: string;
   tracks?: SearchResult["tracks"];
   videos?: SearchResult["videos"];
 }
@@ -321,6 +342,7 @@ function getBestThumbnail(raw: RawPipedItem, source: string): string {
     raw.thumbnailUrl ||
     raw.thumbnail ||
     raw.img ||
+    raw.coverUrl ||
     raw.artwork_url ||
     raw.artwork ||
     raw.user?.avatar_url ||
@@ -365,8 +387,7 @@ function SearchPageInner() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const [selectedSource, setSelectedSource] = useState<SourceType>(() => {
-    const source = searchParams.get("source");
-    return (source as SourceType) || "mixed";
+    return normalizeSelectableSource(searchParams.get("source"));
   });
   const [selectedFilter, setSelectedFilter] = useState(() => {
     const filter = searchParams.get("filter");
@@ -724,12 +745,13 @@ function SearchPageInner() {
         if (loadMore && paginationRef.current.nextpage) {
           params.set("nextpage", paginationRef.current.nextpage);
         }
-        const url = await buildBackendRouteUrlAsync("/search", {
+        const searchPath = "/search";
+        const url = await buildBackendRouteUrlAsync(searchPath, {
           searchParams: params,
         });
 
         console.log("🔍 Search URL:", url);
-        const response = await fetchBackendRoute("/search", {
+        const response = await fetchBackendRoute(searchPath, {
           searchParams: params,
         });
         const data: {
@@ -848,7 +870,9 @@ function SearchPageInner() {
     if (searchParams.get("source")) return;
     if (hasSearched || searchQueryRef.current.trim()) return;
 
-    const preferredSource = settings.preferredSearchSource;
+    const preferredSource = normalizeSelectableSource(
+      settings.preferredSearchSource
+    );
     let nextFilter = "all";
     if (preferredSource === "soundcloud") nextFilter = "tracks";
     if (preferredSource === "youtubemusic") nextFilter = "songs";
@@ -858,14 +882,7 @@ function SearchPageInner() {
     selectedSourceRef.current = preferredSource;
     setSelectedFilter(nextFilter);
     selectedFilterRef.current = nextFilter;
-    setSourceFilters((prev) => {
-      const selected = prev.find((entry) => entry.id === preferredSource);
-      if (!selected) return prev;
-      return [
-        selected,
-        ...prev.filter((entry) => entry.id !== preferredSource),
-      ];
-    });
+    setSourceFilters((prev) => moveEnabledSourceToFront(prev, preferredSource));
   }, [
     hasHydratedSettings,
     hasSearched,
@@ -926,12 +943,10 @@ function SearchPageInner() {
     didRestoreInitialStateRef.current = true;
 
     const queryFromUrl = searchParams.get("q") || "";
-    const sourceFromUrl =
-      (searchParams.get("source") as SourceType) || "mixed";
+    const sourceFromUrl = normalizeSelectableSource(searchParams.get("source"));
     const filterFromUrl = searchParams.get("filter") || "all";
     const savedSessionState = readStoredSearchPageSessionState();
-    const savedSessionSource =
-      (savedSessionState?.source as SourceType | undefined) || "mixed";
+    const savedSessionSource = normalizeSelectableSource(savedSessionState?.source);
     const savedSessionFilter = savedSessionState?.filter || "all";
     const hasSavedSessionQuery = Boolean(savedSessionState?.query?.trim());
     const matchesSavedSession =
@@ -954,6 +969,7 @@ function SearchPageInner() {
         selectedSourceRef.current = initialSource;
         setSelectedFilter(initialFilter);
         selectedFilterRef.current = initialFilter;
+        setSourceFilters((prev) => moveEnabledSourceToFront(prev, initialSource));
         if (shouldRestoreSavedSession && savedSessionState?.results) {
           setHasSearched(savedSessionState.hasSearched ?? true);
           hasSearchedRef.current = savedSessionState.hasSearched ?? true;
@@ -1111,12 +1127,10 @@ function SearchPageInner() {
   // ─── Source selection ────────────────────────────────────
   const handleSourceSelect = useCallback(
     (sourceId: SourceType) => {
-      setSourceFilters((prev) => {
-        const selected = prev.find((f) => f.id === sourceId);
-        if (!selected) return prev;
-        const others = prev.filter((f) => f.id !== sourceId);
-        return [selected, ...others];
-      });
+      const selectedFilterEntry = sourceFilters.find((f) => f.id === sourceId);
+      if (selectedFilterEntry?.disabled) return;
+
+      setSourceFilters((prev) => moveEnabledSourceToFront(prev, sourceId));
       setSelectedSource(sourceId);
       selectedSourceRef.current = sourceId;
 
@@ -1142,7 +1156,7 @@ function SearchPageInner() {
         handleSearch(undefined, false, newFilter);
       }
     },
-    [handleSearch]
+    [handleSearch, sourceFilters]
   );
 
   // ─── Filter selection ────────────────────────────────────

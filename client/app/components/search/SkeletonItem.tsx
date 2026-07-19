@@ -20,7 +20,7 @@ export const SkeletonItem: React.FC<SkeletonItemProps> = ({
     : isSoundCloudSource
     ? "animate-float-pulse flex items-start gap-4 py-3"
     : isJioSaavnSource
-    ? "animate-float-pulse flex items-start gap-3.5 py-3"
+    ? "animate-float-pulse flex items-start gap-3 py-2.5"
     : "animate-float-pulse flex items-start gap-3 py-2.5";
 
   const coverClasses = isYouTubeSource
@@ -28,7 +28,7 @@ export const SkeletonItem: React.FC<SkeletonItemProps> = ({
     : isSoundCloudSource
     ? "h-20 w-20 rounded-2xl"
     : isJioSaavnSource
-    ? "h-16 w-16 rounded-xl"
+    ? "h-16 w-16 rounded-xl sm:h-24 sm:w-24 lg:h-32 lg:w-32"
     : "h-16 w-16 rounded-xl";
 
   const titleClasses = isYouTubeSource
@@ -36,7 +36,7 @@ export const SkeletonItem: React.FC<SkeletonItemProps> = ({
     : isSoundCloudSource
     ? "loading-skeleton mb-2 h-4 w-[72%] rounded-lg"
     : isJioSaavnSource
-    ? "loading-skeleton mb-2 h-4 w-[68%] rounded-lg"
+    ? "loading-skeleton h-4 w-[70%] max-w-[18rem] rounded-lg"
     : "loading-skeleton mb-1.5 h-4 w-full rounded-lg";
 
   const subtitleClasses = isYouTubeSource
@@ -44,19 +44,23 @@ export const SkeletonItem: React.FC<SkeletonItemProps> = ({
     : isSoundCloudSource
     ? "loading-skeleton mb-2 h-3 w-[52%] rounded-md"
     : isJioSaavnSource
-    ? "loading-skeleton mb-1.5 h-3 w-[58%] rounded-md"
+    ? "loading-skeleton h-3 w-[52%] max-w-[12rem] rounded-md"
     : "loading-skeleton h-3 w-3/4 rounded-md";
 
   const metaClasses = isSoundCloudSource
     ? "loading-skeleton h-3 w-[38%] rounded-md"
     : isJioSaavnSource
-    ? "loading-skeleton h-3 w-[42%] rounded-md"
+    ? "loading-skeleton h-3 w-[34%] max-w-[8rem] rounded-md"
     : null;
+
+  const contentClasses = isJioSaavnSource
+    ? "min-w-0 flex-1 space-y-2 pt-1 sm:pt-1.5"
+    : "flex-1";
 
   return (
     <div className={containerClasses}>
       <div className={`loading-skeleton shrink-0 ${coverClasses}`} />
-      <div className="flex-1">
+      <div className={contentClasses}>
         <div className={titleClasses} />
         <div className={subtitleClasses} />
         {metaClasses ? <div className={metaClasses} /> : null}

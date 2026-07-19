@@ -4,7 +4,9 @@ export type SourceType =
   | "youtubemusic"
   | "soundcloud"
   | "spotify"
-  | "jiosaavn";
+  | "jiosaavn"
+  | "itunes"
+  | "deezer";
 
 export interface AuthorThumbnail {
   url: string;
@@ -64,6 +66,7 @@ export interface SourceFilter {
   id: SourceType;
   label: string;
   color: string;
+  disabled?: boolean;
 }
 
 export interface FilterOption {

@@ -412,6 +412,8 @@
   "source.soundcloud": "SoundCloud",
   "source.jiosaavn": "JioSaavn",
   "source.spotify": "Spotify",
+  "source.itunes": "iTunes",
+  "source.deezer": "Deezer",
   "theme.default": "Streamify",
   "theme.ocean": "Ocean",
   "theme.amethyst": "Amethyst",

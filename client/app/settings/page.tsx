@@ -325,6 +325,8 @@ export default function SettingsPage() {
     youtubemusic: getSourceLabel("youtubemusic"),
     soundcloud: getSourceLabel("soundcloud"),
     jiosaavn: getSourceLabel("jiosaavn"),
+    itunes: getSourceLabel("itunes"),
+    deezer: getSourceLabel("deezer"),
   };
   const themeLabels: Record<AppTheme, string> = {
     default: getThemeLabel("default"),
