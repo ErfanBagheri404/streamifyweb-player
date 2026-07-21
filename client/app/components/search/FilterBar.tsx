@@ -65,8 +65,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               >
                 <SourceIcon
                   source={source.id}
-                  size={source.id === "mixed" ? 14 : 16}
-                  className={`${source.id === "mixed" ? "h-3.5 w-3.5" : "h-4 w-4"} flex-shrink-0 object-contain ${
+                  size={16}
+                  className={`h-4 w-4 flex-shrink-0 object-contain ${
                     source.disabled ? "opacity-50" : ""
                   }`}
                 />
