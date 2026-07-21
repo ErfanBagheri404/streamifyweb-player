@@ -48,15 +48,6 @@ function normalizeSelectableSource(
   return value === "spotify" ? "mixed" : (value as SourceType);
 }
 
-function moveEnabledSourceToFront(
-  filters: typeof defaultSourceFilters,
-  sourceId: SourceType
-) {
-  const selected = filters.find((entry) => entry.id === sourceId);
-  if (!selected || selected.disabled) return filters;
-  return [selected, ...filters.filter((entry) => entry.id !== sourceId)];
-}
-
 function readStoredSearchHistory(): string[] {
   if (typeof window === "undefined") return [];
   try {
@@ -882,7 +873,6 @@ function SearchPageInner() {
     selectedSourceRef.current = preferredSource;
     setSelectedFilter(nextFilter);
     selectedFilterRef.current = nextFilter;
-    setSourceFilters((prev) => moveEnabledSourceToFront(prev, preferredSource));
   }, [
     hasHydratedSettings,
     hasSearched,
@@ -969,7 +959,6 @@ function SearchPageInner() {
         selectedSourceRef.current = initialSource;
         setSelectedFilter(initialFilter);
         selectedFilterRef.current = initialFilter;
-        setSourceFilters((prev) => moveEnabledSourceToFront(prev, initialSource));
         if (shouldRestoreSavedSession && savedSessionState?.results) {
           setHasSearched(savedSessionState.hasSearched ?? true);
           hasSearchedRef.current = savedSessionState.hasSearched ?? true;
@@ -1130,7 +1119,6 @@ function SearchPageInner() {
       const selectedFilterEntry = sourceFilters.find((f) => f.id === sourceId);
       if (selectedFilterEntry?.disabled) return;
 
-      setSourceFilters((prev) => moveEnabledSourceToFront(prev, sourceId));
       setSelectedSource(sourceId);
       selectedSourceRef.current = sourceId;
 

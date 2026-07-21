@@ -15,9 +15,6 @@ import {
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
-const ITUNES_SEARCH_URL = "https://itunes.apple.com/search";
-const DEEZER_SEARCH_URL = "https://api.deezer.com/search/track";
-const DEEZER_FALLBACK_PROXY_PREFIX = "https://r.jina.ai/http://api.deezer.com";
 
 type SearchResponse = { items: unknown[]; nextpage?: string | null };
 type ExternalCatalogTrack = {
@@ -104,8 +101,10 @@ async function fetchDeezerPayload(
   query: string,
   limit: number,
   signal: AbortSignal,
+  deezerApiBase: string,
+  deezerFallbackPrefix: string,
 ): Promise<Record<string, unknown>> {
-  const directUrl = new URL(DEEZER_SEARCH_URL);
+  const directUrl = new URL(deezerApiBase);
   directUrl.searchParams.set("q", query);
   directUrl.searchParams.set("limit", String(limit));
 
@@ -127,7 +126,7 @@ async function fetchDeezerPayload(
     const fallbackPath = `${new URL(directUrl.toString()).pathname}${
       new URL(directUrl.toString()).search
     }`;
-    const fallbackUrl = `${DEEZER_FALLBACK_PROXY_PREFIX}${fallbackPath}`;
+    const fallbackUrl = `${deezerFallbackPrefix}${fallbackPath}`;
     const fallbackResponse = await fetch(fallbackUrl, {
       headers: {
         Accept: "text/plain",
@@ -1383,11 +1382,12 @@ async function searchJioSaavn(
 async function searchItunesCatalog(
   query: string,
   limit: number,
+  itunesApiBase: string,
 ): Promise<SearchResponse> {
   const signal = withTimeout(undefined, 12000);
   const safeLimit = clampCatalogLimit(limit);
 
-  const url = new URL(ITUNES_SEARCH_URL);
+  const url = new URL(itunesApiBase);
   url.searchParams.set("term", query);
   url.searchParams.set("entity", "song");
   url.searchParams.set("limit", String(safeLimit));
@@ -1424,10 +1424,18 @@ async function searchItunesCatalog(
 async function searchDeezerCatalog(
   query: string,
   limit: number,
+  deezerApiBase: string,
+  deezerFallbackPrefix: string,
 ): Promise<SearchResponse> {
   const signal = withTimeout(undefined, 12000);
   const safeLimit = clampCatalogLimit(limit);
-  const payload = await fetchDeezerPayload(query, safeLimit, signal);
+  const payload = await fetchDeezerPayload(
+    query,
+    safeLimit,
+    signal,
+    deezerApiBase,
+    deezerFallbackPrefix,
+  );
   const tracks = toArray(payload.data)
     .map((entry) => normalizeDeezerTrack(toRecord(entry)))
     .filter((entry): entry is ExternalCatalogTrack => Boolean(entry));
@@ -1515,6 +1523,7 @@ export async function GET(request: NextRequest) {
   const limitNum = parseInt(searchParams.get("limit") || "20", 10) || 20;
   const nextpage = searchParams.get("nextpage") || undefined;
   const runId = `pre-${Date.now()}`;
+  const endpoints = await getProviderEndpoints();
 
   // #region debug-point A:search-route-entry
   reportDebugEvent(
@@ -1676,10 +1685,19 @@ export async function GET(request: NextRequest) {
         result = await searchJioSaavn(q, filterParam);
         break;
       case "itunes":
-        result = await searchItunesCatalog(q, limitNum);
+        result = await searchItunesCatalog(
+          q,
+          limitNum,
+          endpoints.providers.itunes.apiBase,
+        );
         break;
       case "deezer":
-        result = await searchDeezerCatalog(q, limitNum);
+        result = await searchDeezerCatalog(
+          q,
+          limitNum,
+          endpoints.providers.deezer.apiBase,
+          endpoints.providers.deezer.fallbackProxyPrefix,
+        );
         break;
       default:
         result = { items: [], nextpage: null };

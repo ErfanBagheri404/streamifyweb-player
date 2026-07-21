@@ -479,21 +479,46 @@ function normalizeJioSaavnPayload(
   const audioStream = extractJioSaavnAudioUrl(payload);
   if (!audioStream) return null;
 
+  const pickFirstString = (keys: string[]): string | undefined => {
+    for (const record of [root, moreInfo, ...records]) {
+      const value = pickArrayString(record, keys);
+      if (value) return value;
+    }
+    return undefined;
+  };
+
+  const pickFirstArtist = (): string | undefined => {
+    for (const record of [root, moreInfo, ...records]) {
+      const value = pickJioSaavnArtistNames(record);
+      if (value) return value;
+    }
+    return undefined;
+  };
+
   const image =
-    pickJioSaavnImage(root.image) ||
-    pickArrayString(root, ["thumbnailUrl", "thumbnail"]) ||
-    pickJioSaavnImage(moreInfo.image) ||
-    pickArrayString(moreInfo, ["thumbnailUrl", "thumbnail"]);
+    [root, moreInfo, ...records]
+      .map(
+        (record) =>
+          pickJioSaavnImage(record.image) ||
+          pickArrayString(record, ["thumbnailUrl", "thumbnail"]),
+      )
+      .find(Boolean) || undefined;
 
   return {
-    id: root.id || root.songid || root.url,
-    title: root.song || root.title || root.name,
-    author: pickJioSaavnArtistNames(root) || pickJioSaavnArtistNames(moreInfo),
+    id:
+      pickFirstString(["id", "songid", "identifier", "url"]) ||
+      root.id ||
+      root.songid ||
+      root.url,
+    title:
+      pickFirstString(["song", "title", "name", "label"]) ||
+      undefined,
+    author: pickFirstArtist(),
     lengthSeconds: toNumber(root.duration) ?? toNumber(moreInfo.duration),
     thumbnailUrl: image,
     url:
-      pickArrayString(root, ["url", "perma_url", "permaUrl", "permalink"]) ||
-      pickArrayString(moreInfo, ["url", "perma_url", "permaUrl", "permalink"]),
+      pickFirstString(["url", "perma_url", "permaUrl", "permalink"]) ||
+      undefined,
     audioUrl: buildDirectProxyAudioUrl(audioStream),
     source: "jiosaavn",
   };

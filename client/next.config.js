@@ -1,20 +1,17 @@
-const previewBackendApiEnv =
-  process.env.VERCEL_ENV === "preview"
-    ? {
-        NEXT_PUBLIC_STREAMIFY_API_MODE:
-          process.env.NEXT_PUBLIC_STREAMIFY_API_MODE || "absolute",
-        NEXT_PUBLIC_STREAMIFY_API_BASE_URL:
-          process.env.NEXT_PUBLIC_STREAMIFY_API_BASE_URL ||
-          "https://helloify-api.hf.space, https://api.streamify.workers.dev",
-        NEXT_PUBLIC_STREAMIFY_API_ROUTES:
-          process.env.NEXT_PUBLIC_STREAMIFY_API_ROUTES ||
-          "/video,/audio-proxy,/license-proxy,/search,/artist,/collection,/lyrics",
-      }
-    : {};
+const backendApiEnv = {
+  NEXT_PUBLIC_STREAMIFY_API_MODE:
+    process.env.NEXT_PUBLIC_STREAMIFY_API_MODE || "absolute",
+  NEXT_PUBLIC_STREAMIFY_API_BASE_URL:
+    process.env.NEXT_PUBLIC_STREAMIFY_API_BASE_URL ||
+    "https://helloify-api.hf.space, https://api.streamify.workers.dev",
+  NEXT_PUBLIC_STREAMIFY_API_ROUTES:
+    process.env.NEXT_PUBLIC_STREAMIFY_API_ROUTES ||
+    "/video,/audio-proxy,/license-proxy,/search,/artist,/collection,/lyrics",
+};
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  env: previewBackendApiEnv,
+  env: backendApiEnv,
   images: {
     remotePatterns: [
       {

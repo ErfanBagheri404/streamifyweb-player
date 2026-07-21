@@ -12,6 +12,7 @@ import { usePathname } from "next/navigation";
 import { useAudio } from "../contexts/AudioContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import { useSidePanel } from "../contexts/SidePanelContext";
+import SourceIcon from "./SourceIcon";
 import { spaceMono } from "../fonts";
 import { isStandaloneAuthPath } from "../lib/auth-routes";
 
@@ -119,7 +120,7 @@ const MiniPlayer: React.FC = () => {
       `${currentSong.id}:${currentSong.title}:${
         currentSong.duration ?? duration ?? 0
       }`,
-      STATIC_WAVEFORM_BAR_COUNT
+      STATIC_WAVEFORM_BAR_COUNT,
     );
   }, [currentSong, duration]);
 
@@ -160,18 +161,18 @@ const MiniPlayer: React.FC = () => {
   const volumePercent = Math.round(volume * 100);
   const volumeSliderProgressPercent = Math.min(
     100,
-    (volumePercent / maxVolumePercent) * 100
+    (volumePercent / maxVolumePercent) * 100,
   );
   const isMuted = volumePercent === 0;
   const volumeLabel = isMuted
     ? t("miniPlayer.volumeMuted")
     : volumePercent < 35
-    ? t("miniPlayer.volumeLow")
-    : volumePercent < 70
-    ? t("miniPlayer.volumeMedium")
-    : volumePercent > 100
-    ? t("miniPlayer.volumeBoosted")
-    : t("miniPlayer.volumeHigh");
+      ? t("miniPlayer.volumeLow")
+      : volumePercent < 70
+        ? t("miniPlayer.volumeMedium")
+        : volumePercent > 100
+          ? t("miniPlayer.volumeBoosted")
+          : t("miniPlayer.volumeHigh");
   const canGoPrevious =
     currentTime > 3 ||
     queueIndex > 0 ||
@@ -191,14 +192,14 @@ const MiniPlayer: React.FC = () => {
     repeatMode === "queue"
       ? t("miniPlayer.repeatQueue")
       : repeatMode === "one"
-      ? t("miniPlayer.repeatOne")
-      : t("miniPlayer.repeatOff");
+        ? t("miniPlayer.repeatOne")
+        : t("miniPlayer.repeatOff");
   const repeatBadgeLabel =
     repeatMode === "queue"
       ? t("miniPlayer.repeatAllShort")
       : repeatMode === "one"
-      ? t("miniPlayer.repeatOneShort")
-      : null;
+        ? t("miniPlayer.repeatOneShort")
+        : null;
   const toggleMute = () => {
     if (isMuted) {
       setVolume(lastNonZeroVolumeRef.current || DEFAULT_UNMUTED_VOLUME);
@@ -217,12 +218,12 @@ const MiniPlayer: React.FC = () => {
 
       const rawRatio = Math.min(
         Math.max((clientX - bounds.left) / bounds.width, 0),
-        1
+        1,
       );
       const ratio = isRtl ? 1 - rawRatio : rawRatio;
       seekTo(duration * ratio);
     },
-    [duration, isRtl, seekTo]
+    [duration, isRtl, seekTo],
   );
 
   useEffect(() => {
@@ -263,7 +264,7 @@ const MiniPlayer: React.FC = () => {
   }, [isVolumeOpen]);
 
   const handleCompactWaveformPointerDown = (
-    event: React.PointerEvent<HTMLButtonElement>
+    event: React.PointerEvent<HTMLButtonElement>,
   ) => {
     if (!duration) return;
 
@@ -278,14 +279,14 @@ const MiniPlayer: React.FC = () => {
   };
 
   const handleCompactWaveformPointerMove = (
-    event: React.PointerEvent<HTMLButtonElement>
+    event: React.PointerEvent<HTMLButtonElement>,
   ) => {
     if (!isDraggingSeekRef.current) return;
     seekFromClientX(event.clientX);
   };
 
   const handleCompactWaveformPointerEnd = (
-    event: React.PointerEvent<HTMLButtonElement>
+    event: React.PointerEvent<HTMLButtonElement>,
   ) => {
     if (!isDraggingSeekRef.current) return;
 
@@ -306,8 +307,8 @@ const MiniPlayer: React.FC = () => {
   const statusText = isSongLoading
     ? t("common.loadingTrack")
     : playbackError
-    ? playbackError
-    : null;
+      ? playbackError
+      : null;
   const displayedIsSongLoading =
     isSeekDragging && seekDragPlaybackStateRef.current
       ? seekDragPlaybackStateRef.current.isSongLoading
@@ -411,9 +412,22 @@ const MiniPlayer: React.FC = () => {
               <h4
                 dir={isRtl ? "rtl" : "ltr"}
                 style={{ unicodeBidi: "isolate" }}
-                className="truncate text-start text-[13px] font-medium text-[color:var(--foreground)] lg:text-sm"
+                className="flex min-w-0 items-center gap-2 text-start text-[13px] font-medium text-[color:var(--foreground)] lg:text-sm"
               >
-                {currentSong.title}
+                <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center self-center">
+                  <SourceIcon
+                    source={currentSong.source}
+                    size={18}
+                    className="h-[18px] w-[18px] object-contain"
+                  />
+                </span>
+                <span
+                  className={`block min-w-0 flex-1 truncate leading-[1.1] ${
+                    isRtl ? "translate-y-px" : ""
+                  }`}
+                >
+                  {currentSong.title}
+                </span>
               </h4>
               <p
                 dir={isRtl ? "rtl" : "ltr"}
@@ -640,7 +654,7 @@ const MiniPlayer: React.FC = () => {
                   </div>
                   <div className="mt-3 flex justify-center gap-2">
                     {BOOSTED_VOLUME_PRESETS.filter(
-                      (preset) => preset <= maxVolumePercent
+                      (preset) => preset <= maxVolumePercent,
                     ).map((preset) => (
                       <button
                         key={preset}

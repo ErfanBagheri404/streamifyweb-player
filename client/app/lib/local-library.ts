@@ -569,7 +569,7 @@ function createCloudTrackRef(
   return { id, source };
 }
 
-function hasPlaceholderSongMetadata(song: Song): boolean {
+export function hasPlaceholderSongMetadata(song: Song): boolean {
   const title = song.title?.trim();
   const artist = song.artist?.trim();
   const source = song.source?.trim();

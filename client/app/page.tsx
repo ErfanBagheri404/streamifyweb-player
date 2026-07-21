@@ -510,9 +510,12 @@ export default function Home() {
       });
     }
 
-    const sortedArtists = [...artistMap.values()].sort(
-      (a, b) => b.count - a.count
-    );
+    const sortedArtists = [...artistMap.values()]
+      .filter((artist) => {
+        const name = artist.name?.trim().toLowerCase();
+        return name && !name.includes("- topic");
+      })
+      .sort((a, b) => b.count - a.count);
     return sortedArtists[0] || null;
   }, [recentSongs]);
 

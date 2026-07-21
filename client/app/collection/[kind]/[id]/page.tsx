@@ -11,12 +11,14 @@ import { useToast } from "../../../contexts/ToastContext";
 import {
   createStoredPlaylist,
   findStoredPlaylistForSourceCollection,
+  hasPlaceholderSongMetadata,
   isSongLiked,
   LOCAL_LIBRARY_UPDATED_EVENT,
   moveSongInStoredPlaylist,
   readLikedSongs,
   readLocalCollection,
   readStoredPlaylists,
+  refreshLocalLibrarySongMetadata,
   removeSongFromStoredPlaylist,
   removeStoredPlaylist,
   renameStoredPlaylist,
@@ -39,7 +41,7 @@ function reportDebugEvent(
   _hypothesisId: string,
   _location: string,
   _msg: string,
-  _data: Record<string, unknown>
+  _data: Record<string, unknown>,
 ) {}
 
 type CollectionEntry = {
@@ -81,7 +83,7 @@ function isYouTubeCollectionSource(source?: string): boolean {
 }
 
 function resolveEntryCoverUrl(
-  entry: Pick<CollectionEntry, "thumbnailUrl">
+  entry: Pick<CollectionEntry, "thumbnailUrl">,
 ): string | undefined {
   const entryCoverUrl = entry.thumbnailUrl?.trim();
   if (entryCoverUrl) return entryCoverUrl;
@@ -91,7 +93,7 @@ function resolveEntryCoverUrl(
 function getCollectionPageCacheKey(
   id: string,
   kind: string,
-  source: string
+  source: string,
 ): string {
   return `collection-page:v2:${source || "default"}:${kind}:${id}`;
 }
@@ -99,7 +101,7 @@ function getCollectionPageCacheKey(
 function readStoredCollectionItem(
   id: string,
   kind: string,
-  source: string
+  source: string,
 ): SearchResult | null {
   if (typeof window === "undefined") {
     return null;
@@ -115,7 +117,7 @@ function readStoredCollectionItem(
         (entry) =>
           entry.id === id &&
           entry.type === kind &&
-          (source ? entry.source === source : true)
+          (source ? entry.source === source : true),
       ) || null
     );
   } catch (error) {
@@ -202,7 +204,7 @@ function getSourceLabel(source?: string): string {
 
 function isPlayableSource(source?: string): boolean {
   return ["youtube", "youtubemusic", "soundcloud", "jiosaavn"].includes(
-    (source || "").toLowerCase()
+    (source || "").toLowerCase(),
   );
 }
 
@@ -453,8 +455,8 @@ function getCollectionEntries(item: SearchResult | null): CollectionEntry[] {
         typeof track.duration === "string"
           ? Number.parseInt(track.duration, 10)
           : typeof track.duration === "number"
-          ? Math.floor(track.duration / 1000)
-          : undefined,
+            ? Math.floor(track.duration / 1000)
+            : undefined,
       url: track.permalink_url,
       album: item.title,
       addedAt: (track as { created_at?: string }).created_at,
@@ -473,7 +475,7 @@ function toSongSnapshot(
   fallback: {
     artist?: string;
     source?: string;
-  }
+  },
 ): Song {
   return {
     id: entry.id,
@@ -490,7 +492,7 @@ function toSongSnapshot(
 
 function matchesCollectionEntrySong(
   entry: CollectionEntry,
-  song: Song
+  song: Song,
 ): boolean {
   if (song.id !== entry.id) return false;
 
@@ -521,7 +523,7 @@ export default function CollectionPage() {
   const id = decodeURIComponent(params.id);
   const savedRouteContext = useMemo(
     () => findSavedCollectionRouteContext(id, kind),
-    [id, kind]
+    [id, kind],
   );
   const source = searchParams.get("source") || savedRouteContext?.source || "";
   const sourceUrl = searchParams.get("url") || "";
@@ -534,23 +536,23 @@ export default function CollectionPage() {
 
   const storedItem = useMemo(
     () => readStoredCollectionItem(id, kind, source),
-    [id, kind, source]
+    [id, kind, source],
   );
   const collectionCacheKey = useMemo(
     () => getCollectionPageCacheKey(id, kind, source),
-    [id, kind, source]
+    [id, kind, source],
   );
   const cachedRemoteCollection = useMemo(
     () =>
       readSessionCache<CachedRemoteCollectionState>(
         collectionCacheKey,
-        COLLECTION_PAGE_CACHE_TTL_MS
+        COLLECTION_PAGE_CACHE_TTL_MS,
       ),
-    [collectionCacheKey]
+    [collectionCacheKey],
   );
   const storedEntries = useMemo(
     () => getCollectionEntries(storedItem),
-    [storedItem]
+    [storedItem],
   );
 
   const [remoteState, setRemoteState] = useState<{
@@ -565,14 +567,15 @@ export default function CollectionPage() {
     isLoading: !cachedRemoteCollection,
   });
   const [loadingSongId, setLoadingSongId] = useState<string | null>(null);
+  const [isHydrating, setIsHydrating] = useState(false);
   const [localLibraryVersion, setLocalLibraryVersion] = useState(0);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [collectionQuery, setCollectionQuery] = useState("");
   const [draggedEntryIndex, setDraggedEntryIndex] = useState<number | null>(
-    null
+    null,
   );
   const [dragOverEntryIndex, setDragOverEntryIndex] = useState<number | null>(
-    null
+    null,
   );
   const [isPlaylistActionsOpen, setIsPlaylistActionsOpen] = useState(false);
   const [selectedEntryAction, setSelectedEntryAction] = useState<{
@@ -595,14 +598,14 @@ export default function CollectionPage() {
 
     window.addEventListener(
       LOCAL_LIBRARY_UPDATED_EVENT,
-      handleLocalLibraryUpdated
+      handleLocalLibraryUpdated,
     );
     window.addEventListener("storage", handleLocalLibraryUpdated);
 
     return () => {
       window.removeEventListener(
         LOCAL_LIBRARY_UPDATED_EVENT,
-        handleLocalLibraryUpdated
+        handleLocalLibraryUpdated,
       );
       window.removeEventListener("storage", handleLocalLibraryUpdated);
     };
@@ -610,20 +613,20 @@ export default function CollectionPage() {
 
   const localCollection = useMemo(
     () => (source.toLowerCase() === "local" ? readLocalCollection(id) : null),
-    [id, localLibraryVersion, source]
+    [id, localLibraryVersion, source],
   );
   const storedPlaylists = useMemo(
     () => readStoredPlaylists(),
-    [localLibraryVersion]
+    [localLibraryVersion],
   );
   const likedSongKeys = useMemo(
     () =>
       new Set(
         readLikedSongs().map((song) =>
-          getSongPreferenceKey(song.id, song.source)
-        )
+          getSongPreferenceKey(song.id, song.source),
+        ),
       ),
-    [localLibraryVersion]
+    [localLibraryVersion],
   );
 
   useEffect(() => {
@@ -640,10 +643,10 @@ export default function CollectionPage() {
     return Boolean(
       (lowerSource === "jiosaavn" &&
         (kind === "album" || kind === "playlist")) ||
-        ((lowerSource === "youtube" || lowerSource === "youtubemusic") &&
-          kind === "playlist") ||
-        (lowerSource === "soundcloud" &&
-          (kind === "playlist" || kind === "album"))
+      ((lowerSource === "youtube" || lowerSource === "youtubemusic") &&
+        kind === "playlist") ||
+      (lowerSource === "soundcloud" &&
+        (kind === "playlist" || kind === "album")),
     );
   }, [kind, source]);
   const shouldHideStoredEntriesWhileFetching = useMemo(
@@ -651,7 +654,7 @@ export default function CollectionPage() {
       shouldFetchRemote &&
       isYouTubeCollectionSource(source) &&
       !cachedRemoteCollection,
-    [cachedRemoteCollection, shouldFetchRemote, source]
+    [cachedRemoteCollection, shouldFetchRemote, source],
   );
 
   usePageLoadingToast({
@@ -659,6 +662,45 @@ export default function CollectionPage() {
     isLoading: remoteState.isLoading,
     message: t("common.loading"),
   });
+
+  const localPlaylistSongsNeedHydrating = useMemo(() => {
+    if (!localCollection) return false;
+    return localCollection.songs.some(hasPlaceholderSongMetadata);
+  }, [localCollection]);
+
+  usePageLoadingToast({
+    enabled: localPlaylistSongsNeedHydrating || isHydrating,
+    isLoading: isHydrating,
+    message: t("common.loading"),
+  });
+
+  useEffect(() => {
+    if (!localPlaylistSongsNeedHydrating || isHydrating) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      setIsHydrating(true);
+      try {
+        await refreshLocalLibrarySongMetadata();
+        if (!cancelled) {
+          setLocalLibraryVersion((value) => value + 1);
+        }
+      } catch {
+        // hydration failed silently — songs stay as placeholders
+      } finally {
+        if (!cancelled) {
+          setIsHydrating(false);
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [localPlaylistSongsNeedHydrating]);
 
   useEffect(() => {
     let cancelled = false;
@@ -727,7 +769,7 @@ export default function CollectionPage() {
             storedHref: storedItem?.href || null,
             storedUrl: storedItem?.url || null,
             requestParams: params.toString(),
-          }
+          },
         );
         // #endregion
 
@@ -758,7 +800,7 @@ export default function CollectionPage() {
             entryCount: Array.isArray(json.entries)
               ? json.entries.length
               : null,
-          }
+          },
         );
         // #endregion
 
@@ -766,7 +808,7 @@ export default function CollectionPage() {
           throw new Error(
             typeof json.error === "string"
               ? json.error
-              : "Failed to load collection"
+              : "Failed to load collection",
           );
         }
 
@@ -800,7 +842,7 @@ export default function CollectionPage() {
             storedHref: storedItem?.href || null,
             storedUrl: storedItem?.url || null,
             error: error instanceof Error ? error.message : String(error),
-          }
+          },
         );
         // #endregion
         if (!cancelled) {
@@ -890,7 +932,7 @@ export default function CollectionPage() {
       remoteState.collection?.description ||
       (storedItem as (SearchResult & { description?: string }) | null)
         ?.description ||
-      ""
+      "",
   );
   const displayImage =
     localCollection?.collection.thumbnailUrl ||
@@ -908,7 +950,7 @@ export default function CollectionPage() {
       source.toLowerCase() === "local"
         ? null
         : findStoredPlaylistForSourceCollection(id, kind, collectionSource),
-    [collectionSource, id, kind, localLibraryVersion, source]
+    [collectionSource, id, kind, localLibraryVersion, source],
   );
 
   const totalRuntime = useMemo(
@@ -916,9 +958,9 @@ export default function CollectionPage() {
       entries.reduce(
         (total, entry) =>
           total + (typeof entry.duration === "number" ? entry.duration : 0),
-        0
+        0,
       ),
-    [entries]
+    [entries],
   );
   const normalizedCollectionQuery = collectionQuery.trim().toLowerCase();
   const filteredEntries = useMemo(() => {
@@ -929,7 +971,7 @@ export default function CollectionPage() {
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(normalizedCollectionQuery)
+        .includes(normalizedCollectionQuery),
     );
   }, [entries, normalizedCollectionQuery]);
 
@@ -937,16 +979,16 @@ export default function CollectionPage() {
     entries.length > 0
       ? t("collection.songCount", { count: formatNumber(entries.length) })
       : localCollection?.collection.count != null
-      ? t("collection.itemsCount", {
-          count: formatNumber(localCollection.collection.count),
-        })
-      : remoteState.collection?.count != null
-      ? t("collection.itemsCount", {
-          count: formatNumber(remoteState.collection.count),
-        })
-      : count
-      ? t("collection.itemsCount", { count })
-      : "";
+        ? t("collection.itemsCount", {
+            count: formatNumber(localCollection.collection.count),
+          })
+        : remoteState.collection?.count != null
+          ? t("collection.itemsCount", {
+              count: formatNumber(remoteState.collection.count),
+            })
+          : count
+            ? t("collection.itemsCount", { count })
+            : "";
 
   const localizedRuntime = (() => {
     if (!totalRuntime) return "";
@@ -969,14 +1011,14 @@ export default function CollectionPage() {
     collectionSource.toLowerCase() === "local"
       ? t("collection.yourLibrary")
       : collectionSource.toLowerCase() === "youtube"
-      ? getLocalizedSourceLabel("youtube")
-      : collectionSource.toLowerCase() === "youtubemusic"
-      ? getLocalizedSourceLabel("youtubemusic")
-      : collectionSource.toLowerCase() === "soundcloud"
-      ? getLocalizedSourceLabel("soundcloud")
-      : collectionSource.toLowerCase() === "jiosaavn"
-      ? getLocalizedSourceLabel("jiosaavn")
-      : t("collection.collection"),
+        ? getLocalizedSourceLabel("youtube")
+        : collectionSource.toLowerCase() === "youtubemusic"
+          ? getLocalizedSourceLabel("youtubemusic")
+          : collectionSource.toLowerCase() === "soundcloud"
+            ? getLocalizedSourceLabel("soundcloud")
+            : collectionSource.toLowerCase() === "jiosaavn"
+              ? getLocalizedSourceLabel("jiosaavn")
+              : t("collection.collection"),
     displayCountText,
     localizedRuntime,
   ].filter(Boolean);
@@ -1037,7 +1079,7 @@ export default function CollectionPage() {
           toSongSnapshot(item, {
             artist: displayAuthor,
             source: collectionSource,
-          })
+          }),
         );
 
         const currentIndex = queue.findIndex((song) => song.id === entry.id);
@@ -1050,7 +1092,7 @@ export default function CollectionPage() {
           {
             queue,
             currentIndex: currentIndex >= 0 ? currentIndex : 0,
-          }
+          },
         );
       }
     } catch (error) {
@@ -1075,7 +1117,7 @@ export default function CollectionPage() {
 
   const showFeedback = (
     message: string,
-    tone: "success" | "error" = "success"
+    tone: "success" | "error" = "success",
   ) => {
     showToast({
       message,
@@ -1097,7 +1139,7 @@ export default function CollectionPage() {
         toSongSnapshot(entry, {
           artist: displayAuthor,
           source: collectionSource,
-        })
+        }),
       ),
       sourceCollectionId: id,
       sourceCollectionKind: kind,
@@ -1111,7 +1153,7 @@ export default function CollectionPage() {
       actionLabel: t("library.open"),
       onAction: () => {
         router.push(
-          `/collection/playlist/${encodeURIComponent(playlist.id)}?source=local`
+          `/collection/playlist/${encodeURIComponent(playlist.id)}?source=local`,
         );
       },
     });
@@ -1120,7 +1162,7 @@ export default function CollectionPage() {
   const handleToggleEntryLike = (entry: CollectionEntry) => {
     const song =
       localCollection?.songs.find((storedSong) =>
-        matchesCollectionEntrySong(entry, storedSong)
+        matchesCollectionEntrySong(entry, storedSong),
       ) ||
       toSongSnapshot(entry, {
         artist: displayAuthor,
@@ -1130,7 +1172,7 @@ export default function CollectionPage() {
     showFeedback(
       result.liked
         ? t("fullscreen.addedToLiked")
-        : t("fullscreen.removedFromLiked")
+        : t("fullscreen.removedFromLiked"),
     );
   };
 
@@ -1147,7 +1189,7 @@ export default function CollectionPage() {
     const result = renameStoredPlaylist(
       id,
       renamePlaylistName,
-      renamePlaylistDescription
+      renamePlaylistDescription,
     );
     if (!result.updated || !result.playlist) return;
 
@@ -1171,7 +1213,7 @@ export default function CollectionPage() {
 
     const song =
       localCollection?.songs.find((storedSong) =>
-        matchesCollectionEntrySong(entry, storedSong)
+        matchesCollectionEntrySong(entry, storedSong),
       ) ||
       toSongSnapshot(entry, {
         artist: displayAuthor,
@@ -1378,8 +1420,8 @@ export default function CollectionPage() {
                   {likedSongKeys.has(
                     getSongPreferenceKey(
                       selectedEntryAction.entry.id,
-                      collectionSource
-                    )
+                      collectionSource,
+                    ),
                   )
                     ? t("collection.unlikeSong")
                     : t("collection.likeSong")}
@@ -1388,8 +1430,8 @@ export default function CollectionPage() {
                   filled={likedSongKeys.has(
                     getSongPreferenceKey(
                       selectedEntryAction.entry.id,
-                      collectionSource
-                    )
+                      collectionSource,
+                    ),
                   )}
                 />
               </button>
@@ -1635,14 +1677,14 @@ export default function CollectionPage() {
                   const isLoadingTrack = loadingSongId === entry.id;
                   const rowSong =
                     localCollection?.songs.find((storedSong) =>
-                      matchesCollectionEntrySong(entry, storedSong)
+                      matchesCollectionEntrySong(entry, storedSong),
                     ) ||
                     toSongSnapshot(entry, {
                       artist: displayAuthor,
                       source: collectionSource,
                     });
                   const isEntryLiked = likedSongKeys.has(
-                    getSongPreferenceKey(rowSong.id, rowSong.source)
+                    getSongPreferenceKey(rowSong.id, rowSong.source),
                   );
 
                   return (
