@@ -62,64 +62,69 @@ export type ProviderQueryValue = string | number | boolean | null | undefined;
 const PROVIDER_ENDPOINTS_URL =
   process.env.NEXT_PUBLIC_STREAMIFY_PROVIDER_ENDPOINTS_URL ||
   process.env.STREAMIFY_PROVIDER_ENDPOINTS_URL ||
-  "http://instances.helloify.workers.dev/";
+  "https://instances.helloify.workers.dev/config";
 
-function createEmptyProviderEndpoints(): ProviderEndpoints {
+function createDefaultProviderEndpoints(): ProviderEndpoints {
   return {
     instances: {
-      piped: [],
-      invidious: [],
+      piped: ["https://api.piped.private.coffee"],
+      invidious: [
+        "https://yt.omada.cafe",
+        "https://invidious.schenkel.eti.br",
+        "https://invidious.kemonomimi.nl",
+        "https://lekker.gay",
+      ],
     },
     providers: {
       search: {
-        ytifyInstance: "",
-        soundcloudSearchProxyBase: "",
+        ytifyInstance: "https://api.ytify.workers.dev",
+        soundcloudSearchProxyBase: "https://proxy.searchsoundcloud.com",
       },
       jiosaavn: {
-        apiBase: "",
-        fallbackSearchBase: "",
-        webOrigin: "",
+        apiBase: "https://streamifyjiosaavn.vercel.app",
+        fallbackSearchBase: "https://jiosaavn-api.vercel.app",
+        webOrigin: "https://www.jiosaavn.com",
       },
       beatseek: {
-        apiBase: "",
+        apiBase: "https://beatseek.io/api",
       },
       itunes: {
-        apiBase: "",
+        apiBase: "https://itunes.apple.com/search",
       },
       deezer: {
-        apiBase: "",
+        apiBase: "https://api.deezer.com/search",
         fallbackProxyPrefix: "",
       },
       lyrics: {
-        lrclibBase: "",
-        lyricsOvhBase: "",
+        lrclibBase: "https://lrclib.net/api",
+        lyricsOvhBase: "https://api.lyrics.ovh/v1",
       },
       soundcloud: {
-        origin: "",
-        mobileOrigin: "",
-        apiBase: "",
-        apiV2Base: "",
-        widgetBase: "",
-        licenseBase: "",
-        oembedBase: "",
+        origin: "https://soundcloud.com",
+        mobileOrigin: "https://m.soundcloud.com",
+        apiBase: "https://api.soundcloud.com",
+        apiV2Base: "https://api-v2.soundcloud.com",
+        widgetBase: "https://w.soundcloud.com",
+        licenseBase: "https://license.media-streaming.soundcloud.cloud",
+        oembedBase: "https://soundcloud.com/oembed",
       },
       youtube: {
-        webBase: "",
-        musicBase: "",
-        oembedBase: "",
-        imageBase: "",
+        webBase: "https://www.youtube.com",
+        musicBase: "https://music.youtube.com",
+        oembedBase: "https://www.youtube.com/oembed",
+        imageBase: "https://i.ytimg.com",
       },
     },
     headers: {
       origins: {
-        soundcloud: "",
-        youtube: "",
-        jiosaavn: "",
+        soundcloud: "https://soundcloud.com",
+        youtube: "https://www.youtube.com",
+        jiosaavn: "https://www.jiosaavn.com",
       },
       referers: {
-        soundcloud: "",
-        youtube: "",
-        jiosaavn: "",
+        soundcloud: "https://soundcloud.com/",
+        youtube: "https://www.youtube.com/",
+        jiosaavn: "https://www.jiosaavn.com/",
       },
     },
   };
@@ -155,7 +160,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 function normalizeProviderEndpoints(value: unknown): ProviderEndpoints {
-  const fallback = createEmptyProviderEndpoints();
+  const fallback = createDefaultProviderEndpoints();
   const root = asRecord(value);
   const instances = asRecord(root.instances);
   const providers = asRecord(root.providers);
@@ -174,10 +179,10 @@ function normalizeProviderEndpoints(value: unknown): ProviderEndpoints {
   return {
     instances: {
       piped: dedupeStrings(
-        cleanUrlList(instances.piped as string[] | undefined),
+        cleanUrlList((instances.piped ?? asRecord(instances.client).piped) as string[] | undefined),
       ),
       invidious: dedupeStrings(
-        cleanUrlList(instances.invidious as string[] | undefined),
+        cleanUrlList((instances.invidious ?? asRecord(instances.client).invidious) as string[] | undefined),
       ),
     },
     providers: {
@@ -398,8 +403,8 @@ export function buildProviderUrlCandidates(
   );
 }
 
-const EMPTY_PROVIDER_ENDPOINTS = createEmptyProviderEndpoints();
-let cachedProviderEndpoints = EMPTY_PROVIDER_ENDPOINTS;
+const DEFAULT_PROVIDER_ENDPOINTS = createDefaultProviderEndpoints();
+let cachedProviderEndpoints = DEFAULT_PROVIDER_ENDPOINTS;
 let providerEndpointsPromise: Promise<ProviderEndpoints> | null = null;
 
 export function getCachedProviderEndpointsSnapshot(): ProviderEndpoints {
