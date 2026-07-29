@@ -448,7 +448,7 @@ export default function FullscreenPlayer() {
         setLyricsText("");
         setLyricsState({
           loading: false,
-          error: "Lyrics are turned off in Settings.",
+          error: t("fullscreen.lyricsDisabledError"),
           isSynced: false,
         });
         return;
@@ -474,7 +474,7 @@ export default function FullscreenPlayer() {
           setLyricsText("");
           setLyricsState({
             loading: false,
-            error: "Lyrics are not available for this track right now.",
+            error: t("fullscreen.lyricsNotAvailableError"),
             isSynced: false,
           });
           return;
@@ -491,7 +491,7 @@ export default function FullscreenPlayer() {
         setLyricsText("");
         setLyricsState({
           loading: false,
-          error: "Couldn't load lyrics for this track.",
+          error: t("fullscreen.lyricsLoadError"),
           isSynced: false,
         });
       }
@@ -784,7 +784,7 @@ export default function FullscreenPlayer() {
         setLyricsText("");
         setLyricsState({
           loading: false,
-          error: "No lyrics found. Try another artist or song title.",
+          error: t("fullscreen.lyricsSearchNotFound"),
           isSynced: false,
         });
         return;
@@ -800,7 +800,7 @@ export default function FullscreenPlayer() {
       setLyricsText("");
       setLyricsState({
         loading: false,
-        error: "Couldn't load lyrics for that search. Try another spelling.",
+        error: t("fullscreen.lyricsSearchError"),
         isSynced: false,
       });
     }
@@ -1135,6 +1135,15 @@ export default function FullscreenPlayer() {
                           </button>
                         );
                       })}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLyricsManualModeUntil(Date.now() + 30_000);
+                        }}
+                        className="mt-4 text-xs text-[color:color-mix(in_srgb,var(--foreground)_40%,transparent)] underline decoration-dotted underline-offset-2 transition hover:text-[color:color-mix(in_srgb,var(--foreground)_65%,transparent)]"
+                      >
+                        {t("fullscreen.lyricsWrongButton")}
+                      </button>
                     </>
                   ) : plainLyricsText ? (
                     <>
@@ -1144,36 +1153,55 @@ export default function FullscreenPlayer() {
                       <pre className="whitespace-pre-wrap break-words font-sans text-base leading-8 text-[color:var(--foreground)] sm:text-lg sm:leading-9 md:text-[22px] md:leading-[1.5]">
                         {plainLyricsText}
                       </pre>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLyricsManualModeUntil(Date.now() + 30_000);
+                        }}
+                        className="mt-4 text-xs text-[color:color-mix(in_srgb,var(--foreground)_40%,transparent)] underline decoration-dotted underline-offset-2 transition hover:text-[color:color-mix(in_srgb,var(--foreground)_65%,transparent)]"
+                      >
+                        {t("fullscreen.lyricsWrongButton")}
+                      </button>
                     </>
                   ) : (
                     <div className="space-y-3 py-2">
                       <p className="font-medium text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]">
                         {lyricsState.error ||
-                          "Lyrics are not available for this track yet."}
+                          t("fullscreen.lyricsNotAvailable")}
                       </p>
                       <div className="theme-surface-soft rounded-xl border p-4">
                         <p className="text-sm text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)]">
                           {t("fullscreen.searchLyricsManually")}
                         </p>
                         <div className="mt-3 grid gap-3">
-                          <input
-                            type="text"
-                            value={manualLyricsArtist}
-                            onChange={(event) =>
-                              setManualLyricsArtist(event.target.value)
-                            }
-                            placeholder={t("fullscreen.artistName")}
-                            className="theme-button-soft rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_25%,transparent)]"
-                          />
-                          <input
-                            type="text"
-                            value={manualLyricsTitle}
-                            onChange={(event) =>
-                              setManualLyricsTitle(event.target.value)
-                            }
-                            placeholder={t("fullscreen.songTitle")}
-                            className="theme-button-soft rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_25%,transparent)]"
-                          />
+                          <div>
+                            <label className="mb-1 block text-xs text-[color:color-mix(in_srgb,var(--foreground)_50%,transparent)]">
+                              {t("fullscreen.artistNameLabel")}
+                            </label>
+                            <input
+                              type="text"
+                              value={manualLyricsArtist}
+                              onChange={(event) =>
+                                setManualLyricsArtist(event.target.value)
+                              }
+                              placeholder={t("fullscreen.artistName")}
+                              className="theme-button-soft w-full rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_25%,transparent)]"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-[color:color-mix(in_srgb,var(--foreground)_50%,transparent)]">
+                              {t("fullscreen.songTitleLabel")}
+                            </label>
+                            <input
+                              type="text"
+                              value={manualLyricsTitle}
+                              onChange={(event) =>
+                                setManualLyricsTitle(event.target.value)
+                              }
+                              placeholder={t("fullscreen.songTitle")}
+                              className="theme-button-soft w-full rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_25%,transparent)]"
+                            />
+                          </div>
                           <button
                             type="button"
                             onClick={() => {

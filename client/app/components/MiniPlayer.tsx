@@ -95,6 +95,7 @@ const MiniPlayer: React.FC = () => {
     closeFullscreen,
     showAutoRetryPrompt,
     autoRetryStatusMessage,
+    isAutoRetrying,
     enableAutoRetry,
     disableAutoRetry,
   } = useAudio();
@@ -304,11 +305,14 @@ const MiniPlayer: React.FC = () => {
     return null;
   }
 
+  const isAutoRetryingActive = isAutoRetrying || showAutoRetryPrompt;
   const statusText = isSongLoading
     ? t("common.loadingTrack")
-    : playbackError
-      ? playbackError
-      : null;
+    : isAutoRetryingActive
+      ? autoRetryStatusMessage || t("common.loadingTrack")
+      : playbackError
+        ? playbackError
+        : null;
   const displayedIsSongLoading =
     isSeekDragging && seekDragPlaybackStateRef.current
       ? seekDragPlaybackStateRef.current.isSongLoading
