@@ -3145,14 +3145,17 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         },
       );
       // #endregion
+      // Attempt auto-retry BEFORE setting playbackError so the MiniPlayer
+      // never flashes an error while a retry is in flight.
+      if (scheduleAutoRetry(activeSong, "audio-element-error-final")) {
+        // Retry scheduled — keep playbackError null so the UI shows the
+        // retrying state instead of an error flash.
+        return;
+      }
+
       setPlaybackError(defaultPlaybackError);
       setIsSongLoading(false);
       setIsPlaying(false);
-
-      // Proactively schedule auto-retry so it fires even when React batches
-      // the state updates and the useEffect dependency check misses the
-      // playbackError transition (common on auto-advance from queue).
-      scheduleAutoRetry(activeSong, "audio-element-error-final");
     };
 
     audio.addEventListener("play", handlePlay);
@@ -3779,14 +3782,16 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         error instanceof Error
           ? localizePlaybackErrorMessage(error.message)
           : defaultPlaybackError;
+
+      // Attempt auto-retry BEFORE setting playbackError so the MiniPlayer
+      // never flashes an error while a retry is in flight.
+      if (scheduleAutoRetry(song, "resolve-and-play-failure")) {
+        clearSongLoading();
+        throw error;
+      }
+
       setPlaybackError(errorMsg);
       clearSongLoading();
-
-      // Proactively schedule auto-retry so it fires even when React batches
-      // the state updates and the useEffect dependency check misses the
-      // playbackError transition (common on auto-advance from queue).
-      scheduleAutoRetry(song, "resolve-and-play-failure");
-
       throw error;
     }
   };
