@@ -1004,6 +1004,17 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         } catch {}
       }
 
+      const options = { queue: nextQueue, currentIndex: nextIndex };
+
+      // When the next song already has a resolved audio URL, go through
+      // playSong so the audio element error + auto-retry flow is identical
+      // to a manual tap.  This prevents the error from flashing while the
+      // background retry is still in progress.
+      if (nextSong.audioUrl && !shouldRefreshResolvedAudio(nextSong)) {
+        playSong(nextSong, options);
+        return;
+      }
+
       setPlaybackError(null);
       setCurrentTime(0);
       setDuration(nextSong.duration || 0);
@@ -1011,10 +1022,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       setIsSongLoading(true);
 
       void resolveAndPlaySongRef
-        .current(nextSong, {
-          queue: nextQueue,
-          currentIndex: nextIndex,
-        })
+        .current(nextSong, options)
         .catch((error) => {
           console.error(errorLabel, error);
         });
