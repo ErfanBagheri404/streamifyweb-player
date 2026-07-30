@@ -3148,6 +3148,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       setPlaybackError(defaultPlaybackError);
       setIsSongLoading(false);
       setIsPlaying(false);
+
+      // Proactively schedule auto-retry so it fires even when React batches
+      // the state updates and the useEffect dependency check misses the
+      // playbackError transition (common on auto-advance from queue).
+      scheduleAutoRetry(activeSong, "audio-element-error-final");
     };
 
     audio.addEventListener("play", handlePlay);
@@ -3770,12 +3775,18 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         },
       );
       // #endregion
-      setPlaybackError(
+      const errorMsg =
         error instanceof Error
           ? localizePlaybackErrorMessage(error.message)
-          : defaultPlaybackError,
-      );
+          : defaultPlaybackError;
+      setPlaybackError(errorMsg);
       clearSongLoading();
+
+      // Proactively schedule auto-retry so it fires even when React batches
+      // the state updates and the useEffect dependency check misses the
+      // playbackError transition (common on auto-advance from queue).
+      scheduleAutoRetry(song, "resolve-and-play-failure");
+
       throw error;
     }
   };
