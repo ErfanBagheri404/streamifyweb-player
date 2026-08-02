@@ -132,7 +132,7 @@ export function SessionSearch({ sendCommand, claimed }: SessionSearchProps) {
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto p-3 pt-2">
+      <div className="flex-1 overflow-y-auto p-3 pt-2 hide-scrollbar">
         {!claimed ? (
           <p className="mt-6 text-xs text-center" style={{ color: "var(--muted-foreground)" }}>
             Waiting for bot to claim this session...
