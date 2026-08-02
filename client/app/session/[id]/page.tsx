@@ -92,7 +92,7 @@ export default function SessionPage({
   if (!state) return null;
 
   return (
-    <div className="w-full h-full overflow-hidden flex flex-col gap-4 p-3 sm:p-5">
+    <div className="w-full h-full overflow-hidden flex flex-col gap-4 -m-3 sm:-m-5 lg:-m-3 p-3 sm:p-5 lg:p-3">
       {/* Header */}
       <header className="flex items-center gap-3 flex-shrink-0">
         <div className="min-w-0 flex-1">
