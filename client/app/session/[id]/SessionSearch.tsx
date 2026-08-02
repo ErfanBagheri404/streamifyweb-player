@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { buildBackendRouteUrl } from "../../lib/backend-api";
 import { extractYouTubeVideoId, buildYouTubeThumbnailUrl } from "../../lib/youtube-thumbnails";
-import type { QueuedTrack } from "./types";
+import type { SessionState } from "./types";
 import { formatDuration } from "./types";
 
 interface SearchResult {
@@ -13,13 +13,15 @@ interface SearchResult {
   duration: number;
   thumbnail: string;
   source: string;
+  views?: number;
 }
 
 interface SessionSearchProps {
   sendCommand: (type: string, payload?: Record<string, unknown>) => void;
+  claimed: boolean;
 }
 
-export function SessionSearch({ sendCommand }: SessionSearchProps) {
+export function SessionSearch({ sendCommand, claimed }: SessionSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -62,6 +64,7 @@ export function SessionSearch({ sendCommand }: SessionSearchProps) {
             duration: i.duration || i.lengthSeconds || 0,
             thumbnail,
             source: "youtube",
+            views: i.views || 0,
           };
         });
       setResults(items);
@@ -79,6 +82,7 @@ export function SessionSearch({ sendCommand }: SessionSearchProps) {
   };
 
   const handleAdd = (track: SearchResult) => {
+    if (!claimed) return;
     sendCommand("queue-add", {
       query: `${track.title} ${track.artist}`,
       source: track.source,
@@ -109,8 +113,9 @@ export function SessionSearch({ sendCommand }: SessionSearchProps) {
             type="text"
             value={query}
             onChange={(e) => handleChange(e.target.value)}
-            placeholder="Search to add tracks..."
-            className="w-full rounded-xl border py-2.5 pl-9 pr-4 text-sm outline-none transition-colors focus:border-[var(--theme-accent)] placeholder:text-white/30"
+            placeholder={claimed ? "Search to add tracks..." : "Claim session first to add tracks"}
+            disabled={!claimed}
+            className="w-full rounded-xl border py-2.5 pl-9 pr-4 text-sm outline-none transition-colors focus:border-[var(--theme-accent)] placeholder:text-white/30 disabled:opacity-40"
             style={{
               background: "var(--surface-2)",
               borderColor: "var(--border-subtle)",
@@ -127,33 +132,65 @@ export function SessionSearch({ sendCommand }: SessionSearchProps) {
 
       {/* Results */}
       <div className="flex-1 overflow-y-auto p-3 pt-2">
-        {results.length > 0 ? (
-          <ul className="space-y-1">
+        {!claimed ? (
+          <p className="mt-6 text-xs text-center" style={{ color: "var(--muted-foreground)" }}>
+            Waiting for bot to claim this session...
+          </p>
+        ) : results.length > 0 ? (
+          <ul className="space-y-0.5">
             {results.map((track) => (
               <li
                 key={track.id}
-                className="group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-white/[0.04] cursor-pointer"
-                onClick={() => handleAdd(track)}
+                className="group flex items-start gap-3 rounded-lg py-2 transition-colors hover:bg-white/[0.04]"
               >
-                <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-md bg-black/30">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={track.thumbnail} alt={track.title} className="h-full w-full object-cover" loading="lazy" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{track.title}</p>
-                  <p className="text-xs truncate" style={{ color: "var(--muted-foreground)" }}>
-                    {track.artist} · {formatDuration(track.duration)}
+                <button
+                  type="button"
+                  onClick={() => handleAdd(track)}
+                  className="shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]"
+                >
+                  {track.thumbnail ? (
+                    <img
+                      src={track.thumbnail}
+                      alt=""
+                      width={120}
+                      height={68}
+                      loading="lazy"
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                      className="h-[68px] w-[120px] rounded-xl object-cover"
+                    />
+                  ) : (
+                    <div className="h-[68px] w-[120px] rounded-xl border" style={{ background: "var(--surface-3)" }} />
+                  )}
+                </button>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <p className="text-sm font-medium truncate" style={{ color: "var(--foreground)" }}>
+                    {track.title}
                   </p>
+                  <p className="text-xs truncate" style={{ color: "var(--muted-foreground)" }}>
+                    {track.artist}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                    <span>{formatDuration(track.duration)}</span>
+                    {track.views ? (
+                      <>
+                        <span className="h-1 w-1 rounded-full bg-current opacity-30" />
+                        <span>{track.views.toLocaleString()} views</span>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
-                <span
-                  className="flex-shrink-0 text-xs font-medium px-2 py-1 rounded-lg transition-all"
+                <button
+                  type="button"
+                  onClick={() => handleAdd(track)}
+                  className="shrink-0 mt-1 text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
                   style={{
                     background: addedId === track.id ? "rgba(34,197,94,0.2)" : "var(--surface-3)",
                     color: addedId === track.id ? "#22c55e" : "var(--muted-foreground)",
                   }}
                 >
                   {addedId === track.id ? "Added" : "Add"}
-                </span>
+                </button>
               </li>
             ))}
           </ul>

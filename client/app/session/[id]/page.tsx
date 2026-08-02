@@ -167,7 +167,7 @@ export default function SessionPage({
         {/* Left: Player + Search */}
         <div className="lg:col-span-2 flex flex-col gap-4 min-h-0">
           <SessionPlayer state={state} role={myRole} sendCommand={sendCommand} />
-          <SessionSearch sendCommand={sendCommand} />
+          <SessionSearch sendCommand={sendCommand} claimed={state.claimed} />
         </div>
 
         {/* Right: Queue + Users */}
