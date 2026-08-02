@@ -54,7 +54,21 @@ export default function SessionPage({
     );
   }
 
-  /* ---- Error / ended ---- */
+  /* ---- Disconnected / reconnecting (no state yet) ---- */
+  if (connectionStatus !== "connected" && !state) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-[var(--border-subtle)] border-t-[var(--theme-accent)]" />
+          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+            {error ? `Retrying... (${error})` : "Connecting to session..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ---- Session ended ---- */
   if (error && !state) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center px-4">
@@ -70,20 +84,6 @@ export default function SessionPage({
           >
             Retry
           </button>
-        </div>
-      </div>
-    );
-  }
-
-  /* ---- Disconnected (but we may reconnect) ---- */
-  if (connectionStatus === "disconnected" && !state) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-[var(--border-subtle)] border-t-[var(--theme-accent)]" />
-          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-            Reconnecting…
-          </p>
         </div>
       </div>
     );

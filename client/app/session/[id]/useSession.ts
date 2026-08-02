@@ -80,6 +80,11 @@ export function useSession(sessionId: string): UseSessionReturn {
       attemptRef.current = 0;
       setConnectionStatus("connected");
       setError(null);
+      // Register self with the DO so user appears in connected users list
+      const user = discordUserRef.current;
+      if (user) {
+        ws.send(JSON.stringify({ type: "identify", payload: { discordUser: user } }));
+      }
     };
 
     ws.onmessage = (event) => {
@@ -109,8 +114,7 @@ export function useSession(sessionId: string): UseSessionReturn {
 
     ws.onerror = () => {
       if (!mountedRef.current) return;
-      setConnectionStatus("error");
-      setError("WebSocket connection error.");
+      // Don't set error — onclose handles reconnect. Error screen blocks UI.
     };
 
     ws.onclose = () => {
@@ -124,6 +128,8 @@ export function useSession(sessionId: string): UseSessionReturn {
       attemptRef.current = attempt + 1;
 
       reconnectTimeoutRef.current = setTimeout(() => {
+        setConnectionStatus("connecting");
+        setError(null); // clear any stale error before retry
         connectRef.current();
       }, delay);
     };

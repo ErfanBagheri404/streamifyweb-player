@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { buildBackendRouteUrl } from "../../lib/backend-api";
+import { extractYouTubeVideoId, buildYouTubeThumbnailUrl } from "../../lib/youtube-thumbnails";
 import type { QueuedTrack } from "./types";
 import { formatDuration } from "./types";
 
@@ -48,14 +49,21 @@ export function SessionSearch({ sendCommand }: SessionSearchProps) {
       const items: SearchResult[] = (data.items || [])
         .filter((i: any) => i.type === "stream" || i.type === "video" || i.type === "song" || i.title)
         .slice(0, 15)
-        .map((i: any) => ({
-          id: i.url || i.videoId || i.id || "",
-          title: i.title || i.name || "",
-          artist: i.uploaderName || i.artist || i.channel || "Unknown",
-          duration: i.duration || i.lengthSeconds || 0,
-          thumbnail: i.thumbnail || i.thumbnailUrl || i.coverUrl || "",
-          source: "youtube",
-        }));
+        .map((i: any) => {
+          const rawThumb = i.thumbnail || i.thumbnailUrl || i.coverUrl || "";
+          const videoId = extractYouTubeVideoId(i.url || i.videoId || i.id || rawThumb);
+          const thumbnail = videoId
+            ? buildYouTubeThumbnailUrl(videoId, "hqdefault.jpg")
+            : rawThumb;
+          return {
+            id: i.url || i.videoId || i.id || "",
+            title: i.title || i.name || "",
+            artist: i.uploaderName || i.artist || i.channel || "Unknown",
+            duration: i.duration || i.lengthSeconds || 0,
+            thumbnail,
+            source: "youtube",
+          };
+        });
       setResults(items);
     } catch {
       setResults([]);

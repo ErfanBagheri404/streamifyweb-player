@@ -753,7 +753,7 @@ export default function Home() {
             ) : (
               <>
                 <Link
-                  href="/sessions"
+                  href="/session"
                   className="flex items-center gap-2 rounded-full border border-[#5865F2]/30 bg-[#5865F2]/15 px-4 py-2 text-sm font-semibold text-[#5865F2] transition hover:bg-[#5865F2]/25 hover:border-[#5865F2]/50"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
