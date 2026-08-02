@@ -152,13 +152,19 @@ export default function SessionPage({
         </div>
       </header>
 
-      {/* Error banner (if connected but got an error) */}
-      {error && state && (
+      {/* Error banner — from WS error or from state error (bot pushes errors here) */}
+      {(error || state.error) && state && (
         <div
-          className="rounded-lg border px-4 py-3 text-sm"
+          className="rounded-lg border px-4 py-3 text-sm flex items-center justify-between gap-3"
           style={{ background: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.3)", color: "#fca5a5" }}
         >
-          {error}
+          <span>{state.error || error}</span>
+          <button
+            onClick={() => sendCommand("clear-error")}
+            className="text-xs opacity-60 hover:opacity-100 transition-opacity shrink-0"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 

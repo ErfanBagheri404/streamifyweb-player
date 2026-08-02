@@ -37,6 +37,7 @@ export interface SessionState {
   filter: string | null;
   searchResults: QueuedTrack[] | null;
   lastActivity: number;
+  error: string | null;
 }
 
 export type WSMessage =
