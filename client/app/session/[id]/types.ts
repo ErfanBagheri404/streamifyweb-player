@@ -27,6 +27,7 @@ export interface SessionState {
   claimed: boolean;
   roles: Record<string, "admin" | "dj" | "listener">;
   userNames: Record<string, string>;
+  userAvatars: Record<string, string | null>;
   current: QueuedTrack | null;
   queue: QueuedTrack[];
   isPlaying: boolean;
@@ -35,6 +36,7 @@ export interface SessionState {
   volume: number; // 0-150 (bot may go above 100)
   filter: string | null;
   searchResults: QueuedTrack[] | null;
+  lastActivity: number;
 }
 
 export type WSMessage =

@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { buildBackendRouteUrl } from "../../lib/backend-api";
-import { extractYouTubeVideoId, buildYouTubeThumbnailUrl } from "../../lib/youtube-thumbnails";
+import { extractYouTubeVideoId, normalizeYouTubeThumbnailUrl } from "../../lib/youtube-thumbnails";
 import type { SessionState } from "./types";
 import { formatDuration } from "./types";
 
@@ -55,7 +55,8 @@ export function SessionSearch({ sendCommand, claimed }: SessionSearchProps) {
           const rawThumb = i.thumbnail || i.thumbnailUrl || i.coverUrl || "";
           const videoId = extractYouTubeVideoId(i.url || i.videoId || i.id || rawThumb);
           const thumbnail = videoId
-            ? buildYouTubeThumbnailUrl(videoId, "hqdefault.jpg")
+            ? normalizeYouTubeThumbnailUrl({ videoId, variant: "hqdefault.jpg", width: 320, height: 180 })
+            || rawThumb
             : rawThumb;
           return {
             id: i.url || i.videoId || i.id || "",

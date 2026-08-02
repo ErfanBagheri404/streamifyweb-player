@@ -13,8 +13,15 @@ interface SessionUsersProps {
   discordUser?: import("./types").DiscordUser | null;
 }
 
+function getAvatarUrl(userId: string, avatar: string | null | undefined): string | null {
+  if (!avatar) return null;
+  // Discord avatars can be just the hash or a full URL
+  if (avatar.startsWith("http")) return avatar;
+  return `https://cdn.discordapp.com/avatars/${userId}/${avatar}.png?size=64`;
+}
+
 export function SessionUsers({ state, discordUser }: SessionUsersProps) {
-  const { roles, userNames, createdBy } = state;
+  const { roles, userNames, userAvatars, createdBy } = state;
   const entries = Object.entries(roles);
 
   // Determine the current user's role
@@ -40,6 +47,7 @@ export function SessionUsers({ state, discordUser }: SessionUsersProps) {
             const style = ROLE_STYLES[role] ?? ROLE_STYLES.listener;
             const isCreator = createdBy.id === userId;
             const displayName = userNames?.[userId] || createdBy.username || userId;
+            const avatarUrl = getAvatarUrl(userId, userAvatars?.[userId]);
 
             return (
               <li
@@ -47,9 +55,27 @@ export function SessionUsers({ state, discordUser }: SessionUsersProps) {
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/[0.04]"
               >
                 {/* Avatar */}
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    className="h-8 w-8 flex-shrink-0 rounded-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      // Fallback to initial letter on error
+                      e.currentTarget.style.display = "none";
+                      const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                      if (fallback) fallback.style.display = "flex";
+                    }}
+                  />
+                ) : null}
                 <div
                   className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                  style={{ background: style.bg, color: style.color }}
+                  style={{
+                    background: style.bg,
+                    color: style.color,
+                    display: avatarUrl ? "none" : "flex",
+                  }}
                 >
                   {displayName.charAt(0).toUpperCase()}
                 </div>
