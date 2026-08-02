@@ -155,20 +155,39 @@ export function useSession(sessionId: string): UseSessionReturn {
   }, [doConnect]);
 
   const sendCommand = useCallback(
-    (type: string, payload: Record<string, unknown> = {}) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      ws.send(
-        JSON.stringify({
-          type,
-          payload: {
-            ...payload,
-            discordUser: discordUserRef.current,
+    async (type: string, payload: Record<string, unknown> = {}) => {
+      const fullPayload = {
+        ...payload,
+        discordUser: discordUserRef.current,
+      };
+
+      // Try HTTP first (reliable)
+      try {
+        const res = await fetch(`${baseUrl}/session/${encodeURIComponent(sessionId)}/command`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Web-Origin": "true",
           },
-        })
-      );
+          body: JSON.stringify({
+            userId: discordUserRef.current?.id ?? "anonymous",
+            username: discordUserRef.current?.username ?? "Anonymous",
+            type,
+            payload: fullPayload,
+          }),
+        });
+        if (res.ok) return;
+      } catch {
+        // HTTP failed, fall through to WS
+      }
+
+      // Fallback: try WebSocket
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type, payload: fullPayload }));
+      }
     },
-    []
+    [baseUrl, sessionId]
   );
 
   return { state, connectionStatus, error, sendCommand, discordUser, setDiscordUser };

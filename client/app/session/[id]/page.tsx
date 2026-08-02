@@ -92,7 +92,7 @@ export default function SessionPage({
   if (!state) return null;
 
   return (
-    <div className="w-full h-full overflow-hidden flex flex-col gap-4 -m-3 sm:-m-5 lg:-m-3 p-3 sm:p-5 lg:p-3">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden gap-4">
       {/* Header */}
       <header className="flex items-center gap-3 flex-shrink-0">
         <div className="min-w-0 flex-1">
@@ -102,7 +102,7 @@ export default function SessionPage({
           <p className="text-sm mt-0.5 flex flex-wrap items-center gap-x-1.5" style={{ color: "var(--muted-foreground)" }}>
             {state.guildName !== "" && (
               <>
-                <span>Channel #{state.channelId}</span>
+                <span>Channel #{state.channelName || state.channelId}</span>
                 <span className="mx-0.5">·</span>
               </>
             )}

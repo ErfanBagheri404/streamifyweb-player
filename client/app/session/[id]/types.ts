@@ -22,6 +22,7 @@ export interface SessionState {
   guildId: string;
   guildName: string;
   channelId: string;
+  channelName: string;
   createdBy: DiscordUser;
   createdAt: number;
   claimed: boolean;

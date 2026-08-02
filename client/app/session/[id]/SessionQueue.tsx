@@ -14,7 +14,7 @@ export function SessionQueue({ state, role, sendCommand }: SessionQueueProps) {
   const canRemove = roleCanControl(role);
 
   return (
-    <div className="flex flex-col min-h-0 flex-1 rounded-2xl border p-5 sm:p-6" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
+    <div className="flex flex-col min-h-0 flex-1 rounded-xl border p-5 sm:p-6" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <h3 className="text-base font-semibold">Queue</h3>
         <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "var(--surface-3)", color: "var(--muted-foreground)" }}>
@@ -69,9 +69,9 @@ export function SessionQueue({ state, role, sendCommand }: SessionQueueProps) {
               <span
                 className="hidden sm:block flex-shrink-0 text-[11px] truncate max-w-[80px]"
                 style={{ color: "var(--muted-foreground)" }}
-                title={`Added by ${track.requestedBy}`}
+                title={`Added by ${state.userNames?.[track.requestedBy] || track.requestedBy}`}
               >
-                {track.requestedBy}
+                {state.userNames?.[track.requestedBy] || track.requestedBy}
               </span>
 
               {/* Remove button (admin/dj only) */}

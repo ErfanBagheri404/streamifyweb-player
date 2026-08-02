@@ -29,7 +29,7 @@ export function SessionUsers({ state, discordUser }: SessionUsersProps) {
   const myStyle = ROLE_STYLES[myRole] ?? ROLE_STYLES.listener;
 
   return (
-    <div className="rounded-2xl border p-5 sm:p-6" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
+    <div className="rounded-xl border p-5 sm:p-6" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-base font-semibold">Connected Users</h3>
         <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "var(--surface-3)", color: "var(--muted-foreground)" }}>

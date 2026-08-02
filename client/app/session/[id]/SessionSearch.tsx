@@ -82,18 +82,25 @@ export function SessionSearch({ sendCommand, claimed }: SessionSearchProps) {
     debounceRef.current = setTimeout(() => doSearch(value), 600);
   };
 
-  const handleAdd = (track: SearchResult) => {
-    if (!claimed) return;
-    sendCommand("queue-add", {
-      query: `${track.title} ${track.artist}`,
-      source: track.source,
-    });
-    setAddedId(track.id);
-    setTimeout(() => setAddedId(null), 2000);
+  const [addingId, setAddingId] = useState<string | null>(null);
+
+  const handleAdd = async (track: SearchResult) => {
+    if (!claimed || addingId) return;
+    setAddingId(track.id);
+    try {
+      await sendCommand("queue-add", {
+        query: `${track.title} ${track.artist}`,
+        source: track.source,
+      });
+      setAddedId(track.id);
+      setTimeout(() => setAddedId(null), 2000);
+    } finally {
+      setAddingId(null);
+    }
   };
 
   return (
-    <div className="flex flex-col min-h-0 flex-1 rounded-2xl border" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
+    <div className="flex flex-col min-h-0 flex-1 rounded-xl border" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
       {/* Search input */}
       <div className="p-3 pb-0">
         <div className="relative">
@@ -184,13 +191,19 @@ export function SessionSearch({ sendCommand, claimed }: SessionSearchProps) {
                 <button
                   type="button"
                   onClick={() => handleAdd(track)}
-                  className="shrink-0 mt-1 text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
+                  disabled={addingId === track.id}
+                  className="shrink-0 mt-1 text-xs font-medium px-3 py-1.5 rounded-lg transition-all disabled:opacity-60"
                   style={{
                     background: addedId === track.id ? "rgba(34,197,94,0.2)" : "var(--surface-3)",
                     color: addedId === track.id ? "#22c55e" : "var(--muted-foreground)",
                   }}
                 >
-                  {addedId === track.id ? "Added" : "Add"}
+                  {addingId === track.id ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Adding
+                    </span>
+                  ) : addedId === track.id ? "Added" : "Add"}
                 </button>
               </li>
             ))}

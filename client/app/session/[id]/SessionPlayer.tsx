@@ -62,14 +62,31 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
   }, [current, isPlaying]);
 
   return (
-    <div className="rounded-2xl border p-5 sm:p-6" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
+    <div className="rounded-xl border p-5 sm:p-6" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
       {/* No track */}
       {!current ? (
         <div className="flex flex-col items-center justify-center py-12 gap-3">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{color:"var(--muted-foreground)"}}><circle cx="12" cy="12" r="10"/><path d="M9 10V16M15 10V16M8 10h8M9 8h6"/></svg>
-          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-            Nothing playing right now. Add something to the queue!
-          </p>
+          {state.queue.length > 0 ? (
+            <>
+              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                {state.queue.length} track{state.queue.length > 1 ? "s" : ""} in queue
+              </p>
+              <button
+                onClick={() => sendCommand("play")}
+                disabled={isDisabled}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40"
+                style={{ background: "var(--theme-accent)", color: "var(--theme-accent-contrast)" }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                Play Queue
+              </button>
+            </>
+          ) : (
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              Nothing playing right now. Add something to the queue!
+            </p>
+          )}
         </div>
       ) : (
         <>
