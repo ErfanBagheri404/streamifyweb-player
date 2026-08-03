@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
 import type { SessionState } from "./types";
 
 const ROLE_STYLES: Record<string, { bg: string; color: string; label: string }> = {
@@ -11,22 +12,97 @@ const ROLE_STYLES: Record<string, { bg: string; color: string; label: string }> 
 interface SessionUsersProps {
   state: SessionState;
   discordUser?: import("./types").DiscordUser | null;
+  myRole?: "admin" | "dj" | "listener";
+  sendCommand?: (type: string, payload?: Record<string, unknown>) => void;
 }
 
 function getAvatarUrl(userId: string, avatar: string | null | undefined): string | null {
   if (!avatar) return null;
-  // Discord avatars can be just the hash or a full URL
   if (avatar.startsWith("http")) return avatar;
   return `https://cdn.discordapp.com/avatars/${userId}/${avatar}.png?size=64`;
 }
 
-export function SessionUsers({ state, discordUser }: SessionUsersProps) {
+function RoleBadge({
+  userId,
+  role,
+  isAdmin,
+  onChangeRole,
+}: {
+  userId: string;
+  role: string;
+  isAdmin: boolean;
+  onChangeRole?: (userId: string, role: "admin" | "dj" | "listener") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const style = ROLE_STYLES[role] ?? ROLE_STYLES.listener;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  if (!isAdmin || !onChangeRole) {
+    return (
+      <span
+        className="flex-shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
+        style={{ background: style.bg, color: style.color }}
+      >
+        {style.label}
+      </span>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative flex-shrink-0">
+      <button
+        onClick={() => setOpen(!open)}
+        className="rounded-full px-2 py-0.5 text-[11px] font-medium transition-opacity hover:opacity-80 cursor-pointer"
+        style={{ background: style.bg, color: style.color }}
+      >
+        {style.label}
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border py-1 shadow-lg"
+          style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}
+        >
+          {(["admin", "dj", "listener"] as const).map((r) => {
+            const s = ROLE_STYLES[r];
+            return (
+              <button
+                key={r}
+                onClick={() => {
+                  onChangeRole(userId, r);
+                  setOpen(false);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] font-medium transition-colors hover:bg-white/[0.06]"
+                style={{ color: s.color }}
+              >
+                {r === role && <span className="text-[8px]">&#9679;</span>}
+                {r !== role && <span className="w-[8px]" />}
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SessionUsers({ state, discordUser, myRole, sendCommand }: SessionUsersProps) {
   const { roles, userNames, userAvatars, createdBy } = state;
   const entries = Object.entries(roles);
+  const isAdmin = myRole === "admin";
 
-  // Determine the current user's role
-  const myRole = discordUser ? (roles[discordUser.id] ?? "listener") : "listener";
-  const myStyle = ROLE_STYLES[myRole] ?? ROLE_STYLES.listener;
+  const handleChangeRole = (userId: string, role: "admin" | "dj" | "listener") => {
+    if (sendCommand) sendCommand("role", { userId, role });
+  };
 
   return (
     <div className="rounded-xl border p-5 sm:p-6" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
@@ -44,10 +120,10 @@ export function SessionUsers({ state, discordUser }: SessionUsersProps) {
       ) : (
         <ul className="space-y-1 max-h-[280px] overflow-y-auto hide-scrollbar">
           {entries.map(([userId, role]) => {
-            const style = ROLE_STYLES[role] ?? ROLE_STYLES.listener;
             const isCreator = createdBy.id === userId;
             const displayName = userNames?.[userId] || createdBy.username || userId;
             const avatarUrl = getAvatarUrl(userId, userAvatars?.[userId]);
+            const avatarFallback = ROLE_STYLES[role] ?? ROLE_STYLES.listener;
 
             return (
               <li
@@ -62,7 +138,6 @@ export function SessionUsers({ state, discordUser }: SessionUsersProps) {
                     className="h-8 w-8 flex-shrink-0 rounded-full object-cover"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
-                      // Fallback to initial letter on error
                       e.currentTarget.style.display = "none";
                       const fallback = e.currentTarget.nextElementSibling as HTMLElement;
                       if (fallback) fallback.style.display = "flex";
@@ -72,8 +147,8 @@ export function SessionUsers({ state, discordUser }: SessionUsersProps) {
                 <div
                   className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold"
                   style={{
-                    background: style.bg,
-                    color: style.color,
+                    background: avatarFallback.bg,
+                    color: avatarFallback.color,
                     display: avatarUrl ? "none" : "flex",
                   }}
                 >
@@ -92,13 +167,13 @@ export function SessionUsers({ state, discordUser }: SessionUsersProps) {
                   </p>
                 </div>
 
-                {/* Role badge */}
-                <span
-                  className="flex-shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
-                  style={{ background: style.bg, color: style.color }}
-                >
-                  {style.label}
-                </span>
+                {/* Role badge — clickable dropdown for admin */}
+                <RoleBadge
+                  userId={userId}
+                  role={role}
+                  isAdmin={isAdmin}
+                  onChangeRole={handleChangeRole}
+                />
               </li>
             );
           })}
@@ -110,7 +185,7 @@ export function SessionUsers({ state, discordUser }: SessionUsersProps) {
         className="mt-3 rounded-xl px-3 py-2 text-xs"
         style={{ background: "var(--surface-3)", color: "var(--muted-foreground)" }}
       >
-        Your role: <span className="font-medium" style={{ color: myStyle.color }}>{myStyle.label}</span>
+        Your role: <span className="font-medium" style={{ color: ROLE_STYLES[myRole ?? "listener"].color }}>{ROLE_STYLES[myRole ?? "listener"].label}</span>
         {!discordUser && (
           <span className="ml-1">(connect Discord to identify)</span>
         )}

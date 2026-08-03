@@ -179,7 +179,7 @@ export default function SessionPage({
         {/* Right: Queue + Users */}
         <div className="flex flex-col gap-4 min-h-0">
           <SessionQueue state={state} role={myRole} sendCommand={sendCommand} />
-          <SessionUsers state={state} discordUser={discordUser} />
+          <SessionUsers state={state} discordUser={discordUser} myRole={myRole} sendCommand={sendCommand} />
         </div>
       </div>
     </div>
