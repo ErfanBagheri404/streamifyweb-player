@@ -42,7 +42,7 @@ export function SessionUsers({ state, discordUser }: SessionUsersProps) {
           No users connected yet.
         </p>
       ) : (
-        <ul className="space-y-1">
+        <ul className="space-y-1 max-h-[280px] overflow-y-auto hide-scrollbar">
           {entries.map(([userId, role]) => {
             const style = ROLE_STYLES[role] ?? ROLE_STYLES.listener;
             const isCreator = createdBy.id === userId;
