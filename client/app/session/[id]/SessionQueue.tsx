@@ -66,13 +66,44 @@ export function SessionQueue({ state, role, sendCommand }: SessionQueueProps) {
               </div>
 
               {/* Added by */}
-              <span
-                className="hidden sm:block flex-shrink-0 text-[11px] truncate max-w-[80px]"
-                style={{ color: "var(--muted-foreground)" }}
+              <div
+                className="hidden sm:flex flex-shrink-0 items-center gap-1.5 max-w-[100px]"
                 title={`Added by ${state.userNames?.[track.requestedBy] || track.requestedBy}`}
               >
-                {state.userNames?.[track.requestedBy] || track.requestedBy}
-              </span>
+                {(() => {
+                  const userId = track.requestedBy;
+                  const avatar = state.userAvatars?.[userId];
+                  const name = state.userNames?.[userId] || userId;
+                  const avatarUrl = avatar?.startsWith("http")
+                    ? avatar
+                    : avatar
+                    ? `https://cdn.discordapp.com/avatars/${userId}/${avatar}.png?size=32`
+                    : null;
+                  return (
+                    <>
+                      {avatarUrl ? (
+                        <img
+                          src={avatarUrl}
+                          alt=""
+                          className="h-5 w-5 rounded-full object-cover flex-shrink-0"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => { e.currentTarget.style.display = "none"; }}
+                        />
+                      ) : (
+                        <div
+                          className="h-5 w-5 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold"
+                          style={{ background: "var(--surface-3)", color: "var(--muted-foreground)" }}
+                        >
+                          {name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="text-[11px] truncate" style={{ color: "var(--muted-foreground)" }}>
+                        {name}
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
 
               {/* Remove button (admin/dj only) */}
               {canRemove && (
