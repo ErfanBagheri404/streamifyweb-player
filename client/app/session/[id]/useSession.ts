@@ -82,9 +82,16 @@ export function useSession(sessionId: string): UseSessionReturn {
       setError(null);
       // Register self with the DO so user appears in connected users list
       const user = discordUserRef.current;
-      if (user) {
-        ws.send(JSON.stringify({ type: "identify", payload: { discordUser: user } }));
-      }
+      ws.send(JSON.stringify({
+        type: "identify",
+        payload: {
+          discordUser: user ?? {
+            id: "anon-" + Math.random().toString(36).slice(2, 8),
+            username: "Guest",
+            avatar: null,
+          },
+        },
+      }));
     };
 
     ws.onmessage = (event) => {
