@@ -44,8 +44,8 @@ export default function SessionPage({
     setHasConnected(true);
   }
 
-  /* ---- Initial loading (never connected yet) ---- */
-  if (connectionStatus === "connecting") {
+  /* ---- Initial loading (never connected yet, no state) ---- */
+  if (connectionStatus === "connecting" && !hasConnected && !state) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
