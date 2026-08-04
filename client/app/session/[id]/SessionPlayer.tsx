@@ -165,9 +165,9 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
             <span className="tabular-nums">{formatDuration(current.duration)}</span>
           </div>
 
-          {/* All controls in one row */}
+          {/* All controls in one row: Loop, Q-Loop | Prev, Play/Pause, Next, Stop | Lyrics, Filter */}
           <div className="mt-4 flex items-center justify-center gap-1 sm:gap-2">
-            {/* Loop — compact pill */}
+            {/* Loop */}
             <button
               disabled={isDisabled}
               onClick={() => { setOptimisticLoop(!loopActive); sendCommand("loop"); }}
@@ -183,6 +183,22 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
               <span className="hidden sm:inline">Loop</span>
             </button>
 
+            {/* Queue Loop */}
+            <button
+              disabled={isDisabled}
+              onClick={() => { setOptimisticLoopQueue(!loopQueueActive); sendCommand("loopqueue"); }}
+              className="flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-40"
+              style={{
+                background: loopQueueActive ? "rgba(var(--theme-accent-rgb, 128,128,128), 0.15)" : "transparent",
+                color: loopQueueActive ? "var(--theme-accent)" : "var(--muted-foreground)",
+                border: loopQueueActive ? "1px solid rgba(var(--theme-accent-rgb, 128,128,128), 0.3)" : "1px solid transparent",
+              }}
+              title={loopQueueActive ? "Disable queue loop" : "Enable queue loop"}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+              <span className="hidden sm:inline">Q</span>
+            </button>
+
             {/* Prev */}
             <button
               disabled={isDisabled}
@@ -192,17 +208,6 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
               title="Previous"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z"/></svg>
-            </button>
-
-            {/* Skip */}
-            <button
-              disabled={isDisabled}
-              onClick={() => sendCommand("skip")}
-              className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-110 active:scale-90 disabled:opacity-40"
-              style={{ color: "var(--foreground)" }}
-              title="Skip"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
             </button>
 
             {/* Play / Pause — center, largest */}
@@ -220,17 +225,6 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
               )}
             </button>
 
-            {/* Stop */}
-            <button
-              disabled={isDisabled}
-              onClick={() => sendCommand("stop")}
-              className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-110 active:scale-90 disabled:opacity-40"
-              style={{ color: "var(--foreground)" }}
-              title="Stop"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-            </button>
-
             {/* Next */}
             <button
               disabled={isDisabled}
@@ -242,20 +236,15 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2V6zM6 18l8.5-6L6 6v12z"/></svg>
             </button>
 
-            {/* Queue Loop — compact pill */}
+            {/* Stop */}
             <button
               disabled={isDisabled}
-              onClick={() => { setOptimisticLoopQueue(!loopQueueActive); sendCommand("loopqueue"); }}
-              className="flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-40"
-              style={{
-                background: loopQueueActive ? "rgba(var(--theme-accent-rgb, 128,128,128), 0.15)" : "transparent",
-                color: loopQueueActive ? "var(--theme-accent)" : "var(--muted-foreground)",
-                border: loopQueueActive ? "1px solid rgba(var(--theme-accent-rgb, 128,128,128), 0.3)" : "1px solid transparent",
-              }}
-              title={loopQueueActive ? "Disable queue loop" : "Enable queue loop"}
+              onClick={() => sendCommand("stop")}
+              className="flex h-9 w-9 items-center justify-center rounded-full transition-all hover:scale-110 active:scale-90 disabled:opacity-40"
+              style={{ color: "var(--foreground)" }}
+              title="Stop"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-              <span className="hidden sm:inline">Q</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
             </button>
 
             {/* Lyrics */}
