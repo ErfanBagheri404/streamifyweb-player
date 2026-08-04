@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { SessionState } from "./types";
 
 const ROLE_STYLES: Record<string, { bg: string; color: string; label: string }> = {
@@ -34,17 +35,26 @@ function RoleBadge({
   onChangeRole?: (userId: string, role: "admin" | "dj" | "listener") => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const btnRef = useRef<HTMLButtonElement>(null);
   const style = ROLE_STYLES[role] ?? ROLE_STYLES.listener;
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  const handleOpen = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setOpen(!open);
+  };
 
   if (!isAdmin || !onChangeRole) {
     return (
@@ -58,18 +68,24 @@ function RoleBadge({
   }
 
   return (
-    <div ref={ref} className="relative flex-shrink-0">
+    <>
       <button
-        onClick={() => setOpen(!open)}
-        className="rounded-full px-2 py-0.5 text-[11px] font-medium transition-opacity hover:opacity-80 cursor-pointer"
+        ref={btnRef}
+        onClick={handleOpen}
+        className="flex-shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium transition-opacity hover:opacity-80 cursor-pointer"
         style={{ background: style.bg, color: style.color }}
       >
         {style.label}
       </button>
-      {open && (
+      {open && createPortal(
         <div
-          className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border py-1 shadow-lg"
-          style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}
+          className="fixed z-[9999] min-w-[100px] rounded-lg border py-1 shadow-lg"
+          style={{
+            background: "var(--surface-1)",
+            borderColor: "var(--border-subtle)",
+            top: menuPos.top,
+            right: menuPos.right,
+          }}
         >
           {(["admin", "dj", "listener"] as const).map((r) => {
             const s = ROLE_STYLES[r];
@@ -89,9 +105,10 @@ function RoleBadge({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
