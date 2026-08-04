@@ -39,6 +39,7 @@ export interface SessionState {
   searchResults: QueuedTrack[] | null;
   lastActivity: number;
   error: string | null;
+  lyrics: string | null;
 }
 
 export type WSMessage =
@@ -62,7 +63,10 @@ export type CommandType =
   | "queue-move"
   | "clear"
   | "filter"
-  | "search";
+  | "search"
+  | "lyrics"
+  | "always-on"
+  | "prev";
 
 export type UserRole = "admin" | "dj" | "listener";
 
