@@ -39,6 +39,7 @@ export interface SessionState {
   searchResults: QueuedTrack[] | null;
   lastActivity: number;
   error: string | null;
+  position?: number;
   lyrics: string | null;
 }
 
@@ -66,7 +67,8 @@ export type CommandType =
   | "search"
   | "lyrics"
   | "always-on"
-  | "prev";
+  | "prev"
+  | "seek";
 
 export type UserRole = "admin" | "dj" | "listener";
 

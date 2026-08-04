@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionState, UserRole } from "./types";
 import { formatDuration, roleCanControl } from "./types";
 
@@ -37,9 +37,13 @@ interface SessionPlayerProps {
 export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) {
   const [localProgress, setLocalProgress] = useState(0);
   const [showFilter, setShowFilter] = useState(false);
+  const [hoverPosition, setHoverPosition] = useState<number | null>(null); // ms
   const progressRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
   const lastTrackIdRef = useRef<string | null>(null);
+  const positionBaseRef = useRef<number>(0); // server position in ms
+  const positionBaseTimeRef = useRef<number>(0); // performance.now when base was set
+  const lastPositionRef = useRef<number | undefined>(undefined); // last server position received
   const isDisabled = !roleCanControl(role);
 
   const [optimisticLoop, setOptimisticLoop] = useState<boolean | null>(null);
@@ -56,24 +60,78 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
   const requestedByName = state.userNames?.[requestedById] || requestedById || "Unknown";
   const requestedByAvatarUrl = discordAvatarUrl(requestedById, state.userAvatars?.[requestedById]);
 
+  // Server position in ms → local seconds
+  const serverPositionSec = state.position != null ? state.position / 1000 : undefined;
+
+  // Track changes → reset
   const trackId = current?.id ?? null;
   if (trackId !== lastTrackIdRef.current) {
     lastTrackIdRef.current = trackId;
+    positionBaseRef.current = 0;
+    positionBaseTimeRef.current = performance.now();
+    lastPositionRef.current = undefined;
     setLocalProgress(0);
   }
 
+  // When server position arrives, update the base
   useEffect(() => {
-    if (!current || !isPlaying) return;
-    let lastTime = performance.now();
+    if (serverPositionSec == null) return;
+    // Reset base if: no previous position, or track changed, or drift > 2s
+    const prev = lastPositionRef.current;
+    if (prev == null || Math.abs(serverPositionSec - prev) > 2) {
+      positionBaseRef.current = serverPositionSec;
+      positionBaseTimeRef.current = performance.now();
+      setLocalProgress(serverPositionSec);
+    }
+    lastPositionRef.current = serverPositionSec;
+  }, [serverPositionSec]);
+
+  // RAF interpolation between server updates
+  useEffect(() => {
+    if (!current || !isPlaying) {
+      cancelAnimationFrame(rafRef.current);
+      return;
+    }
     const tick = (now: number) => {
-      const dt = (now - lastTime) / 1000;
-      lastTime = now;
-      setLocalProgress((prev) => Math.min(prev + dt, current.duration));
+      const elapsed = (now - positionBaseTimeRef.current) / 1000;
+      const projected = positionBaseRef.current + elapsed;
+      setLocalProgress(Math.min(projected, current.duration));
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
   }, [current, isPlaying]);
+
+  // Seek on progress bar click
+  const handleProgressClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (isDisabled || !progressRef.current || !current) return;
+      const rect = progressRef.current.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const clickedMs = Math.round(ratio * current.duration * 1000);
+      sendCommand("seek", { position: clickedMs });
+    },
+    [isDisabled, current, sendCommand],
+  );
+
+  // Hover position for indicator
+  const handleProgressHover = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!progressRef.current || !current) {
+        setHoverPosition(null);
+        return;
+      }
+      const rect = progressRef.current.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      setHoverPosition(Math.round(ratio * current.duration * 1000));
+    },
+    [current],
+  );
+
+  const handleProgressLeave = useCallback(() => setHoverPosition(null), []);
+
+  // Clamp display
+  const displayProgress = Math.max(0, Math.min(localProgress, current?.duration ?? 0));
 
   return (
     <div className="rounded-xl border p-5 sm:p-6" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
@@ -145,23 +203,52 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
             </div>
           </div>
 
-          {/* Progress bar */}
-          <div
-            ref={progressRef}
-            className="group mt-5 h-1.5 w-full rounded-full overflow-hidden cursor-pointer"
-            style={{ background: "var(--surface-3)" }}
-            title={`${formatDuration(localProgress)} / ${formatDuration(current.duration)}`}
-          >
+          {/* Progress bar — seekable */}
+          <div className="relative mt-5 group">
+            {/* Hover time indicator */}
+            {hoverPosition != null && (
+              <div
+                className="absolute -top-7 -translate-x-1/2 text-[11px] font-medium px-1.5 py-0.5 rounded pointer-events-none whitespace-nowrap z-10"
+                style={{
+                  left: `${current.duration > 0 ? (hoverPosition / (current.duration * 1000)) * 100 : 0}%`,
+                  background: "var(--surface-3)",
+                  color: "var(--foreground)",
+                }}
+              >
+                {formatDuration(hoverPosition / 1000)}
+              </div>
+            )}
             <div
-              className="h-full rounded-full transition-[width] duration-200"
-              style={{
-                width: `${(localProgress / current.duration) * 100}%`,
-                background: "var(--theme-accent)",
-              }}
-            />
+              ref={progressRef}
+              className="h-1.5 w-full rounded-full overflow-hidden cursor-pointer relative"
+              style={{ background: "var(--surface-3)" }}
+              title={`${formatDuration(displayProgress)} / ${formatDuration(current.duration)}`}
+              onClick={handleProgressClick}
+              onMouseMove={handleProgressHover}
+              onMouseLeave={handleProgressLeave}
+            >
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${(displayProgress / current.duration) * 100}%`,
+                  background: "var(--theme-accent)",
+                  transition: "none",
+                }}
+              />
+              {/* Hover overlay */}
+              {hoverPosition != null && (
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full pointer-events-none"
+                  style={{
+                    width: `${current.duration > 0 ? (hoverPosition / (current.duration * 1000)) * 100 : 0}%`,
+                    background: "rgba(255,255,255,0.1)",
+                  }}
+                />
+              )}
+            </div>
           </div>
           <div className="mt-1 flex justify-between text-xs" style={{ color: "var(--muted-foreground)" }}>
-            <span className="tabular-nums">{formatDuration(localProgress)}</span>
+            <span className="tabular-nums">{formatDuration(displayProgress)}</span>
             <span className="tabular-nums">{formatDuration(current.duration)}</span>
           </div>
 

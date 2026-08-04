@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "./useSession";
 import { SessionPlayer } from "./SessionPlayer";
 import { SessionQueue } from "./SessionQueue";
@@ -40,6 +40,20 @@ export default function SessionPage({
 
   const [copied, setCopied] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
+  const [toasts, setToasts] = useState<{id: number; message: string; type: 'error' | 'info' | 'success'}[]>([]);
+
+  const addToast = useCallback((message: string, type: 'error' | 'info' | 'success' = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, {id, message, type}]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
+
+  useEffect(() => {
+    if (state?.error) {
+      addToast(state.error, 'error');
+    }
+  }, [state?.error, addToast]);
+
   if (connectionStatus === "connected" && !hasConnected) {
     setHasConnected(true);
   }
@@ -167,22 +181,6 @@ export default function SessionPage({
         </div>
       )}
 
-      {/* Error banner — from WS error or from state error (bot pushes errors here) */}
-      {(error || state.error) && state && (
-        <div
-          className="rounded-lg border px-4 py-3 text-sm flex items-center justify-between gap-3"
-          style={{ background: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.3)", color: "#fca5a5" }}
-        >
-          <span>{state.error || error}</span>
-          <button
-            onClick={() => sendCommand("clear-error")}
-            className="text-xs opacity-60 hover:opacity-100 transition-opacity shrink-0"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
         {/* Left: Player + Lyrics + Search */}
@@ -207,6 +205,21 @@ export default function SessionPage({
           <SessionQueue state={state} role={myRole} sendCommand={sendCommand} />
           <SessionUsers state={state} discordUser={discordUser} myRole={myRole} sendCommand={sendCommand} />
         </div>
+      </div>
+
+      {/* Toast notifications */}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+        {toasts.map(t => (
+          <div key={t.id} className="rounded-lg border px-4 py-2.5 text-sm font-medium shadow-lg backdrop-blur-sm animate-in slide-in-from-bottom-2"
+            style={{
+              background: t.type === 'error' ? 'rgba(239,68,68,0.15)' : t.type === 'success' ? 'rgba(34,197,94,0.15)' : 'var(--surface-2)',
+              borderColor: t.type === 'error' ? 'rgba(239,68,68,0.3)' : t.type === 'success' ? 'rgba(34,197,94,0.3)' : 'var(--border-subtle)',
+              color: t.type === 'error' ? '#ef4444' : t.type === 'success' ? '#22c55e' : 'var(--foreground)',
+            }}
+          >
+            {t.message}
+          </div>
+        ))}
       </div>
     </div>
   );
