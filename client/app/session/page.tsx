@@ -23,6 +23,8 @@ export default function SessionsPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<string[]>([]);
+  const [guideSessionId, setGuideSessionId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Load stored Discord user + recent sessions on mount
   useEffect(() => {
@@ -76,7 +78,6 @@ export default function SessionsPage() {
     try {
       const id = crypto.randomUUID();
       if (SESSION_URL) {
-        // Non-blocking: if CF Worker is unreachable (Iran network), still navigate
         fetch(`${SESSION_URL}/session/create-pending`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -84,12 +85,21 @@ export default function SessionsPage() {
         }).catch(() => {});
       }
       saveRecent(id);
-      router.push(`/session/${id}`);
+      setGuideSessionId(id);
     } catch (e: any) {
       setError(e.message || "Failed");
     } finally {
       setCreating(false);
     }
+  };
+
+  const copySessionId = async () => {
+    if (!guideSessionId) return;
+    try {
+      await navigator.clipboard.writeText(guideSessionId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
   };
 
   const handleJoin = (e: React.FormEvent) => {
@@ -272,6 +282,130 @@ export default function SessionsPage() {
         <p className="mt-2 text-center text-[10px]" style={{ color: "color-mix(in srgb, var(--foreground) 25%, transparent)" }}>
           NEXT_PUBLIC_SESSION_URL not configured
         </p>
+      )}
+
+      {/* Guide Modal */}
+      {guideSessionId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+          onClick={() => { setGuideSessionId(null); setCopied(false); }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border p-6 sm:p-8"
+            style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-5">
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-xl"
+                style={{ background: "var(--surface-3)" }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--foreground)" }}>
+                  <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                  <path d="M12 16v-4" />
+                  <path d="M12 8h.01" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-semibold">Session Created</h2>
+                <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                  Follow these steps to start controlling the bot
+                </p>
+              </div>
+            </div>
+
+            {/* Steps */}
+            <div className="space-y-4">
+              {/* Step 1: Copy ID */}
+              <div className="flex gap-3">
+                <div
+                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                  style={{ background: "var(--foreground)", color: "var(--background)" }}
+                >
+                  1
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium mb-1.5">Copy your Session ID</p>
+                  <div className="flex gap-2">
+                    <div
+                      className="flex-1 min-w-0 rounded-lg border px-3 py-2 font-mono text-xs truncate"
+                      style={{ background: "var(--surface-3)", borderColor: "var(--border-subtle)" }}
+                    >
+                      {guideSessionId}
+                    </div>
+                    <button
+                      onClick={copySessionId}
+                      className="shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition"
+                      style={{
+                        background: copied ? "rgba(34,197,94,0.15)" : "var(--surface-3)",
+                        color: copied ? "#22c55e" : "var(--foreground)",
+                      }}
+                    >
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2: Link in Discord */}
+              <div className="flex gap-3">
+                <div
+                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                  style={{ background: "var(--foreground)", color: "var(--background)" }}
+                >
+                  2
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium mb-1.5">Link it in Discord</p>
+                  <div
+                    className="rounded-lg border px-3 py-2 text-xs"
+                    style={{ background: "var(--surface-3)", borderColor: "var(--border-subtle)" }}
+                  >
+                    <span style={{ color: "var(--muted-foreground)" }}>Type in your server: </span>
+                    <span className="font-mono font-medium">/session link </span>
+                    <span className="font-mono" style={{ color: "#5865F2" }}>[paste id]</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3: You're in */}
+              <div className="flex gap-3">
+                <div
+                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                  style={{ background: "var(--foreground)", color: "var(--background)" }}
+                >
+                  3
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium mb-1.5">Start controlling</p>
+                  <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                    Once linked, you can search songs, manage the queue, and control playback from this page.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => { router.push(`/session/${guideSessionId}`); setGuideSessionId(null); }}
+                className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition"
+                style={{ background: "var(--foreground)", color: "var(--background)" }}
+              >
+                Open Session
+              </button>
+              <button
+                onClick={() => { setGuideSessionId(null); setCopied(false); }}
+                className="rounded-xl px-4 py-2.5 text-sm font-medium transition"
+                style={{ background: "var(--surface-3)", color: "var(--muted-foreground)" }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
