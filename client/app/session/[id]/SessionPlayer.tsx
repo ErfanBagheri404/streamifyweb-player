@@ -42,7 +42,6 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
   const lastTrackIdRef = useRef<string | null>(null);
   const isDisabled = !roleCanControl(role);
 
-  // Optimistic loop states — toggle instantly, let server state overwrite
   const [optimisticLoop, setOptimisticLoop] = useState<boolean | null>(null);
   const [optimisticLoopQueue, setOptimisticLoopQueue] = useState<boolean | null>(null);
 
@@ -50,7 +49,6 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
   const loopActive = optimisticLoop ?? loop;
   const loopQueueActive = optimisticLoopQueue ?? loopQueue;
 
-  // Reset optimistic overrides when server state changes
   useEffect(() => { setOptimisticLoop(null); }, [loop]);
   useEffect(() => { setOptimisticLoopQueue(null); }, [loopQueue]);
 
@@ -58,14 +56,12 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
   const requestedByName = state.userNames?.[requestedById] || requestedById || "Unknown";
   const requestedByAvatarUrl = discordAvatarUrl(requestedById, state.userAvatars?.[requestedById]);
 
-  // Reset progress when track changes
   const trackId = current?.id ?? null;
   if (trackId !== lastTrackIdRef.current) {
     lastTrackIdRef.current = trackId;
     setLocalProgress(0);
   }
 
-  // Animate progress bar while playing
   useEffect(() => {
     if (!current || !isPlaying) return;
     let lastTime = performance.now();
@@ -83,7 +79,12 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
     <div className="rounded-xl border p-5 sm:p-6" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
       {!current ? (
         <div className="flex flex-col items-center justify-center py-12 gap-3">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{color:"var(--muted-foreground)"}}><circle cx="12" cy="12" r="10"/><path d="M9 10V16M15 10V16M8 10h8M9 8h6"/></svg>
+          <div className="relative">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{color:"var(--muted-foreground)"}}>
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9 10V16M15 10V16M8 10h8M9 8h6"/>
+            </svg>
+          </div>
           {state.queue.length > 0 ? (
             <>
               <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
@@ -92,7 +93,7 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
               <button
                 onClick={() => sendCommand("play")}
                 disabled={isDisabled}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40"
                 style={{ background: "var(--theme-accent)", color: "var(--theme-accent-contrast)" }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
@@ -135,7 +136,7 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
 
               {filter && (
                 <span
-                  className="mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium"
+                  className="mt-2 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium"
                   style={{ background: "var(--surface-3)", color: "var(--theme-accent)" }}
                 >
                   {filter}
@@ -147,7 +148,7 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
           {/* Progress bar */}
           <div
             ref={progressRef}
-            className="group mt-5 h-1.5 w-full rounded-full overflow-hidden"
+            className="group mt-5 h-1.5 w-full rounded-full overflow-hidden cursor-pointer"
             style={{ background: "var(--surface-3)" }}
             title={`${formatDuration(localProgress)} / ${formatDuration(current.duration)}`}
           >
@@ -160,28 +161,55 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
             />
           </div>
           <div className="mt-1 flex justify-between text-xs" style={{ color: "var(--muted-foreground)" }}>
-            <span>{formatDuration(localProgress)}</span>
-            <span>{formatDuration(current.duration)}</span>
+            <span className="tabular-nums">{formatDuration(localProgress)}</span>
+            <span className="tabular-nums">{formatDuration(current.duration)}</span>
           </div>
 
-          {/* Controls */}
-          <div className="mt-4 flex items-center justify-center gap-3">
+          {/* All controls in one row */}
+          <div className="mt-4 flex items-center justify-center gap-1 sm:gap-2">
+            {/* Loop — compact pill */}
+            <button
+              disabled={isDisabled}
+              onClick={() => { setOptimisticLoop(!loopActive); sendCommand("loop"); }}
+              className="flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-40"
+              style={{
+                background: loopActive ? "rgba(var(--theme-accent-rgb, 128,128,128), 0.15)" : "transparent",
+                color: loopActive ? "var(--theme-accent)" : "var(--muted-foreground)",
+                border: loopActive ? "1px solid rgba(var(--theme-accent-rgb, 128,128,128), 0.3)" : "1px solid transparent",
+              }}
+              title={loopActive ? "Disable loop" : "Enable loop"}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+              <span className="hidden sm:inline">Loop</span>
+            </button>
+
+            {/* Prev */}
+            <button
+              disabled={isDisabled}
+              onClick={() => sendCommand("prev")}
+              className="flex h-9 w-9 items-center justify-center rounded-full transition-all hover:scale-110 active:scale-90 disabled:opacity-40"
+              style={{ color: "var(--foreground)" }}
+              title="Previous"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z"/></svg>
+            </button>
+
             {/* Skip */}
             <button
               disabled={isDisabled}
               onClick={() => sendCommand("skip")}
-              className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 disabled:opacity-40"
+              className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-110 active:scale-90 disabled:opacity-40"
               style={{ color: "var(--foreground)" }}
               title="Skip"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
             </button>
 
-            {/* Play / Pause */}
+            {/* Play / Pause — center, largest */}
             <button
               disabled={isDisabled}
               onClick={() => sendCommand(isPlaying ? "pause" : "resume")}
-              className="flex h-12 w-12 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:hover:scale-100"
+              className="flex h-12 w-12 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-90 disabled:opacity-40 disabled:hover:scale-100 shadow-lg"
               style={{ background: "var(--theme-accent)", color: "var(--theme-accent-contrast)" }}
               title={isPlaying ? "Pause" : "Resume"}
             >
@@ -196,43 +224,29 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
             <button
               disabled={isDisabled}
               onClick={() => sendCommand("stop")}
-              className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 disabled:opacity-40"
+              className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-110 active:scale-90 disabled:opacity-40"
               style={{ color: "var(--foreground)" }}
               title="Stop"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
             </button>
-          </div>
 
-          {/* Toggles row */}
-          <div className="mt-3 flex items-center justify-center gap-2">
-            {/* Loop — optimistic */}
+            {/* Next */}
             <button
               disabled={isDisabled}
-              onClick={() => {
-                setOptimisticLoop(!loopActive);
-                sendCommand("loop");
-              }}
-              className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-all disabled:opacity-40"
-              style={{
-                background: loopActive ? "rgba(var(--theme-accent-rgb, 128,128,128), 0.15)" : "transparent",
-                color: loopActive ? "var(--theme-accent)" : "var(--muted-foreground)",
-                border: loopActive ? "1px solid rgba(var(--theme-accent-rgb, 128,128,128), 0.3)" : "1px solid transparent",
-              }}
-              title={loopActive ? "Disable loop" : "Enable loop"}
+              onClick={() => sendCommand("skip")}
+              className="flex h-9 w-9 items-center justify-center rounded-full transition-all hover:scale-110 active:scale-90 disabled:opacity-40"
+              style={{ color: "var(--foreground)" }}
+              title="Next"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-              Loop
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2V6zM6 18l8.5-6L6 6v12z"/></svg>
             </button>
 
-            {/* Queue Loop — optimistic */}
+            {/* Queue Loop — compact pill */}
             <button
               disabled={isDisabled}
-              onClick={() => {
-                setOptimisticLoopQueue(!loopQueueActive);
-                sendCommand("loopqueue");
-              }}
-              className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-all disabled:opacity-40"
+              onClick={() => { setOptimisticLoopQueue(!loopQueueActive); sendCommand("loopqueue"); }}
+              className="flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-40"
               style={{
                 background: loopQueueActive ? "rgba(var(--theme-accent-rgb, 128,128,128), 0.15)" : "transparent",
                 color: loopQueueActive ? "var(--theme-accent)" : "var(--muted-foreground)",
@@ -240,8 +254,8 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
               }}
               title={loopQueueActive ? "Disable queue loop" : "Enable queue loop"}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-              Q-Loop
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+              <span className="hidden sm:inline">Q</span>
             </button>
 
             {/* Filter */}
@@ -249,7 +263,7 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
               <button
                 disabled={isDisabled}
                 onClick={() => setShowFilter(!showFilter)}
-                className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-all disabled:opacity-40"
+                className="flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-40"
                 style={{
                   background: filter ? "rgba(var(--theme-accent-rgb, 128,128,128), 0.15)" : "transparent",
                   color: filter ? "var(--theme-accent)" : "var(--muted-foreground)",
@@ -257,8 +271,8 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
                 }}
                 title="Audio filter"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
-                {filter || "Filter"}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+                <span className="hidden sm:inline">{filter || "Filter"}</span>
               </button>
               {showFilter && (
                 <div
@@ -274,10 +288,7 @@ export function SessionPlayer({ state, role, sendCommand }: SessionPlayerProps) 
                       }}
                       className="flex w-full items-center rounded-lg px-3 py-1.5 text-left text-xs font-medium transition-colors hover:bg-white/5"
                       style={{
-                        color:
-                          filter === f.value || (!filter && !f.value)
-                            ? "var(--theme-accent)"
-                            : "var(--foreground)",
+                        color: filter === f.value || (!filter && !f.value) ? "var(--theme-accent)" : "var(--foreground)",
                       }}
                     >
                       {f.label}
