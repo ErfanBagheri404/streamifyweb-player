@@ -185,9 +185,20 @@ export default function SessionPage({
 
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
-        {/* Left: Player + Search */}
+        {/* Left: Player + Lyrics + Search */}
         <div className="lg:col-span-2 flex flex-col gap-4 min-h-0">
           <SessionPlayer state={state} role={myRole} sendCommand={sendCommand} />
+          {state.lyrics && (
+            <div className="rounded-xl border p-4 overflow-y-auto max-h-[300px] min-h-0" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold" style={{ color: "var(--muted-foreground)" }}>Lyrics</h3>
+                <button onClick={() => sendCommand("lyrics")} className="text-[11px] font-medium px-2 py-1 rounded-md transition-all hover:scale-105" style={{ color: "var(--theme-accent)" }}>
+                  Refresh
+                </button>
+              </div>
+              <pre className="text-xs whitespace-pre-wrap leading-relaxed font-sans" style={{ color: "var(--muted-foreground)" }}>{state.lyrics}</pre>
+            </div>
+          )}
           <SessionSearch sendCommand={sendCommand} claimed={state.claimed} />
         </div>
 
