@@ -266,6 +266,18 @@ export default function SessionsPage() {
         </p>
       )}
 
+      {/* Add Bot button */}
+      <a
+        href="https://discord.com/oauth2/authorize?client_id=1532405105104654452&permissions=2184252416&integration_type=0&scope=bot+applications.commands"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-4 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+        style={{ background: "var(--theme-accent)", color: "var(--theme-accent-contrast)" }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.27 5.43A28.09 28.09 0 0 0 12 3C7.5 3 3.5 5 1.5 8.5l10.5 6 10.5-6A28.09 28.09 0 0 0 19.27 5.43zM5.43 19.27A28.09 28.09 0 0 0 12 21c4.5 0 8.5-2 10.5-5.5l-10.5-6-10.5 6A28.09 28.09 0 0 0 5.43 19.27z"/></svg>
+        Add Bot to Your Server
+      </a>
+
       {/* Guide Modal */}
       {guideSessionId && (
         <div
