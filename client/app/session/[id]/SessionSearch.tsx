@@ -42,7 +42,7 @@ export function SessionSearch({ sendCommand, claimed }: SessionSearchProps) {
         limit: "20",
       });
       const url = buildBackendRouteUrl("/search", { searchParams: params });
-      const res = await fetch(`${url}?${params.toString()}`);
+      const res = await fetch(url);
       if (!res.ok) {
         setResults([]);
         return;

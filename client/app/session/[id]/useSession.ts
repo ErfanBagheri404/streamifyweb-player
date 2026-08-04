@@ -35,6 +35,7 @@ export function useSession(sessionId: string): UseSessionReturn {
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptRef = useRef(0);
   const mountedRef = useRef(true);
+  const sessionEndedRef = useRef(false);
   const discordUserRef = useRef<DiscordUser | null>(discordUser);
 
   // Keep ref in sync with state
@@ -78,6 +79,7 @@ export function useSession(sessionId: string): UseSessionReturn {
     ws.onopen = () => {
       if (!mountedRef.current) return;
       attemptRef.current = 0;
+      sessionEndedRef.current = false;
       setConnectionStatus("connected");
       setError(null);
       // Register self with the DO so user appears in connected users list
@@ -105,6 +107,7 @@ export function useSession(sessionId: string): UseSessionReturn {
           case "command-ack":
             break;
           case "session-ended":
+            sessionEndedRef.current = true;
             setState(null);
             setError("This session has ended.");
             setConnectionStatus("disconnected");
@@ -128,6 +131,9 @@ export function useSession(sessionId: string): UseSessionReturn {
       if (!mountedRef.current) return;
       wsRef.current = null;
       setConnectionStatus("disconnected");
+
+      // Don't reconnect after session ended
+      if (sessionEndedRef.current) return;
 
       // Auto-reconnect with exponential backoff
       const attempt = attemptRef.current;
