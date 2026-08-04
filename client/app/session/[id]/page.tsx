@@ -39,8 +39,12 @@ export default function SessionPage({
   }, [setDiscordUser]);
 
   const [copied, setCopied] = useState(false);
+  const [hasConnected, setHasConnected] = useState(false);
+  if (connectionStatus === "connected" && !hasConnected) {
+    setHasConnected(true);
+  }
 
-  /* ---- Loading ---- */
+  /* ---- Initial loading (never connected yet) ---- */
   if (connectionStatus === "connecting") {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -151,6 +155,17 @@ export default function SessionPage({
           </span>
         </div>
       </header>
+
+      {/* Reconnecting banner */}
+      {hasConnected && connectionStatus !== "connected" && !error && (
+        <div
+          className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs shrink-0"
+          style={{ background: "rgba(245,158,11,0.08)", borderColor: "rgba(245,158,11,0.2)", color: "#fbbf24" }}
+        >
+          <div className="h-1.5 w-1.5 rounded-full bg-[#fbbf24] animate-pulse" />
+          Reconnecting...
+        </div>
+      )}
 
       {/* Error banner — from WS error or from state error (bot pushes errors here) */}
       {(error || state.error) && state && (

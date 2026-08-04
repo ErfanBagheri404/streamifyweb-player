@@ -292,7 +292,7 @@ export default function SessionsPage() {
           onClick={() => { setGuideSessionId(null); setCopied(false); }}
         >
           <div
-            className="w-full max-w-md rounded-2xl border p-6 sm:p-8"
+            className="w-full max-w-md rounded-2xl border p-6 sm:p-8 session-guide-enter"
             style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}
             onClick={(e) => e.stopPropagation()}
           >
