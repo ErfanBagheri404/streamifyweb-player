@@ -132,7 +132,7 @@ export default function SessionsPage() {
           style={{ background: "var(--theme-accent)", color: "var(--theme-accent-contrast)" }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+            <path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a1 1 0 011 1v3a1 1 0 01-1 1h-1.27a7 7 0 01-5.46 5.24l-.54 1.76a1 1 0 01-.95.7H9.22a1 1 0 01-.95-.7L7.73 18A7 7 0 012.27 14H1a1 1 0 01-1-1v-3a1 1 0 011-1h1a7 7 0 017-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 012-2zM8.5 13a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm7 0a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>
           </svg>
           {t("session.addBot")}
         </a>
