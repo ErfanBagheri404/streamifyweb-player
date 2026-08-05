@@ -474,5 +474,19 @@
   "session.openSession": "باز کردن نشست",
   "session.close": "بستن",
   "session.connectPrompt": "برای پیوستن به نشست، دیسکورد را وصل کنید",
-  "session.recent": "نشست‌های اخیر"
+  "session.recent": "نشست‌های اخیر",
+  "session.createSession": "ایجاد نشست",
+  "session.createAndLink": "ایجاد و لینک نشست",
+  "session.createStep1Title": "ایجاد نشست",
+  "session.createStep1Desc": "دکمه زیر را کلیک کنید تا یک شناسه نشست جدید ایجاد شود.",
+  "session.createStep2Title": "لینک در دیسکورد",
+  "session.createStep2Desc": "شناسه نشست را کپی کنید و در سرور دیسکورد خود /session link [id] را اجرا کنید.",
+  "session.createStep3Title": "شروع کنترل",
+  "session.createStep3Desc": "پس از لینک کردن، آهنگ جستجو کنید، صف را مدیریت کنید و پخش را از وب پلیر کنترل کنید.",
+  "session.joinStep1Title": "دریافت شناسه نشست",
+  "session.joinStep1Desc": "از ایجادکننده نشست شناسه نشست را بخواهید، یا آن را در سرور دیسکورد خود پیدا کنید.",
+  "session.joinStep2Title": "شناسه را در زیر وارد کنید",
+  "session.joinStep2Desc": "شناسه نشست را در فیلد ورودی قرار دهید و پیوستن را بزنید.",
+  "session.joinStep3Title": "کنترل مشترک",
+  "session.joinStep3Desc": "هر کسی در نشست می‌تواند به صورت زنده جستجو کند، صف بچیند و پخش را کنترل کنید."
 }

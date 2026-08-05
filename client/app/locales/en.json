@@ -476,5 +476,19 @@
   "session.recent": "Recent Sessions",
   "session.noRecent": "No recent sessions",
   "session.open": "Open",
-  "session.connectPrompt": "Connect your Discord account to create or join sessions"
+  "session.connectPrompt": "Connect your Discord account to create or join sessions",
+  "session.createSession": "Create a Session",
+  "session.createAndLink": "Create & Link Session",
+  "session.createStep1Title": "Create session",
+  "session.createStep1Desc": "Click the button below to generate a new session ID.",
+  "session.createStep2Title": "Link in Discord",
+  "session.createStep2Desc": "Copy the session ID and run /session link [id] in your Discord server.",
+  "session.createStep3Title": "Start controlling",
+  "session.createStep3Desc": "Once linked, search songs, manage the queue, and control playback from the web player.",
+  "session.joinStep1Title": "Get a session ID",
+  "session.joinStep1Desc": "Ask the session creator for the session ID, or find it in your Discord server.",
+  "session.joinStep2Title": "Enter the ID below",
+  "session.joinStep2Desc": "Paste the session ID into the input field and press Join.",
+  "session.joinStep3Title": "Control together",
+  "session.joinStep3Desc": "Everyone in the session can search, queue, and control playback in real-time."
 }
