@@ -131,8 +131,11 @@ export default function SessionsPage() {
           className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
           style={{ background: "var(--theme-accent)", color: "var(--theme-accent-contrast)" }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a1 1 0 011 1v3a1 1 0 01-1 1h-1.27a7 7 0 01-5.46 5.24l-.54 1.76a1 1 0 01-.95.7H9.22a1 1 0 01-.95-.7L7.73 18A7 7 0 012.27 14H1a1 1 0 01-1-1v-3a1 1 0 011-1h1a7 7 0 017-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 012-2zM8.5 13a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm7 0a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="10" rx="2"/>
+            <path d="M12 3a3 3 0 00-3 3v2h6V6a3 3 0 00-3-3z"/>
+            <circle cx="9" cy="16" r="1.5" fill="currentColor" stroke="none"/>
+            <circle cx="15" cy="16" r="1.5" fill="currentColor" stroke="none"/>
           </svg>
           {t("session.addBot")}
         </a>
