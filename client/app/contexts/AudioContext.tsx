@@ -770,6 +770,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const currentSongRef = useRef<Song | null>(null);
   const recentSongsRef = useRef<Song[]>([]);
   const autoRetryPreferenceRef = useRef<AutoRetryPreference>("unknown");
+  const audioErrorReResolveRef = useRef<Record<string, boolean>>({});
   const playbackRunIdRef = useRef("pre-fix");
   const repeatModeRef = useRef<RepeatMode>("off");
   const isSongLoadingRef = useRef(false);
@@ -1353,6 +1354,32 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           attemptedAudioUrl || song.audioUrl,
         )
       ) {
+        return;
+      }
+
+      // Attempt re-resolution before falling to error.
+      if (
+        song.id &&
+        !audioErrorReResolveRef.current[song.id] &&
+        resolveAndPlaySongRef.current
+      ) {
+        audioErrorReResolveRef.current[song.id] = true;
+        const reResolveQueue = playbackQueueRef.current;
+        const reResolveOptions =
+          reResolveQueue.length > 0 && queueIndexRef.current >= 0
+            ? { queue: reResolveQueue, currentIndex: queueIndexRef.current }
+            : undefined;
+        void resolveAndPlaySongRef
+          .current(
+            {
+              ...song,
+              audioUrl: undefined,
+              audioUrls: undefined,
+              audioType: undefined,
+            },
+            reResolveOptions,
+          )
+          .catch(() => {});
         return;
       }
 
@@ -3129,6 +3156,35 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       ) {
         return;
       }
+
+      // Attempt re-resolution before falling to auto-retry or error.
+      // For non-YouTube sources tryNextAudioCandidate returns false,
+      // so we re-resolve to let the server try different providers.
+      if (
+        activeSong?.id &&
+        !audioErrorReResolveRef.current[activeSong.id] &&
+        resolveAndPlaySongRef.current
+      ) {
+        audioErrorReResolveRef.current[activeSong.id] = true;
+        const reResolveQueue = playbackQueueRef.current;
+        const reResolveOptions =
+          reResolveQueue.length > 0 && queueIndexRef.current >= 0
+            ? { queue: reResolveQueue, currentIndex: queueIndexRef.current }
+            : undefined;
+        void resolveAndPlaySongRef
+          .current(
+            {
+              ...activeSong,
+              audioUrl: undefined,
+              audioUrls: undefined,
+              audioType: undefined,
+            },
+            reResolveOptions,
+          )
+          .catch(() => {});
+        return;
+      }
+
       // #region debug-point H1:audio-element-error
       reportDebugEvent(
         playbackRunIdRef.current,
@@ -3640,6 +3696,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setCurrentSong(normalizedSong);
     if (!autoRetryInFlightRef.current) {
       autoRetryAttemptCountRef.current[normalizedSong.id] = 0;
+      audioErrorReResolveRef.current[normalizedSong.id] = false;
       clearAutoRetryState();
       setTransientAutoRetryStatus(null);
       setShowAutoRetryPrompt(false);
@@ -3697,6 +3754,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     setCurrentSong(normalizedSong);
     if (!autoRetryInFlightRef.current) {
       autoRetryAttemptCountRef.current[normalizedSong.id] = 0;
+      audioErrorReResolveRef.current[normalizedSong.id] = false;
       clearAutoRetryState();
       setTransientAutoRetryStatus(null);
       setShowAutoRetryPrompt(false);
@@ -3786,7 +3844,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       // Attempt auto-retry BEFORE setting playbackError so the MiniPlayer
       // never flashes an error while a retry is in flight.
       if (scheduleAutoRetry(song, "resolve-and-play-failure")) {
-        clearSongLoading();
         throw error;
       }
 
@@ -3862,12 +3919,26 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       return;
     }
     if (audioRef.current) {
+      if (playbackError && resolveAndPlaySongRef.current) {
+        // Re-resolve the song to get a fresh URL from a different provider
+        const queue = playbackQueueRef.current;
+        const options =
+          queue.length > 0 && queueIndexRef.current >= 0
+            ? { queue, currentIndex: queueIndexRef.current }
+            : undefined;
+        void resolveAndPlaySongRef.current(currentSong, options).catch(
+          (error) => {
+            console.error('Error re-resolving song on resume:', error);
+          },
+        );
+        return;
+      }
       setPlaybackError(null);
       setIsSongLoading(true);
       setIsPlaying(true);
       resumeManagedAudioGraph();
       audioRef.current.play().catch((error) => {
-        console.error("Error resuming audio:", error);
+        console.error('Error resuming audio:', error);
         setIsSongLoading(false);
         setIsPlaying(false);
       });
