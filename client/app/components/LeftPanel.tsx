@@ -314,14 +314,11 @@ export default function LeftPanel() {
                     />
                   </button>
                 ))
-              : [...Array(3)].map((_, index) => (
-                  <div
-                    key={index}
-                    className="theme-surface-soft flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md"
-                  >
+              : (
+                  <div className="theme-surface-soft flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md">
                     <LogoIcon className="h-4 w-4 text-[color:var(--foreground)] opacity-40" />
                   </div>
-                ))}
+                )}
           </div>
           <button
             type="button"
