@@ -5,14 +5,18 @@ import { getSupabaseBrowserClient } from "../lib/supabase/browser";
 import {
   clearLastSyncedCloudLibrarySnapshot,
   saveLastSyncedCloudLibrarySnapshot,
+  syncCloudLibrarySnapshot,
 } from "../lib/cloud-library-sync";
 import {
   createCloudLibrarySnapshot,
+  LOCAL_LIBRARY_UPDATED_EVENT,
   mergeCloudLibrarySnapshots,
   readLikedSongs,
   readStoredPlaylists,
   restoreCloudLibrary,
 } from "../lib/local-library";
+
+const AUTO_SYNC_DEBOUNCE_MS = 1200;
 
 const CLOUD_LIBRARY_RESTORE_PREFIX = "streamify-cloud-library-restored";
 
@@ -178,6 +182,57 @@ export default function CloudLibraryBridge() {
       subscription.unsubscribe();
     };
   }, [supabase]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let isMounted = true;
+    let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+    let isAutoSyncing = false;
+    let pendingAutoSync = false;
+    let isApplyingRemote = false;
+
+    const runAutoSync = async () => {
+      if (isAutoSyncing) {
+        pendingAutoSync = true;
+        return;
+      }
+
+      isAutoSyncing = true;
+      isApplyingRemote = true;
+      try {
+        await syncCloudLibrarySnapshot();
+      } catch {
+        // Auto-sync failures are non-fatal; the next trigger retries.
+      } finally {
+        isApplyingRemote = false;
+        isAutoSyncing = false;
+        if (pendingAutoSync && isMounted) {
+          pendingAutoSync = false;
+          void runAutoSync();
+        }
+      }
+    };
+
+    const scheduleAutoSync = () => {
+      if (!isMounted || isApplyingRemote) return;
+      if (autoSyncTimer) clearTimeout(autoSyncTimer);
+      autoSyncTimer = setTimeout(() => {
+        void runAutoSync();
+      }, AUTO_SYNC_DEBOUNCE_MS);
+    };
+
+    window.addEventListener(LOCAL_LIBRARY_UPDATED_EVENT, scheduleAutoSync);
+
+    return () => {
+      isMounted = false;
+      if (autoSyncTimer) clearTimeout(autoSyncTimer);
+      window.removeEventListener(
+        LOCAL_LIBRARY_UPDATED_EVENT,
+        scheduleAutoSync
+      );
+    };
+  }, []);
 
   return null;
 }
