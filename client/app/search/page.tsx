@@ -9,6 +9,7 @@ import React, {
   Suspense,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useToast } from "../contexts/ToastContext";
 import { useAudio } from "../contexts/AudioContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
@@ -356,6 +357,7 @@ function SearchPageInner() {
   const { hasHydratedSettings, settings } = useSettings();
   const { t, getSourceLabel } = useAppLanguage();
   const { resolveAndPlaySong } = useAudio();
+  const { showToast } = useToast();
 
   // State
   const [searchQuery, setSearchQuery] = useState(() => {
@@ -1108,9 +1110,10 @@ function SearchPageInner() {
 
       setSuggestions([]);
       persistCurrentSearchContext();
+      showToast({ message: t("common.loading"), tone: "loading", durationMs: 0, source: "navigation" });
       router.push(href);
     },
-    [persistCurrentSearchContext, router]
+    [persistCurrentSearchContext, router, showToast, t]
   );
 
   // ─── Source selection ────────────────────────────────────

@@ -21,64 +21,50 @@ export const SEARCH_CATEGORY_PLAYLISTS: SearchCategoryPlaylist[] = [
   {
     category: "Electronic",
     imageFileName: "Electronic.jpg",
-    playlistTitle: "Monstercat Best of EDM",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PLRBp0Fe2GpgnIh0AiYKh7o7HnYAej-5ph",
-    playlistUrl: "https://soundcloud.com/monstercat/sets/instinct",
+    playlistTitle: "Lounge Music Mix - Electronic",
+    playlistUrl: "https://soundcloud.com/profimedia/sets/lounge-music-mix-electronic",
     source: "soundcloud",
   },
   {
     category: "Heavy Metal",
     imageFileName: "Heavy Metal.jpg",
-    playlistTitle: "Heavy Metal Classics",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PL6Lt9p1lIRZ311J9ZHuzkR5A3xesae2pk",
-    playlistUrl: "https://soundcloud.com/earsplit/sets/heavy-metal",
+    playlistTitle: "Heavy Metal Workout",
+    playlistUrl: "https://soundcloud.com/sc-playlists-eunon/sets/heavy-metal-workout",
     source: "soundcloud",
   },
   {
     category: "Hip-Hop",
     imageFileName: "Hip-Hop.jpg",
-    playlistTitle: "Hip Hop Hits",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PLTDluH66q5mpRzM4z0dY3A1JpN96CB2TF",
-    playlistUrl: "https://soundcloud.com/rapcaviar/sets/hip-hop-hits",
+    playlistTitle: "Top 100 Hip Hop Hits Of All Time",
+    playlistUrl: "https://soundcloud.com/butterworthzak/sets/top-100-hip-hop-hits-of-all",
     source: "soundcloud",
   },
   {
     category: "Jazz",
     imageFileName: "Jazz.jpg",
-    playlistTitle: "Jazz Classics",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PL8F6B0753B2CCA128",
-    playlistUrl: "https://soundcloud.com/jazzhopcafe/sets/jazzhop-essentials",
+    playlistTitle: "Coffee Jazz",
+    playlistUrl: "https://soundcloud.com/relaxcafemusic/sets/coffee-jazz",
     source: "soundcloud",
   },
   {
     category: "K-Pop",
     imageFileName: "K-Pop.jpg",
-    playlistTitle: "K-Pop Daebak",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
-    playlistUrl: "https://soundcloud.com/kpop-playlists/sets/kpop-hits",
+    playlistTitle: "Best KPop 2026 Playlist",
+    playlistUrl: "https://soundcloud.com/storemusic-974485696/sets/best-kpop-2024-playlist-top",
     source: "soundcloud",
   },
   {
     category: "LO-FI",
     imageFileName: "LO-FI.jpg",
-    playlistTitle: "Lofi Hip Hop Radio Playlist",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PLofht4PTcKYnaH8w5olJCI-wUVxuoMHqM",
-    playlistUrl: "https://soundcloud.com/chilledcow/sets/lofi-hip-hop",
+    playlistTitle: "Chill Beats - Lofi Jazz Hop",
+    playlistUrl: "https://soundcloud.com/chill-bill-16/sets/chill-beats-lofi-jazz-hop-lo",
     source: "soundcloud",
   },
   {
     category: "Metal",
     imageFileName: "Metal.jpg",
-    playlistTitle: "Metal Essentials",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PLhQCJTkrHOwSXGx8rD6M2JfA8J8kY4i6x",
-    playlistUrl: "https://soundcloud.com/earsplit/sets/metal",
+    playlistTitle: "Rock & Metal Classics",
+    playlistUrl: "https://soundcloud.com/user-423177428-224399444/sets/rock-metal-classics-ii",
     source: "soundcloud",
   },
   {
@@ -93,37 +79,29 @@ export const SEARCH_CATEGORY_PLAYLISTS: SearchCategoryPlaylist[] = [
   {
     category: "Persian",
     imageFileName: "Persian.jpg",
-    playlistTitle: "Persian Music Hits",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj",
-    playlistUrl: "https://soundcloud.com/persian-music/sets/persian-hits",
+    playlistTitle: "Persian Pop - Top Iranian Hits",
+    playlistUrl: "https://soundcloud.com/max-alaga/sets/persian-pop-2026-top-iranian",
     source: "soundcloud",
   },
   {
     category: "Phonk",
     imageFileName: "Phonk.jpg",
-    playlistTitle: "Drift Phonk",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PLRBp0Fe2GpglB6wzXn0EfacrDo8jMnSmQ",
-    playlistUrl: "https://soundcloud.com/phonk/sets/drift-phonk",
+    playlistTitle: "Aggressive Phonk",
+    playlistUrl: "https://soundcloud.com/b3nde/sets/agressive-phonk",
     source: "soundcloud",
   },
   {
     category: "Pop",
     imageFileName: "Pop.jpg",
-    playlistTitle: "Today's Top Pop",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PL4fGSI1pDJn5rWitrRWFKdm-ulaFiIyoK",
-    playlistUrl: "https://soundcloud.com/topsify/sets/pop-hits",
+    playlistTitle: "Today's Top Music Hits 2025",
+    playlistUrl: "https://soundcloud.com/21charts/sets/todays-top-music-hits-2025",
     source: "soundcloud",
   },
   {
     category: "R&B",
     imageFileName: "R&B.jpg",
-    playlistTitle: "R&B Essentials",
-    // youtubePlaylistUrl:
-    //   "https://www.youtube.com/playlist?list=PL4fGSI1pDJn6dM4n4Xv3AWEzhFawwzrtc",
-    playlistUrl: "https://soundcloud.com/rnb/sets/rnb-essentials",
+    playlistTitle: "R&B Classics 90s & 2000s",
+    playlistUrl: "https://soundcloud.com/sam-derbyshire-498361112/sets/r-b-classics-90s-2000s-best",
     source: "soundcloud",
   },
   {
