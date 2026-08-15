@@ -490,5 +490,12 @@
   "session.joinStep2Title": "Enter the ID below",
   "session.joinStep2Desc": "Paste the session ID into the input field and press Join.",
   "session.joinStep3Title": "Control together",
-  "session.joinStep3Desc": "Everyone in the session can search, queue, and control playback in real-time."
+  "session.joinStep3Desc": "Everyone in the session can search, queue, and control playback in real-time.",
+  "mobileGate.badge": "Latest Release",
+  "mobileGate.title": "Streamify for Android",
+  "mobileGate.description": "The latest version is available now. Download it from the GitHub releases page.",
+  "mobileGate.repoLabel": "Android app repository",
+  "mobileGate.downloadButton": "View Latest Release",
+  "mobileGate.enterButton": "Continue in Browser",
+  "mobileGate.footer": "You can still use the web app in your browser if you prefer."
 }

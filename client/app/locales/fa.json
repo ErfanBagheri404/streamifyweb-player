@@ -488,5 +488,12 @@
   "session.joinStep2Title": "شناسه را در زیر وارد کنید",
   "session.joinStep2Desc": "شناسه نشست را در فیلد ورودی قرار دهید و پیوستن را بزنید.",
   "session.joinStep3Title": "کنترل مشترک",
-  "session.joinStep3Desc": "هر کسی در نشست می‌تواند به صورت زنده جستجو کند، صف بچیند و پخش را کنترل کنید."
+  "session.joinStep3Desc": "هر کسی در نشست می‌تواند به صورت زنده جستجو کند، صف بچیند و پخش را کنترل کند.",
+  "mobileGate.badge": "آخرین نسخه",
+  "mobileGate.title": "Streamify برای اندروید",
+  "mobileGate.description": "آخرین نسخه اکنون در دسترس است. آن را از صفحه رلیزهای گیت‌هاب دانلود کنید.",
+  "mobileGate.repoLabel": "مخزن اپلیکیشن اندروید",
+  "mobileGate.downloadButton": "مشاهده آخرین نسخه",
+  "mobileGate.enterButton": "ادامه در مرورگر",
+  "mobileGate.footer": "اگر ترجیح می‌دهید، می‌توانید همچنان از وب اپ در مرورگر خود استفاده کنید."
 }

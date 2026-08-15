@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { LogoIcon } from "./icons/NavIcons";
+import { useAppLanguage } from "../hooks/useAppLanguage";
 
 const MOBILE_GATE_STORAGE_KEY = "streamify-mobile-web-entered";
-const ANDROID_APP_URL = "https://github.com/ErfanBagheri404/Streamify/";
+const ANDROID_APP_URL = "https://github.com/ErfanBagheri404/Streamify/releases/latest";
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 1023.98px)";
 
 export default function MobileAppGate() {
+  const { t } = useAppLanguage();
   const [isSmallViewport, setIsSmallViewport] = useState(false);
   const [hasEnteredWebApp, setHasEnteredWebApp] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
@@ -61,14 +63,13 @@ export default function MobileAppGate() {
 
               <div className="mt-5 space-y-3">
                 <span className="inline-flex rounded-full border border-white/10 bg-white/6 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/68">
-                  Mobile App Coming Soon
+                  {t("mobileGate.badge")}
                 </span>
                 <h1 className="text-3xl font-black tracking-tight text-white">
-                  Streamify for Android is in development
+                  {t("mobileGate.title")}
                 </h1>
                 <p className="text-sm leading-6 text-white/68">
-                  The mobile app is on the way. You can follow progress, check
-                  updates, and access the Android project here.
+                  {t("mobileGate.description")}
                 </p>
               </div>
 
@@ -93,10 +94,10 @@ export default function MobileAppGate() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white">
-                      Android app repository
+                      {t("mobileGate.repoLabel")}
                     </p>
                     <p className="mt-1 break-all text-xs leading-5 text-white/52">
-                      {ANDROID_APP_URL}
+                      https://github.com/ErfanBagheri404/Streamify
                     </p>
                   </div>
                 </div>
@@ -109,7 +110,7 @@ export default function MobileAppGate() {
                   rel="noreferrer"
                   className="theme-button-accent inline-flex min-h-12 items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold shadow-[0_14px_28px_rgba(0,0,0,0.24)] transition hover:scale-[1.01]"
                 >
-                  Open Android App Page
+                  {t("mobileGate.downloadButton")}
                 </a>
                 <button
                   type="button"
@@ -124,13 +125,12 @@ export default function MobileAppGate() {
                   }}
                   className="theme-button-soft inline-flex min-h-12 items-center justify-center rounded-2xl border px-4 py-3 text-sm font-semibold transition hover:bg-white/[0.08]"
                 >
-                  Enter Web App
+                  {t("mobileGate.enterButton")}
                 </button>
               </div>
 
               <p className="mt-4 text-center text-xs leading-5 text-white/46">
-                The web app works best on larger screens, but you can still
-                continue in browser if you want.
+                {t("mobileGate.footer")}
               </p>
             </div>
           </div>
