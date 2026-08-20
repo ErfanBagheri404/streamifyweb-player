@@ -1043,6 +1043,15 @@ async function fetchSoundCloudDetails(
         "SoundCloud encrypted stream did not include a licenseAuthToken",
       );
     }
+
+    const rawLicenseUrl = buildSoundCloudWidevineLicenseUrl(
+      soundcloud.licenseBase,
+      licenseAuthToken,
+    );
+    const proxiedLicenseUrl = `/api/license-proxy?url=${encodeURIComponent(
+      rawLicenseUrl,
+    )}`;
+
     return {
       id: track.id,
       title: track.title,
@@ -1052,10 +1061,7 @@ async function fetchSoundCloudDetails(
       url: widgetTrackUrl,
       audioType: "soundcloud-drm",
       audioUrl: streamUrl,
-      drmLicenseUrl: buildSoundCloudWidevineLicenseUrl(
-        soundcloud.licenseBase,
-        licenseAuthToken,
-      ),
+      drmLicenseUrl: proxiedLicenseUrl,
       drmScheme: "com.widevine.alpha",
       drmProvider: "soundcloud",
       source: "soundcloud",
@@ -1075,7 +1081,7 @@ async function fetchSoundCloudDetails(
     url: widgetTrackUrl,
     source: "soundcloud",
     audioUrl: buildDirectProxyAudioUrl(streamUrl),
-    playbackStrategy: "widget",
+    playbackStrategy: "audio",
   };
 }
 

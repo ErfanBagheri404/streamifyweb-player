@@ -376,7 +376,7 @@ function inferAudioType(audioUrl?: string, audioType?: AudioType): AudioType {
 }
 
 function shouldUseSoundCloudWidget(song?: Song | null): boolean {
-  return song?.source === "soundcloud" && song?.playbackStrategy === "widget";
+  return false;
 }
 
 function getSoundCloudWidgetTrackUrl(song: Song): string | null {
@@ -2393,8 +2393,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       // The cache-buster forces Shaka to fetch a freshly-rewritten manifest
       // on every play, so the #EXT-X-KEY URI always points at the current
       // license-proxy implementation and not a stale cached rewrite.
+      // The manifest URL returned by the API may already be routed through
+      // our audio-proxy (single proxy). Only wrap it again if it isn't
+      // already a proxy URL to avoid double-proxying.
+      const isAlreadyProxied = /\/audio-proxy\?url=/i.test(nextAudioUrl);
       const soundCloudManifestUrl = resolveAudioUrl(
-        buildAudioProxyUrl(nextAudioUrl) + `&_ts=${Date.now()}`,
+        (isAlreadyProxied ? nextAudioUrl : buildAudioProxyUrl(nextAudioUrl)) + `&_ts=${Date.now()}`,
       );
 
       // The Widevine license server rejects CORS preflights from the
@@ -2604,8 +2608,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             servers: drmServers,
             advanced: {
               "com.widevine.alpha": {
-                videoRobustness: "SW_SECURE_CRYPTO",
-                audioRobustness: "SW_SECURE_CRYPTO",
+                videoRobustness: ["SW_SECURE_CRYPTO"],
+                audioRobustness: ["SW_SECURE_CRYPTO"],
               },
             },
             retryParameters: {
@@ -2869,7 +2873,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         pauseManagedAudio(true);
       }
     } else if (nextAudioType === "hls") {
-      if (hlsSourceRef.current !== nextAudioUrl) {
+      if (hlsSourceRef.current !== nextAudioUrl || audio.ended) {
         pauseManagedAudio(true);
         audio.currentTime = 0;
         audio.removeAttribute("src");
@@ -2920,6 +2924,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         audio.load();
         setCurrentTime(0);
         setDuration(currentSong.duration || 0);
+      } else if (audio.ended) {
+        // Same URL but element reached the end (repeat-one). The data is
+        // still buffered — just seek to 0 so play() can restart cleanly.
+        // Calling load() here would clear the buffer and race the subsequent
+        // play(), leaving the element stuck in a paused/loading state.
+        audio.currentTime = 0;
       } else {
         // #region debug-point D:audio-src-reused
         reportDebugEvent(
@@ -3013,12 +3023,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   }, [currentSong?.duration, currentSong?.id, syncPlaybackStateFromElement]);
 
   useEffect(() => {
-    ensureSoundCloudRuntimeConfig();
-    void loadSoundCloudWidgetApi().catch(() => {});
-    void fetchBackendRoute("/video", {
-      searchParams: { source: "soundcloud", prewarm: 1 },
-    }).catch(() => {});
-  }, []);
+      ensureSoundCloudRuntimeConfig();
+      void fetchBackendRoute("/video", {
+        searchParams: { source: "soundcloud", prewarm: 1 },
+      }).catch(() => {});
+    }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -3616,10 +3625,49 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
           },
         );
         // #endregion
-        playSongRef.current(activeSong, {
-          queue: repeatQueue,
-          currentIndex: repeatIndex,
-        });
+
+        // Non-DRM tracks: same method the SoundCloud widget used for
+        // repeat-one — seek to 0 and play the already-loaded element. No
+        // re-fetch, no state reset, no reload; the media is still buffered
+        // from the first play, so this restarts cleanly.
+        //
+        // DRM (Shaka) tracks: the previously-fetched manifest's segment URLs
+        // are time-limited and expire, so a bare seek-to-0 replay would stall
+        // once the buffer is exhausted. Route those through the full
+        // playSong re-init to fetch a fresh manifest with a new _ts.
+        const isDrm = activeSong.audioType === "soundcloud-drm";
+        if (isDrm) {
+          playSongRef.current(activeSong, {
+            queue: repeatQueue,
+            currentIndex: repeatIndex,
+          });
+          return;
+        }
+        try {
+          setIsPlaying(true);
+          setIsSongLoading(false);
+          setPlaybackError(null);
+          audio.currentTime = 0;
+          // On a freshly-ended element, calling play() immediately can race
+          // the MSE/browser seekable-state recovery and stall after a moment.
+          // Defer play() until the element reports it can play again.
+          const onCanPlay = () => {
+            audio.removeEventListener("canplay", onCanPlay);
+            audio.removeEventListener("loadeddata", onCanPlay);
+            attemptAudioPlay(audio, activeSong);
+          };
+          audio.addEventListener("canplay", onCanPlay);
+          audio.addEventListener("loadeddata", onCanPlay);
+          // Fallback in case neither event fires (e.g. fully buffered file).
+          window.setTimeout(() => onCanPlay(), 300);
+        } catch (error) {
+          console.error("Error repeating audio on repeat-one:", error);
+          // Fall back to the full song-start flow if a direct restart fails.
+          playSongRef.current(activeSong, {
+            queue: repeatQueue,
+            currentIndex: repeatIndex,
+          });
+        }
         return;
       }
 
