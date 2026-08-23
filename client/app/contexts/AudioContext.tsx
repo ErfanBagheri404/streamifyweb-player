@@ -3427,9 +3427,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         ? payload.author
         : song.artist;
     const resolvedCoverUrl =
-      typeof payload.thumbnailUrl === "string" && payload.thumbnailUrl.trim()
+      song.coverUrl ||
+      (typeof payload.thumbnailUrl === "string" && payload.thumbnailUrl.trim()
         ? payload.thumbnailUrl
-        : song.coverUrl;
+        : song.coverUrl);
     const resolvedUrl =
       typeof payload.url === "string" && payload.url.trim()
         ? payload.url
