@@ -62,7 +62,9 @@ function emitLocalLibraryUpdated() {
 }
 
 function getSongStorageKey(song: Pick<Song, "id" | "source">): string {
-  return `${song.source?.trim().toLowerCase() || "unknown"}:${song.id}`;
+  const id = song.id == null ? "" : String(song.id).trim();
+  const source = song.source?.trim().toLowerCase() || "unknown";
+  return `${source}:${id}`;
 }
 
 function normalizeSongSnapshot(song: Song): Song {
@@ -75,7 +77,7 @@ function normalizeSongSnapshot(song: Song): Song {
       : song.coverUrl;
 
   return {
-    id: song.id,
+    id: song.id == null ? "" : String(song.id),
     title: song.title,
     artist: song.artist,
     artistId: song.artistId,
@@ -563,8 +565,8 @@ export function mergeCloudLibrarySnapshots(
 function createCloudTrackRef(
   song: Pick<Song, "id" | "source">
 ): CloudTrackRef | null {
-  const id = song.id?.trim();
-  const source = song.source?.trim();
+  const id = song.id == null ? "" : String(song.id).trim();
+  const source = song.source == null ? "" : String(song.source).trim();
   if (!id || !source) return null;
   return { id, source };
 }
