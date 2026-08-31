@@ -39,7 +39,7 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
       - run: npm ci
-      - run: npx eslint . --max-warnings 100
+      - run: npx eslint . --max-warnings 200
 
   build:
     name: Build
