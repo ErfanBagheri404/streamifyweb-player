@@ -390,7 +390,7 @@ const MiniPlayer: React.FC = () => {
       <div className="theme-surface theme-shadow-strong rounded-[24px] border px-3 py-2 lg:rounded-full lg:p-2">
         <div className="mx-auto flex max-w-full flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-2.5 lg:flex-1 lg:gap-3">
-            <div className="theme-surface-soft relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border transition lg:h-12 lg:w-12">
+            <div className="theme-surface-soft relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full transition lg:h-12 lg:w-12">
               {currentSong.coverUrl ? (
                 <Image
                   src={currentSong.coverUrl}
