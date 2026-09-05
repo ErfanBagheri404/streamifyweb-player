@@ -5,6 +5,7 @@ import AppBootstrap from "./AppBootstrap";
 import CloudLibraryBridge from "./CloudLibraryBridge";
 import LeftPanel from "./LeftPanel";
 import MobileAppGate from "./MobileAppGate";
+import PageTitle from "./PageTitle";
 import ShellLayout from "./ShellLayout";
 import { isStandaloneAuthPath } from "../lib/auth-routes";
 import { AudioProvider } from "../contexts/AudioContext";
@@ -32,6 +33,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <ToastProvider>
         <AppBootstrap />
         <AudioProvider>
+          <PageTitle />
           <SidePanelProvider>
             <CloudLibraryBridge />
             <MobileAppGate />
