@@ -1088,6 +1088,54 @@ export default function SettingsPage() {
                 {t("settings.resetDefaults")}
               </button>
             </section>
+
+            <section className="theme-surface-strong rounded-xl border p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:color-mix(in_srgb,var(--foreground)_42%,transparent)]">
+                {t("settings.community")}
+              </p>
+              <div className="mt-4 flex flex-wrap items-start justify-center gap-4">
+                <a
+                  href="https://t.me/StreamifyPlayer"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex w-24 flex-col items-center gap-2"
+                >
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full border bg-[color:color-mix(in_srgb,var(--theme-accent)_14%,transparent)] text-[color:var(--theme-accent)] transition group-hover:brightness-[1.15]">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="h-5 w-5"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
+                    </svg>
+                  </span>
+                  <span className="theme-muted text-xs font-semibold">
+                    {t("settings.communityTelegram")}
+                  </span>
+                </a>
+                <a
+                  href="https://github.com/ErfanBagheri404/streamifyweb-player"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex w-24 flex-col items-center gap-2"
+                >
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full border bg-[color:color-mix(in_srgb,var(--theme-accent)_14%,transparent)] text-[color:var(--theme-accent)] transition group-hover:brightness-[1.15]">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="h-5 w-5"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5 0-.24-.01-.88-.01-1.72-2.78.62-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.26-4.56-1.11-4.56-4.95 0-1.09.39-1.99 1.03-2.69-.1-.26-.45-1.28.1-2.65 0 0 .84-.27 2.75 1.02a9.36 9.36 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.65.64.7 1.03 1.6 1.03 2.69 0 3.85-2.34 4.68-4.57 4.94.36.31.68.92.68 1.85 0 1.34-.01 2.42-.01 2.75 0 .28.16.59.67.49A10.02 10.02 0 0022 12c0-5.52-4.48-10-10-10z" />
+                    </svg>
+                  </span>
+                  <span className="theme-muted text-xs font-semibold">
+                    {t("settings.communityGithub")}
+                  </span>
+                </a>
+              </div>
+            </section>
           </aside>
         </div>
       </div>
