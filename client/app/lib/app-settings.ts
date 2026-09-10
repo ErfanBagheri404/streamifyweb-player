@@ -58,6 +58,7 @@ export interface AppSettings {
   rememberLastSearch: boolean;
   preferredSearchSource: PreferredSearchSource;
   seekStepSeconds: number;
+  showCommunityBanner: boolean;
 }
 
 export const APP_SETTINGS_STORAGE_KEY = "streamifyAppSettings";
@@ -92,6 +93,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   rememberLastSearch: true,
   preferredSearchSource: "mixed",
   seekStepSeconds: 10,
+  showCommunityBanner: true,
 };
 
 function isAppLanguage(value: unknown): value is AppLanguage {
@@ -209,5 +211,9 @@ export function sanitizeAppSettings(value: unknown): AppSettings {
     seekStepSeconds: isSeekStepSeconds(record.seekStepSeconds)
       ? record.seekStepSeconds
       : DEFAULT_APP_SETTINGS.seekStepSeconds,
+    showCommunityBanner:
+      typeof record.showCommunityBanner === "boolean"
+        ? record.showCommunityBanner
+        : DEFAULT_APP_SETTINGS.showCommunityBanner,
   };
 }

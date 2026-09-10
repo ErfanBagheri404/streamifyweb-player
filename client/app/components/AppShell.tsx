@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import AppBootstrap from "./AppBootstrap";
 import CloudLibraryBridge from "./CloudLibraryBridge";
+import CommunityBanner from "./CommunityBanner";
 import LeftPanel from "./LeftPanel";
 import MobileAppGate from "./MobileAppGate";
 import PageTitle from "./PageTitle";
@@ -37,6 +38,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <SidePanelProvider>
             <CloudLibraryBridge />
             <MobileAppGate />
+            <CommunityBanner />
             <LeftPanel />
             <ShellLayout>{children}</ShellLayout>
           </SidePanelProvider>

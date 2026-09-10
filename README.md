@@ -28,6 +28,12 @@
   <img src="https://img.shields.io/badge/License-Source--Available-B91C1C?style=flat-square" alt="Source-available license" />
 </p>
 
+<p align="center">
+  <a href="https://t.me/StreamifyPlayer" target="_blank">
+    <img src="https://img.shields.io/badge/Join-Telegram%20Community-2AABEE?style=for-the-badge&logo=telegram&logoColor=white" alt="Streamify Telegram community" />
+  </a>
+</p>
+
 ## English
 
 ### Overview
@@ -143,6 +149,16 @@ feat: add mixed search source
 fix: keep player loading during provider fallback
 docs: refresh README presentation and usage notes
 ```
+
+### Community
+
+Join the official Streamify community on Telegram for release announcements, support, and feedback:
+
+<p>
+  <a href="https://t.me/StreamifyPlayer" target="_blank">t.me/StreamifyPlayer</a>
+</p>
+
+The same link is available inside the app from the dismissible community banner and in Settings.
 
 ### License And Usage
 
@@ -262,6 +278,16 @@ feat: add mixed search source
 fix: keep player loading during provider fallback
 docs: refresh README presentation and usage notes
 ```
+
+### جامعه کاربری
+
+برای اطلاع از رلیزها، دریافت پشتیبانی و بازخورد دادن، به جامعه رسمی استریمیفای در تلگرام بپیوندید:
+
+<p>
+  <a href="https://t.me/StreamifyPlayer" target="_blank">t.me/StreamifyPlayer</a>
+</p>
+
+همین لینک داخل برنامه هم از طریق بنر قابل بستن جامعه کاربری و در تنظیمات در دسترس است.
 
 ### مجوز و شرایط استفاده
 

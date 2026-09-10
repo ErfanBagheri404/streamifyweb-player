@@ -1069,3 +1069,24 @@ html[data-theme-mode="light"] .theme-media-hero [class*="text-white/78"] {
 .animate-slide-down-fade {
   animation: slideDownFade 0.25s ease-out forwards;
 }
+
+/* Community banner — thin top strip advertising the Telegram community.
+   Its live height is exported as --community-banner-height by
+   CommunityBanner.tsx so the shell always clears the fixed strip.
+   The extra 0.5rem / 0.75rem preserves the body's original p-2 / sm:p-3
+   top gap underneath the banner. html[data-community-banner] is set by a
+   pre-paint inline script in layout.tsx so dismissed banners never flash. */
+html[data-community-banner="on"] body {
+  padding-top: calc(var(--community-banner-height, 2.25rem) + 0.5rem);
+}
+
+@media (min-width: 640px) {
+  html[data-community-banner="on"] body {
+    padding-top: calc(var(--community-banner-height, 2.25rem) + 0.75rem);
+  }
+}
+
+html[data-community-banner="off"] .community-banner {
+  display: none;
+}
+

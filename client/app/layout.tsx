@@ -144,6 +144,14 @@ export default function RootLayout({
       <body
         className={`${dmSans.className} theme-shell flex min-h-full flex-col p-2 sm:p-3 lg:h-full lg:flex-row lg:p-3`}
       >
+        {/* Pre-paint community banner state: hides the banner before first
+            paint for visitors who dismissed it, avoiding an SSR flash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var s=localStorage.getItem('streamifyAppSettings'),o=s?JSON.parse(s):null;document.documentElement.dataset.communityBanner=o&&o.showCommunityBanner===false?'off':'on'}catch(e){}",
+          }}
+        />
         <AppShell>{children}</AppShell>
       </body>
     </html>
