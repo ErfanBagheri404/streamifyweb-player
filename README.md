@@ -150,16 +150,6 @@ fix: keep player loading during provider fallback
 docs: refresh README presentation and usage notes
 ```
 
-### Community
-
-Join the official Streamify community on Telegram for release announcements, support, and feedback:
-
-<p>
-  <a href="https://t.me/StreamifyPlayer" target="_blank">t.me/StreamifyPlayer</a>
-</p>
-
-The same link is available inside the app from the dismissible community banner and in Settings.
-
 ### License And Usage
 
 This repository is source-available, not open-source. You may not copy, modify, redistribute, sublicense, sell, host, republish, or publish this application or substantial parts of it without prior written permission from the copyright holder.
