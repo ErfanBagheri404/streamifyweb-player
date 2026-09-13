@@ -336,6 +336,7 @@ export default function FullscreenPlayer() {
   });
   const [manualLyricsArtist, setManualLyricsArtist] = useState("");
   const [manualLyricsTitle, setManualLyricsTitle] = useState("");
+  const [showManualLyricsSearch, setShowManualLyricsSearch] = useState(false);
   const [lyricsManualModeUntil, setLyricsManualModeUntil] = useState(0);
   const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
   const lyricItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -515,11 +516,13 @@ export default function FullscreenPlayer() {
     if (!currentSong) {
       setManualLyricsArtist("");
       setManualLyricsTitle("");
+      setShowManualLyricsSearch(false);
       return;
     }
 
     setManualLyricsArtist(currentSong.artist || "");
     setManualLyricsTitle(currentSong.title || "");
+    setShowManualLyricsSearch(false);
   }, [currentSong]);
 
   const embeddedRelatedSongs = useMemo(
@@ -796,6 +799,7 @@ export default function FullscreenPlayer() {
         error: null,
         isSynced: Boolean(payload.isSynced),
       });
+      setShowManualLyricsSearch(false);
     } catch {
       setLyricsText("");
       setLyricsState({
@@ -805,6 +809,66 @@ export default function FullscreenPlayer() {
       });
     }
   };
+
+  const manualLyricsSearchPanel = (
+    <div className="theme-surface-soft rounded-xl border p-4">
+      <p className="text-sm text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)]">
+        {t("fullscreen.searchLyricsManually")}
+      </p>
+      <div className="mt-3 grid gap-3">
+        <div>
+          <label className="mb-1 block text-xs text-[color:color-mix(in_srgb,var(--foreground)_50%,transparent)]">
+            {t("fullscreen.artistNameLabel")}
+          </label>
+          <input
+            type="text"
+            value={manualLyricsArtist}
+            onChange={(event) =>
+              setManualLyricsArtist(event.target.value)
+            }
+            placeholder={t("fullscreen.artistName")}
+            className="theme-button-soft w-full rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_25%,transparent)]"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-[color:color-mix(in_srgb,var(--foreground)_50%,transparent)]">
+            {t("fullscreen.songTitleLabel")}
+          </label>
+          <input
+            type="text"
+            value={manualLyricsTitle}
+            onChange={(event) =>
+              setManualLyricsTitle(event.target.value)
+            }
+            placeholder={t("fullscreen.songTitle")}
+            className="theme-button-soft w-full rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_25%,transparent)]"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              void runManualLyricsSearch();
+            }}
+            disabled={
+              lyricsState.loading ||
+              (!manualLyricsArtist.trim() && !manualLyricsTitle.trim())
+            }
+            className="theme-button-accent inline-flex items-center justify-center rounded-full border border-transparent px-4 py-2 text-sm font-semibold transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+          >
+            {t("common.tryLyricsSearch")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowManualLyricsSearch(false)}
+            className="theme-button-soft inline-flex items-center justify-center rounded-full border px-4 py-2 text-sm font-semibold text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)] transition"
+          >
+            {t("common.cancel")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   const handleSectionSongPress = (
     song: (typeof sectionSongs)[number],
@@ -1066,6 +1130,24 @@ export default function FullscreenPlayer() {
                         ? t("fullscreen.lyrics")
                         : t("fullscreen.lyricsAutoScrollOff")
                       : t("fullscreen.lyricsDisabled")}
+                    {settings.lyricsEnabled &&
+                    (lyricLines.length > 0 || plainLyricsText) ? (
+                      <>
+                        <span
+                          className="mx-1.5 select-none align-middle"
+                          aria-hidden="true"
+                        >
+                          ·
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowManualLyricsSearch(true)}
+                          className="text-xs align-middle underline decoration-dotted underline-offset-2 transition hover:text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)]"
+                        >
+                          {t("fullscreen.lyricsWrongButton")}
+                        </button>
+                      </>
+                    ) : null}
                   </p>
                 </div>
                 <button
@@ -1135,15 +1217,9 @@ export default function FullscreenPlayer() {
                           </button>
                         );
                       })}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLyricsManualModeUntil(Date.now() + 30_000);
-                        }}
-                        className="mt-4 text-xs text-[color:color-mix(in_srgb,var(--foreground)_40%,transparent)] underline decoration-dotted underline-offset-2 transition hover:text-[color:color-mix(in_srgb,var(--foreground)_65%,transparent)]"
-                      >
-                        {t("fullscreen.lyricsWrongButton")}
-                      </button>
+                      {showManualLyricsSearch ? (
+                        <div className="mt-4">{manualLyricsSearchPanel}</div>
+                      ) : null}
                     </>
                   ) : plainLyricsText ? (
                     <>
@@ -1153,15 +1229,9 @@ export default function FullscreenPlayer() {
                       <pre className="whitespace-pre-wrap break-words font-sans text-base leading-8 text-[color:var(--foreground)] sm:text-lg sm:leading-9 md:text-[22px] md:leading-[1.5]">
                         {plainLyricsText}
                       </pre>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLyricsManualModeUntil(Date.now() + 30_000);
-                        }}
-                        className="mt-4 text-xs text-[color:color-mix(in_srgb,var(--foreground)_40%,transparent)] underline decoration-dotted underline-offset-2 transition hover:text-[color:color-mix(in_srgb,var(--foreground)_65%,transparent)]"
-                      >
-                        {t("fullscreen.lyricsWrongButton")}
-                      </button>
+                      {showManualLyricsSearch ? (
+                        <div className="mt-4">{manualLyricsSearchPanel}</div>
+                      ) : null}
                     </>
                   ) : (
                     <div className="space-y-3 py-2">
@@ -1169,55 +1239,7 @@ export default function FullscreenPlayer() {
                         {lyricsState.error ||
                           t("fullscreen.lyricsNotAvailable")}
                       </p>
-                      <div className="theme-surface-soft rounded-xl border p-4">
-                        <p className="text-sm text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)]">
-                          {t("fullscreen.searchLyricsManually")}
-                        </p>
-                        <div className="mt-3 grid gap-3">
-                          <div>
-                            <label className="mb-1 block text-xs text-[color:color-mix(in_srgb,var(--foreground)_50%,transparent)]">
-                              {t("fullscreen.artistNameLabel")}
-                            </label>
-                            <input
-                              type="text"
-                              value={manualLyricsArtist}
-                              onChange={(event) =>
-                                setManualLyricsArtist(event.target.value)
-                              }
-                              placeholder={t("fullscreen.artistName")}
-                              className="theme-button-soft w-full rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_25%,transparent)]"
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs text-[color:color-mix(in_srgb,var(--foreground)_50%,transparent)]">
-                              {t("fullscreen.songTitleLabel")}
-                            </label>
-                            <input
-                              type="text"
-                              value={manualLyricsTitle}
-                              onChange={(event) =>
-                                setManualLyricsTitle(event.target.value)
-                              }
-                              placeholder={t("fullscreen.songTitle")}
-                              className="theme-button-soft w-full rounded-xl border px-3 py-2 text-sm text-[color:var(--foreground)] outline-none transition placeholder:text-[color:color-mix(in_srgb,var(--foreground)_35%,transparent)] focus:border-[color:color-mix(in_srgb,var(--foreground)_25%,transparent)]"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void runManualLyricsSearch();
-                            }}
-                            disabled={
-                              lyricsState.loading ||
-                              (!manualLyricsArtist.trim() &&
-                                !manualLyricsTitle.trim())
-                            }
-                            className="theme-button-accent inline-flex items-center justify-center rounded-full border border-transparent px-4 py-2 text-sm font-semibold transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
-                          >
-                            {t("common.tryLyricsSearch")}
-                          </button>
-                        </div>
-                      </div>
+                      {manualLyricsSearchPanel}
                     </div>
                   )}
                 </div>
