@@ -336,7 +336,9 @@ export default function FullscreenPlayer() {
   });
   const [manualLyricsArtist, setManualLyricsArtist] = useState("");
   const [manualLyricsTitle, setManualLyricsTitle] = useState("");
-  const [showManualLyricsSearch, setShowManualLyricsSearch] = useState(false);
+  const [dismissedLyricsText, setDismissedLyricsText] = useState<string | null>(
+    null,
+  );
   const [lyricsManualModeUntil, setLyricsManualModeUntil] = useState(0);
   const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
   const lyricItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -516,13 +518,13 @@ export default function FullscreenPlayer() {
     if (!currentSong) {
       setManualLyricsArtist("");
       setManualLyricsTitle("");
-      setShowManualLyricsSearch(false);
+      setDismissedLyricsText(null);
       return;
     }
 
     setManualLyricsArtist(currentSong.artist || "");
     setManualLyricsTitle(currentSong.title || "");
-    setShowManualLyricsSearch(false);
+    setDismissedLyricsText(null);
   }, [currentSong]);
 
   const embeddedRelatedSongs = useMemo(
@@ -799,7 +801,7 @@ export default function FullscreenPlayer() {
         error: null,
         isSynced: Boolean(payload.isSynced),
       });
-      setShowManualLyricsSearch(false);
+      setDismissedLyricsText(null);
     } catch {
       setLyricsText("");
       setLyricsState({
@@ -858,13 +860,18 @@ export default function FullscreenPlayer() {
           >
             {t("common.tryLyricsSearch")}
           </button>
-          <button
-            type="button"
-            onClick={() => setShowManualLyricsSearch(false)}
-            className="theme-button-soft inline-flex items-center justify-center rounded-full border px-4 py-2 text-sm font-semibold text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)] transition"
-          >
-            {t("common.cancel")}
-          </button>
+          {dismissedLyricsText !== null ? (
+            <button
+              type="button"
+              onClick={() => {
+                setLyricsText(dismissedLyricsText);
+                setDismissedLyricsText(null);
+              }}
+              className="theme-button-soft inline-flex items-center justify-center rounded-full border px-4 py-2 text-sm font-semibold text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)] transition"
+            >
+              {t("fullscreen.lyricsRestoreButton")}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1141,7 +1148,10 @@ export default function FullscreenPlayer() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => setShowManualLyricsSearch(true)}
+                          onClick={() => {
+                            setDismissedLyricsText(lyricsText);
+                            setLyricsText("");
+                          }}
                           className="text-xs align-middle underline decoration-dotted underline-offset-2 transition hover:text-[color:color-mix(in_srgb,var(--foreground)_70%,transparent)]"
                         >
                           {t("fullscreen.lyricsWrongButton")}
@@ -1217,9 +1227,6 @@ export default function FullscreenPlayer() {
                           </button>
                         );
                       })}
-                      {showManualLyricsSearch ? (
-                        <div className="mt-4">{manualLyricsSearchPanel}</div>
-                      ) : null}
                     </>
                   ) : plainLyricsText ? (
                     <>
@@ -1229,15 +1236,14 @@ export default function FullscreenPlayer() {
                       <pre className="whitespace-pre-wrap break-words font-sans text-base leading-8 text-[color:var(--foreground)] sm:text-lg sm:leading-9 md:text-[22px] md:leading-[1.5]">
                         {plainLyricsText}
                       </pre>
-                      {showManualLyricsSearch ? (
-                        <div className="mt-4">{manualLyricsSearchPanel}</div>
-                      ) : null}
                     </>
                   ) : (
                     <div className="space-y-3 py-2">
                       <p className="font-medium text-[color:color-mix(in_srgb,var(--foreground)_55%,transparent)]">
-                        {lyricsState.error ||
-                          t("fullscreen.lyricsNotAvailable")}
+                        {dismissedLyricsText !== null
+                          ? t("fullscreen.lyricsDismissedMessage")
+                          : lyricsState.error ||
+                            t("fullscreen.lyricsNotAvailable")}
                       </p>
                       {manualLyricsSearchPanel}
                     </div>

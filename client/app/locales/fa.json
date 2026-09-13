@@ -247,6 +247,8 @@
   "fullscreen.lyricsSearchNotFound": "متن آهنگ پیدا نشد. هنرمند یا عنوان دیگری را امتحان کن.",
   "fullscreen.lyricsSearchError": "نتوانستیم متن آهنگ را برای این جستجو بارگذاری کنیم. املای دیگری را امتحان کن.",
   "fullscreen.lyricsWrongButton": "متن آهنگ اشتباه است؟",
+  "fullscreen.lyricsDismissedMessage": "متن آهنگ پاک شد. در پایین دنبال متن درست بگرد یا آن را بازگردان.",
+  "fullscreen.lyricsRestoreButton": "بازگردانی",
   "fullscreen.songTitle": "عنوان آهنگ",
   "fullscreen.upNext": "بعدی ها",
   "fullscreen.related": "مرتبط",

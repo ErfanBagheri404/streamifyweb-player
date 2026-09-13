@@ -247,6 +247,8 @@
   "fullscreen.lyricsSearchNotFound": "No lyrics found. Try another artist or song title.",
   "fullscreen.lyricsSearchError": "Couldn't load lyrics for that search. Try another spelling.",
   "fullscreen.lyricsWrongButton": "Wrong lyrics?",
+  "fullscreen.lyricsDismissedMessage": "Lyrics cleared. Search for the right ones below, or restore them.",
+  "fullscreen.lyricsRestoreButton": "Restore",
   "fullscreen.songTitle": "Song title",
   "fullscreen.upNext": "Up Next",
   "fullscreen.related": "Related",
