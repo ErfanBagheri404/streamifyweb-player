@@ -12,6 +12,8 @@ type AuthMode = "signin" | "signup" | "forgot-password" | "reset-password";
 
 interface AuthScreenProps {
   mode: AuthMode;
+  // Validated same-origin path from ?next= (see lib/auth-routes getSafeNextPath).
+  next?: string;
 }
 
 type AccountStatusResponse = {
@@ -108,7 +110,7 @@ function PasswordEyeGlyph({ visible }: { visible: boolean }) {
   );
 }
 
-export default function AuthScreen({ mode }: AuthScreenProps) {
+export default function AuthScreen({ mode, next = "/settings" }: AuthScreenProps) {
   const { t, isRtl } = useAppLanguage();
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -132,6 +134,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
   const authUnavailableMessage =
     "Authentication is unavailable until Supabase environment variables are configured.";
   const passwordTogglePositionClass = isRtl ? "left-0 pl-3" : "right-0 pr-3";
+  const nextQuery = next === "/settings" ? "" : `?next=${encodeURIComponent(next)}`;
   const heroTitle = isRtl
     ? "دقيقا از همان جايي که بودي ادامه بده"
     : "Pick Up Exactly Where You Left Off";
@@ -279,7 +282,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
         const { error } = await supabase.auth.resetPasswordForEmail(
           normalizedEmail,
           {
-            redirectTo: `${getBaseUrl()}/reset-password`,
+            redirectTo: `${getBaseUrl()}/reset-password${nextQuery}`,
           }
         );
 
@@ -328,7 +331,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
         if (error) throw error;
 
         setMessage(t("auth.passwordUpdated"));
-        router.replace("/signin");
+        router.replace(`/signin${nextQuery}`);
         router.refresh();
       } catch (error) {
         setErrorMessage(
@@ -384,7 +387,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
           email: normalizedEmail,
           password,
           options: {
-            emailRedirectTo: `${getBaseUrl()}/auth/callback?next=/settings`,
+            emailRedirectTo: `${getBaseUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
           },
         });
 
@@ -392,7 +395,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
 
         if (data.session) {
           setMessage(t("auth.accountReady"));
-          router.replace("/settings");
+          router.replace(next);
           router.refresh();
           return;
         }
@@ -409,7 +412,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
       if (error) throw error;
 
       setMessage(t("auth.signedIn"));
-      router.replace("/settings");
+      router.replace(next);
       router.refresh();
     } catch (error) {
       if (
@@ -457,7 +460,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${getBaseUrl()}/auth/callback?next=/settings`,
+          redirectTo: `${getBaseUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
         },
       });
 
