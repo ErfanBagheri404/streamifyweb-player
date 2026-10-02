@@ -928,7 +928,7 @@ async function searchSpotifyCatalog(
   limit: number,
   filter?: string,
 ): Promise<SearchResponse> {
-  const safeLimit = Math.max(1, Math.min(10, clampCatalogLimit(limit)));
+  const safeLimit = Math.max(1, Math.min(20, clampCatalogLimit(limit)));
   const wanted =
     filter === "artists" || filter === "artist"
       ? "artist"
@@ -938,13 +938,15 @@ async function searchSpotifyCatalog(
           ? "track"
           : "all";
 
+  // Spotify's search op defaults to ~5 rows per bucket; pass limit explicitly.
+  const searchLimit = Math.min(Math.max(safeLimit * 6, 30), 90);
   const payload = await spotifyPartnerQuery(
-    { term: query.trim() },
+    { term: query.trim(), limit: searchLimit },
     SPOTIFY_SEARCH_OP_HASH,
   );
 
   const uris: string[] = [];
-  collectSpotifyUris(toRecord(payload.data).searchV2, uris, 50);
+  collectSpotifyUris(toRecord(payload.data).searchV2, uris, searchLimit);
   if (!uris.length) return { items: [], nextpage: null };
 
   // ponytail: "all" blends artists + albums + songs; the search op returns ~5
@@ -972,7 +974,7 @@ async function searchSpotifyCatalog(
   );
   const entities = toArray(toRecord(lookup.data).lookupEntities).map(toRecord);
 
-  const cards: Record<string, unknown>[] = [];
+  const cardSpecs: { kind: "album" | "artist"; id: string; name: string }[] = [];
   const tracks: ExternalCatalogTrack[] = [];
   for (const entry of entities) {
     const kind = lookupSpotifyEntityKind(entry);
@@ -984,7 +986,7 @@ async function searchSpotifyCatalog(
       }
       const name = lookupSpotifyEntityName(entry);
       if (!name) continue;
-      cards.push(await fetchSpotifyEntityCard(kind, id, name));
+      cardSpecs.push({ kind, id, name });
       continue;
     }
     if (wanted === "artist" || wanted === "album") continue;
@@ -992,7 +994,16 @@ async function searchSpotifyCatalog(
     if (track) tracks.push(track);
   }
 
-  const signal = withTimeout(undefined, 20000);
+  // Only the slots that survive the final slice need a cover fetch, and they
+  // run in parallel -- sequential embed lookups ate the whole match budget.
+  const isEntity = wanted === "artist" || wanted === "album";
+  const cards = await Promise.all(
+    cardSpecs.slice(0, isEntity ? safeLimit : 2).map((spec) =>
+      fetchSpotifyEntityCard(spec.kind, spec.id, spec.name),
+    ),
+  );
+
+  const signal = withTimeout(undefined, 15000);
   const matchedTracks = await Promise.all(
     tracks.map(async (track) => {
       const playback = await findJioSaavnPlayback(track, signal);

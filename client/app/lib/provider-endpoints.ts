@@ -415,7 +415,12 @@ export async function getProviderEndpoints(options?: {
   revalidate?: boolean;
 }): Promise<ProviderEndpoints> {
   if (!providerEndpointsPromise || options?.revalidate) {
+    // The config host is unreachable from some regions and hangs instead of
+    // failing fast; without a timeout every provider lookup waits on it.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
     providerEndpointsPromise = fetch(PROVIDER_ENDPOINTS_URL, {
+      signal: controller.signal,
       // Provider endpoints are slow-moving config. Cache them in Next's Data
       // Cache so a fresh serverless instance (cold start) reuses the last
       // fetch instead of paying for a live upstream round-trip. An explicit
@@ -432,10 +437,12 @@ export async function getProviderEndpoints(options?: {
         }
 
         const payload = normalizeProviderEndpoints(await response.json());
+        clearTimeout(timer);
         cachedProviderEndpoints = payload;
         return payload;
       })
       .catch((error) => {
+        clearTimeout(timer);
         providerEndpointsPromise = null;
         throw error;
       });

@@ -46,7 +46,7 @@ function normalizeSelectableSource(
 ): SourceType {
   if (!value) return "mixed";
   if (!SEARCH_SOURCE_IDS.has(value as SourceType)) return "mixed";
-  return value === "spotify" ? "mixed" : (value as SourceType);
+  return value as SourceType;
 }
 
 function readStoredSearchHistory(): string[] {
