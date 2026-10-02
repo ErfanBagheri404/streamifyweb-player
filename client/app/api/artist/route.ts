@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicJsonCacheHeaders } from "../_lib/cache-headers";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import { getInvidiousInstances } from "../../lib/media-providers";
 import {
@@ -352,7 +353,10 @@ export async function GET(request: NextRequest) {
   if (source === "jiosaavn") {
     try {
       const payload = await fetchJioSaavnArtist(id);
-      return NextResponse.json(payload, { status: 200 });
+      return NextResponse.json(payload, {
+        status: 200,
+        headers: publicJsonCacheHeaders(300),
+      });
     } catch {
       return NextResponse.json(
         { error: "Failed to load artist" },
@@ -369,7 +373,7 @@ export async function GET(request: NextRequest) {
         albums: [],
         playlists: [],
       } satisfies ArtistPayload,
-      { status: 200 }
+      { status: 200, headers: publicJsonCacheHeaders(300) }
     );
   }
 
@@ -462,7 +466,7 @@ export async function GET(request: NextRequest) {
         albums,
         playlists,
       } satisfies ArtistPayload,
-      { status: 200 }
+      { status: 200, headers: publicJsonCacheHeaders(300) }
     );
   } catch {
     return NextResponse.json(

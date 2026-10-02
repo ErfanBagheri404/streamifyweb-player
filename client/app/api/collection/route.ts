@@ -1,5 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { publicJsonCacheHeaders } from "../_lib/cache-headers";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import {
@@ -15,7 +14,6 @@ import { normalizeYouTubeThumbnailUrl } from "../../lib/youtube-thumbnails";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 const COLLECTION_FETCH_TIMEOUT_MS = 12000;
-const execFileAsync = promisify(execFile);
 
 type CollectionResponse = {
   collection: {
@@ -236,7 +234,11 @@ async function fetchJson(url: string): Promise<unknown> {
       "$response | ConvertTo-Json -Depth 100 -Compress",
     ].join("; ");
 
-    const { stdout } = await execFileAsync(
+    // Windows-local-only fallback (guarded by process.platform above). Loaded
+    // lazily so node:child_process stays out of the Vercel cold-start path.
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const { stdout } = await promisify(execFile)(
       "powershell",
       ["-NoProfile", "-NonInteractive", "-Command", script],
       {
@@ -673,7 +675,9 @@ export async function GET(request: NextRequest) {
     );
     // #endregion
 
-    return NextResponse.json(response);
+    return NextResponse.json(response, {
+      headers: publicJsonCacheHeaders(60),
+    });
   } catch (error) {
     // #region debug-point C:collection-route-error
     reportDebugEvent(

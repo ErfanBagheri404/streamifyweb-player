@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import {
   getInvidiousInstances,
@@ -25,7 +23,6 @@ const STALE_CACHE_TTL_MS = 60 * 60 * 1000;
 const YOUTUBE_PROVIDER_HINT_TTL_MS = 24 * 60 * 60 * 1000;
 const INVIDIOUS_TIMEOUT_MS = 10000;
 const PIPED_TIMEOUT_MS = 7000;
-const execFileAsync = promisify(execFile);
 const preferredYouTubeProviders = new Map<
   string,
   { label: string; cachedAt: number }
@@ -1085,6 +1082,23 @@ async function fetchSoundCloudDetails(
   };
 }
 
+// The PowerShell fallback only ever runs on a local Windows dev machine
+// (`process.platform === "win32"` guards every call site), never on Vercel.
+// Importing node:child_process at module scope made every cold start pay for
+// it, so it is loaded lazily the first time the fallback actually fires.
+async function runPowerShell(script: string, timeoutMs: number) {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  return promisify(execFile)(
+    "powershell",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    {
+      timeout: timeoutMs + 3000,
+      maxBuffer: 1024 * 1024 * 5,
+    },
+  );
+}
+
 async function fetchJsonViaPowerShell(
   url: string,
   timeoutMs: number,
@@ -1102,14 +1116,7 @@ async function fetchJsonViaPowerShell(
     "$response | ConvertTo-Json -Depth 100 -Compress",
   ].join("; ");
 
-  const { stdout } = await execFileAsync(
-    "powershell",
-    ["-NoProfile", "-NonInteractive", "-Command", script],
-    {
-      timeout: timeoutMs + 3000,
-      maxBuffer: 1024 * 1024 * 5,
-    },
-  );
+  const { stdout } = await runPowerShell(script, timeoutMs);
 
   return parseJsonText(
     stdout,
@@ -1141,14 +1148,7 @@ async function fetchTextViaPowerShell(
     "$response.Content",
   ].join("; ");
 
-  const { stdout } = await execFileAsync(
-    "powershell",
-    ["-NoProfile", "-NonInteractive", "-Command", script],
-    {
-      timeout: timeoutMs + 3000,
-      maxBuffer: 1024 * 1024 * 5,
-    },
-  );
+  const { stdout } = await runPowerShell(script, timeoutMs);
 
   return stdout;
 }
@@ -1778,7 +1778,10 @@ export async function GET(request: NextRequest) {
   if (prewarm) {
     if (source === "soundcloud") {
       await Promise.allSettled([
-        getProviderEndpoints({ revalidate: true }),
+      // Do not force revalidate here: the module-level provider-endpoints
+      // cache already refreshes on its own TTL, and `revalidate: true` turned
+      // every prewarm into an uncached upstream fetch (extra CPU per play).
+        getProviderEndpoints(),
         getSoundCloudClientId(),
       ]);
       return NextResponse.json({ ok: true, source: "soundcloud" });

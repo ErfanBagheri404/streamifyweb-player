@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicJsonCacheHeaders } from "../_lib/cache-headers";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import {
   getInvidiousInstances,
@@ -1580,7 +1581,7 @@ export async function GET(request: NextRequest) {
         // #endregion
         return NextResponse.json(
           { items: proxied.items, nextpage: proxied.nextpage ?? null },
-          { status: 200 },
+          { status: 200, headers: publicJsonCacheHeaders(30) },
         );
       }
       reportDebugEvent(
@@ -1614,7 +1615,10 @@ export async function GET(request: NextRequest) {
   }
 
   if (!q) {
-    return NextResponse.json({ items: [], nextpage: null }, { status: 200 });
+    return NextResponse.json(
+      { items: [], nextpage: null },
+      { status: 200, headers: publicJsonCacheHeaders(30) },
+    );
   }
 
   try {
@@ -1719,7 +1723,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       { items: result.items, nextpage: result.nextpage ?? null },
-      { status: 200 },
+      { status: 200, headers: publicJsonCacheHeaders(30) },
     );
   } catch (error) {
     // #region debug-point D:search-route-failed

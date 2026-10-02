@@ -39,6 +39,11 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|ttf|woff|woff2)$).*)",
+    // Public API routes authenticate via requireStreamifyRequest, not cookies,
+    // so skip the Supabase round-trip there. The two cookie-authenticated API
+    // routes below still need middleware to refresh/persist the session.
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|ttf|woff|woff2)$).*)",
+    "/api/library/sync",
+    "/api/auth/device/approve",
   ],
 };

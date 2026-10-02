@@ -9,6 +9,7 @@ import {
   buildProviderUrlCandidates,
   getProviderEndpoints,
 } from "../../lib/provider-endpoints";
+import { publicJsonCacheHeaders } from "../_lib/cache-headers";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 
 type LrcLibResponse = {
@@ -239,7 +240,10 @@ export async function GET(request: NextRequest) {
     MAX_LYRICS_OVH_CANDIDATES
   );
   if (!candidates.length) {
-    return NextResponse.json(null, { status: 200 });
+    return NextResponse.json(null, {
+      status: 200,
+      headers: publicJsonCacheHeaders(3600),
+    });
   }
 
   try {
@@ -252,7 +256,7 @@ export async function GET(request: NextRequest) {
           ...payload,
           trackId: track.id,
         },
-        { status: 200 }
+        { status: 200, headers: publicJsonCacheHeaders(3600) }
       );
     }
 
@@ -265,7 +269,7 @@ export async function GET(request: NextRequest) {
           ...payload,
           trackId: track.id,
         },
-        { status: 200 }
+        { status: 200, headers: publicJsonCacheHeaders(3600) }
       );
     }
     return NextResponse.json(null, { status: 200 });

@@ -106,8 +106,13 @@ async function fetchThumbnail(url: string): Promise<Response | null> {
   const timer = setTimeout(() => controller.abort(), THUMBNAIL_TIMEOUT_MS);
 
   try {
+    // Thumbnail bytes are immutable per video id + variant, and the response
+    // is already served with a 1-year immutable Cache-Control below, so the
+    // upstream fetch can be cached too. A short revalidate keeps the function
+    // off the hot path (grid re-renders hit the Data Cache instead of Vercel)
+    // while still letting a bad wsrv response expire.
     const response = await fetch(url, {
-      cache: "no-store",
+      next: { revalidate: 3600 },
       signal: controller.signal,
     });
     if (!response.ok) return null;

@@ -416,7 +416,13 @@ export async function getProviderEndpoints(options?: {
 }): Promise<ProviderEndpoints> {
   if (!providerEndpointsPromise || options?.revalidate) {
     providerEndpointsPromise = fetch(PROVIDER_ENDPOINTS_URL, {
-      cache: options?.revalidate ? "no-store" : "default",
+      // Provider endpoints are slow-moving config. Cache them in Next's Data
+      // Cache so a fresh serverless instance (cold start) reuses the last
+      // fetch instead of paying for a live upstream round-trip. An explicit
+      // revalidate still bypasses the cache.
+      ...(options?.revalidate
+        ? { cache: "no-store" as const }
+        : { next: { revalidate: 3600 } }),
     })
       .then(async (response) => {
         if (!response.ok) {
