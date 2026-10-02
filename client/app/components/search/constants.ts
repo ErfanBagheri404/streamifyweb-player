@@ -8,7 +8,7 @@ export const sourceFilters: SourceFilter[] = [
   { id: "youtubemusic", label: "YouTube Music", color: "#ff0000" },
   { id: "soundcloud", label: "SoundCloud", color: "#ff7700" },
   { id: "jiosaavn", label: "JioSaavn", color: "#1fa18a" },
-  { id: "spotify", label: "Spotify", color: "#1db954", disabled: true },
+  { id: "spotify", label: "Spotify", color: "#1db954" },
 ];
 
 export const searchFilters: FilterOption[] = [
@@ -66,6 +66,13 @@ export function getFilterOptions(source: SourceType): FilterOption[] {
         { label: "Tracks", value: "tracks" },
         { label: "Playlists", value: "playlists" },
         { label: "Albums", value: "albums" },
+      ];
+    case "spotify":
+      return [
+        { label: "All", value: "all" },
+        { label: "Songs", value: "songs" },
+        { label: "Albums", value: "albums" },
+        { label: "Artists", value: "artists" },
       ];
     case "jiosaavn":
     case "itunes":

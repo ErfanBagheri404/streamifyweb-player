@@ -197,15 +197,21 @@ function getSourceLabel(source?: string): string {
       return "SoundCloud";
     case "jiosaavn":
       return "JioSaavn";
+    case "spotify":
+      return "Spotify";
     default:
       return "Collection";
   }
 }
 
 function isPlayableSource(source?: string): boolean {
-  return ["youtube", "youtubemusic", "soundcloud", "jiosaavn"].includes(
-    (source || "").toLowerCase(),
-  );
+  return [
+    "youtube",
+    "youtubemusic",
+    "soundcloud",
+    "jiosaavn",
+    "spotify",
+  ].includes((source || "").toLowerCase());
 }
 
 function PlayGlyph({ className = "h-4 w-4" }: { className?: string }) {

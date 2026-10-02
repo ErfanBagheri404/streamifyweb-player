@@ -71,6 +71,9 @@ export default async function DesktopAuthPage({
       </form>
       <p className="text-xs opacity-50">
         Approval lasts 2 minutes, works once, and never shares your password.
+        After authorizing, your browser asks which app opens the sign-in link
+        — pick Streamify Desktop (while the app is in development the entry
+        may be labelled Electron).
       </p>
     </main>
   );

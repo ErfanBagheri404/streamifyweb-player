@@ -6,6 +6,7 @@ import {
 } from "../../lib/media-providers";
 import {
   buildProviderUrlCandidates,
+  getCachedProviderEndpointsSnapshot,
   getProviderEndpoints,
 } from "../../lib/provider-endpoints";
 import {
@@ -603,6 +604,122 @@ function extractSearchCandidates(
   return [];
 }
 
+function durationMatchScore(
+  expectedSeconds: number | undefined,
+  actualSeconds: number | undefined,
+): number {
+  if (expectedSeconds == null || actualSeconds == null) return 0;
+  const delta = Math.abs(expectedSeconds - actualSeconds);
+  if (delta <= 3) return 2;
+  if (delta >= 15) return 0;
+  return 1;
+}
+
+async function findYouTubeMatchForTrack(
+  title: string,
+  artist: string,
+  duration?: number,
+): Promise<string | null> {
+  const query = [title, artist].filter(Boolean).join(" ").trim();
+  if (!query) return null;
+
+  const [pipedInstance] = await getPipedInstances();
+  const endpoints = [
+    pipedInstance
+      ? `${pipedInstance}/search?q=${encodeURIComponent(query)}&filter=songs`
+      : "",
+    `https://api.ytify.workers.dev/search?q=${encodeURIComponent(query)}&filter=songs`,
+  ].filter(Boolean);
+
+  for (const endpoint of endpoints) {
+    try {
+      const payload = toRecord(
+        await fetchJson(endpoint, undefined, 9000),
+      );
+      const candidates = toArray(toRecord(payload).items)
+        .map(toRecord)
+        .map((item) => ({
+          title: typeof item.title === "string" ? item.title : "",
+          author:
+            typeof item.uploaderName === "string" ? item.uploaderName : "",
+          duration: toNumber(item.duration),
+          id:
+            (typeof item.videoId === "string" && item.videoId) ||
+            extractYouTubeVideoId(
+              typeof item.url === "string" ? item.url : "",
+            ),
+        }))
+        .filter((candidate) => candidate.id)
+        .map((candidate) => ({
+          id: candidate.id,
+          score:
+            titleMatchScore(title, candidate.title) * 2 +
+            titleMatchScore(artist, candidate.author) +
+            durationMatchScore(duration, candidate.duration),
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      if (candidates[0] && candidates[0].score >= 5) return candidates[0].id;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+async function findSoundCloudMatchForTrack(
+  title: string,
+  artist: string,
+): Promise<string | null> {
+  const query = [title, artist].filter(Boolean).join(" ").trim();
+  if (!query) return null;
+
+  const endpoints = buildProviderUrlCandidates(
+    "https://beatseek.io/api",
+    ["/search", "/api/search"],
+    { query, platform: "soundcloud", type: "tracks", limit: 5 },
+  );
+
+  for (const endpoint of endpoints) {
+    try {
+      const payload = toRecord(await fetchJson(endpoint, undefined, 9000));
+      const candidates = toArray(payload.tracks)
+        .map(toRecord)
+        .map((item) => ({
+          title: typeof item.title === "string" ? item.title : "",
+          author:
+            typeof toRecord(item.user).username === "string"
+              ? toRecord(item.user).username
+              : "",
+          url: typeof item.url === "string" ? item.url : "",
+        }))
+        .filter((candidate) => candidate.url)
+        .map((candidate) => ({
+          url: candidate.url,
+          score:
+            titleMatchScore(title, candidate.title) * 2 +
+            titleMatchScore(artist, candidate.author),
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      if (candidates[0] && candidates[0].score >= 4) return candidates[0].url;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+async function getEndpointsSafe() {
+  try {
+    return await getProviderEndpoints();
+  } catch {
+    return getCachedProviderEndpointsSnapshot();
+  }
+}
+
 async function findJioSaavnMatch(
   title: string,
   artist?: string,
@@ -610,7 +727,7 @@ async function findJioSaavnMatch(
   const query = [title, artist].filter(Boolean).join(" ").trim();
   if (!query) return null;
 
-  const providerEndpoints = await getProviderEndpoints();
+  const providerEndpoints = await getEndpointsSafe();
   const endpoints = [
     ...buildProviderUrlCandidates(
       providerEndpoints.providers.jiosaavn.apiBase,
@@ -1653,6 +1770,7 @@ async function fetchVideoDetails(
     artist?: string;
     urlHint?: string;
     providerHint?: string;
+    duration?: number;
   },
 ): Promise<Record<string, unknown>> {
   if (source === "youtubemusic") {
@@ -1719,8 +1837,46 @@ async function fetchVideoDetails(
   }
 
   if (source === "soundcloud") {
-    return fetchSoundCloudDetails(videoId, options?.urlHint);
-  }
+      return fetchSoundCloudDetails(videoId, options?.urlHint);
+    }
+
+    if (source === "spotify") {
+      const title = options?.title || "";
+      const artist = options?.artist || "";
+      if (!title) throw new Error("Spotify track metadata is missing");
+
+      const providerEndpoints = await getEndpointsSafe();
+      const matchedJioSaavnSong = await findJioSaavnMatch(title, artist);
+      if (matchedJioSaavnSong?.id) {
+        const jioSaavnPayload = await fetchJioSaavnFromEndpoints(
+          buildJioSaavnSongEndpoints(
+            matchedJioSaavnSong.id,
+            providerEndpoints.providers.jiosaavn.apiBase,
+            matchedJioSaavnSong.url,
+          ),
+        );
+        if (jioSaavnPayload?.audioUrl) return jioSaavnPayload;
+      }
+
+      const youtubeId = await findYouTubeMatchForTrack(
+        title,
+        artist,
+        options?.duration,
+      );
+      if (youtubeId) {
+        return fetchVideoDetails(youtubeId, runId, "youtube", {
+          title,
+          artist,
+        });
+      }
+
+      const soundcloudUrl = await findSoundCloudMatchForTrack(title, artist);
+      if (soundcloudUrl) {
+        return fetchSoundCloudDetails(soundcloudUrl, soundcloudUrl);
+      }
+
+      throw new Error("No playable source found for Spotify track");
+    }
 
   if (source === "jiosaavn") {
     const providerEndpoints = await getProviderEndpoints();
@@ -1777,10 +1933,10 @@ export async function GET(request: NextRequest) {
 
   if (prewarm) {
     if (source === "soundcloud") {
-      await Promise.allSettled([
       // Do not force revalidate here: the module-level provider-endpoints
       // cache already refreshes on its own TTL, and `revalidate: true` turned
       // every prewarm into an uncached upstream fetch (extra CPU per play).
+      await Promise.allSettled([
         getProviderEndpoints(),
         getSoundCloudClientId(),
       ]);
@@ -1851,6 +2007,7 @@ export async function GET(request: NextRequest) {
         artist,
         urlHint,
         providerHint,
+        duration: Number(searchParams.get("duration")) || undefined,
       }).finally(() => {
         inflightRequests.delete(requestKey);
       });

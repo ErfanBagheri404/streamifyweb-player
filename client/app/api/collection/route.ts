@@ -1,5 +1,5 @@
-import { publicJsonCacheHeaders } from "../_lib/cache-headers";
 import { NextRequest, NextResponse } from "next/server";
+import { publicJsonCacheHeaders } from "../_lib/cache-headers";
 import { requireStreamifyRequest } from "../_lib/request-guard";
 import {
   getInvidiousInstances,
@@ -576,6 +576,130 @@ async function fetchSoundCloudCollection(
   };
 }
 
+const SPOTIFY_EMBED_BASE = "https://open.spotify.com";
+
+function extractSpotifyCollectionId(value: string): string {
+  const raw = value.trim();
+  if (!raw) return "";
+
+  const typeMatch = raw.match(
+    /open\.spotify\.com\/(?:intl-[a-z-]+\/)?(track|album|playlist)\/([A-Za-z0-9]{10,})/i
+  );
+  if (typeMatch?.[2]) return typeMatch[2];
+
+  const queryMatch = raw.match(/[?&](?:list|album|track)=([A-Za-z0-9]{10,})/i);
+  if (queryMatch?.[1]) return queryMatch[1];
+
+  const uriMatch = raw.match(
+    /spotify:(?:track|album|playlist):([A-Za-z0-9]{10,})/i
+  );
+  if (uriMatch?.[1]) return uriMatch[1];
+
+  return /^[A-Za-z0-9]{10,}$/.test(raw) ? raw : "";
+}
+
+function pickSpotifyCollectionKind(value: string): "playlist" | "album" | "track" {
+  const raw = value.toLowerCase();
+  if (raw.includes("/album/") || raw.includes("spotify:album:")) return "album";
+  if (raw.includes("/track/") || raw.includes("spotify:track:")) return "track";
+  return "playlist";
+}
+
+async function fetchSpotifyCollection(
+  rawInput: string,
+  kindHint: "playlist" | "album"
+): Promise<CollectionResponse> {
+  const id = extractSpotifyCollectionId(rawInput);
+  if (!id) throw new Error("Missing or invalid Spotify id");
+
+  const kind =
+    kindHint === "album" ? "album" : pickSpotifyCollectionKind(rawInput);
+  const response = await fetch(
+    `${SPOTIFY_EMBED_BASE}/embed/${kind}/${encodeURIComponent(id)}`,
+    {
+      headers: {
+        "User-Agent": USER_AGENT,
+        Accept: "text/html",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(COLLECTION_FETCH_TIMEOUT_MS),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Spotify embed HTTP ${response.status}`);
+  }
+
+  const html = await response.text();
+  const nextData = html.match(
+    /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/
+  );
+  if (!nextData?.[1]) {
+    throw new Error("Spotify embed returned no data");
+  }
+
+  const parsed = toRecord(
+    toRecord(
+      toRecord(toRecord(JSON.parse(nextData[1])).props as Record<string, unknown>)
+        .pageProps as Record<string, unknown>
+    ).state as Record<string, unknown>
+  );
+  const entity = toRecord(toRecord(parsed.data).entity);
+  const title = safeString(entity.name) || "Spotify Playlist";
+  const coverArt = safeString(
+    toArray(toRecord(entity.coverArt).sources)
+      .map((source) => safeString(toRecord(source).url))
+      .find(Boolean)
+  );
+  const author =
+    safeString(entity.subtitle) ||
+    toArray(entity.authors)
+      .map((entry) => safeString(toRecord(entry).name))
+      .filter(Boolean)
+      .join(", ");
+
+  const entries = toArray(entity.trackList)
+    .map((track) => {
+      const record = toRecord(track);
+      const trackId = safeString(record.uri).split(":").pop() || "";
+      const trackTitle = safeString(record.title);
+      if (!trackId || !trackTitle) return null;
+
+      const artist = safeString(record.subtitle);
+      const durationMs = safeNumber(record.duration);
+      return {
+        id: trackId,
+        title: trackTitle,
+        subtitle: artist,
+        artist,
+        thumbnailUrl: coverArt,
+        duration:
+          durationMs != null && durationMs > 0
+            ? Math.round(durationMs / 1000)
+            : undefined,
+        url: `${SPOTIFY_EMBED_BASE}/track/${trackId}`,
+        album: title,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
+  if (!entries.length) {
+    throw new Error("Spotify collection returned no playable tracks");
+  }
+
+  return {
+    collection: {
+      id,
+      title,
+      author,
+      thumbnailUrl: coverArt,
+      url: `${SPOTIFY_EMBED_BASE}/${kind}/${id}`,
+      count: entries.length,
+      source: "spotify",
+    },
+    entries,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const blockedResponse = requireStreamifyRequest(request);
   if (blockedResponse) return blockedResponse;
@@ -636,6 +760,8 @@ export async function GET(request: NextRequest) {
         normalizedSoundCloudUrl,
         runId
       );
+    } else if (source === "spotify") {
+      response = await fetchSpotifyCollection(id || url, kind);
     }
 
     if (!response) {

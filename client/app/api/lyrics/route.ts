@@ -240,10 +240,7 @@ export async function GET(request: NextRequest) {
     MAX_LYRICS_OVH_CANDIDATES
   );
   if (!candidates.length) {
-    return NextResponse.json(null, {
-      status: 200,
-      headers: publicJsonCacheHeaders(3600),
-    });
+    return NextResponse.json(null, { status: 200 });
   }
 
   try {
@@ -272,7 +269,10 @@ export async function GET(request: NextRequest) {
         { status: 200, headers: publicJsonCacheHeaders(3600) }
       );
     }
-    return NextResponse.json(null, { status: 200 });
+    return NextResponse.json(null, {
+      status: 200,
+      headers: publicJsonCacheHeaders(3600),
+    });
   } catch {
     return NextResponse.json(
       { error: "Failed to load lyrics." },

@@ -3334,6 +3334,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     params.set("artist", song.artist);
     if (song.source) params.set("source", song.source);
     if (song.url) params.set("url", song.url);
+    if (song.duration) params.set("duration", String(Math.round(song.duration)));
     if (isYouTubeSource(song.source)) {
       const cachedProviderHint = readCachedYouTubeProviderHint(song.source);
       if (cachedProviderHint) {
