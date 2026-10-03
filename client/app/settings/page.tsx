@@ -322,12 +322,12 @@ export default function SettingsPage() {
   const searchSourceLabels: Record<PreferredSearchSource, string> = {
     mixed: getSourceLabel("mixed"),
     youtube: getSourceLabel("youtube"),
-    youtubemusic: getSourceLabel("youtubemusic"),
     soundcloud: getSourceLabel("soundcloud"),
-    jiosaavn: getSourceLabel("jiosaavn"),
+    youtubemusic: getSourceLabel("youtubemusic"),
     itunes: getSourceLabel("itunes"),
     deezer: getSourceLabel("deezer"),
-  };
+    jiosaavn: getSourceLabel("jiosaavn"),
+};
   const themeLabels: Record<AppTheme, string> = {
     default: getThemeLabel("default"),
     ocean: getThemeLabel("ocean"),

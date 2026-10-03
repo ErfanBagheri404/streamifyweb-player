@@ -2,13 +2,13 @@ import { SourceFilter, FilterOption, SourceType } from "./types";
 
 export const sourceFilters: SourceFilter[] = [
   { id: "mixed", label: "Mixed", color: "#1ed760" },
+  { id: "youtube", label: "YouTube", color: "#ff0000" },
+  { id: "spotify", label: "Spotify", color: "#1db954" },
+  { id: "soundcloud", label: "SoundCloud", color: "#ff7700" },
+  { id: "youtubemusic", label: "YouTube Music", color: "#ff0000" },
   { id: "itunes", label: "iTunes", color: "#fa243c" },
   { id: "deezer", label: "Deezer", color: "#a238ff" },
-  { id: "youtube", label: "YouTube", color: "#ff0000" },
-  { id: "youtubemusic", label: "YouTube Music", color: "#ff0000" },
-  { id: "soundcloud", label: "SoundCloud", color: "#ff7700" },
   { id: "jiosaavn", label: "JioSaavn", color: "#1fa18a" },
-  { id: "spotify", label: "Spotify", color: "#1db954" },
 ];
 
 export const searchFilters: FilterOption[] = [
