@@ -7,6 +7,7 @@ import {
 } from "../../lib/media-providers";
 import {
   buildProviderUrlCandidates,
+  getCachedProviderEndpointsSnapshot,
   getProviderEndpoints,
 } from "../../lib/provider-endpoints";
 import { normalizeYouTubeThumbnailUrl } from "../../lib/youtube-thumbnails";
@@ -14,6 +15,16 @@ import { normalizeYouTubeThumbnailUrl } from "../../lib/youtube-thumbnails";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 const COLLECTION_FETCH_TIMEOUT_MS = 12000;
+
+// Config host can be unreachable/forbidden; providers still work off the
+// last-known (or built-in) endpoints snapshot, same as the search route.
+async function resolveProviderEndpoints() {
+  try {
+    return await getProviderEndpoints();
+  } catch {
+    return getCachedProviderEndpointsSnapshot();
+  }
+}
 
 type CollectionResponse = {
   collection: {
@@ -298,7 +309,7 @@ async function fetchJioSaavnCollection(
   id: string,
   kind: "playlist" | "album"
 ): Promise<CollectionResponse> {
-  const providerEndpoints = await getProviderEndpoints();
+  const providerEndpoints = await resolveProviderEndpoints();
   const endpointCandidates =
     kind === "playlist"
       ? buildProviderUrlCandidates(
@@ -349,7 +360,7 @@ async function fetchPipedPlaylist(
   id: string,
   source: "youtube" | "youtubemusic"
 ): Promise<CollectionResponse> {
-  const providerEndpoints = await getProviderEndpoints();
+  const providerEndpoints = await resolveProviderEndpoints();
   const youtube = providerEndpoints.providers.youtube;
   const playlistId = extractYouTubePlaylistId(id) || id;
   const errors: string[] = [];
@@ -423,7 +434,7 @@ async function fetchInvidiousMix(
   id: string,
   source: "youtube" | "youtubemusic"
 ): Promise<CollectionResponse> {
-  const providerEndpoints = await getProviderEndpoints();
+  const providerEndpoints = await resolveProviderEndpoints();
   const youtube = providerEndpoints.providers.youtube;
   const mixId = extractYouTubePlaylistId(id) || id;
   const errors: string[] = [];
@@ -506,7 +517,7 @@ async function fetchSoundCloudCollection(
   url: string,
   runId: string
 ): Promise<CollectionResponse> {
-  const providerEndpoints = await getProviderEndpoints();
+  const providerEndpoints = await resolveProviderEndpoints();
   const beatseekBase = providerEndpoints.providers.beatseek.apiBase;
   const beatseekUrls = buildProviderUrlCandidates(
     beatseekBase,
@@ -700,6 +711,140 @@ async function fetchSpotifyCollection(
   };
 }
 
+async function fetchDeezerCollection(
+  id: string,
+  kind: string,
+): Promise<CollectionResponse> {
+  const numericId = id.includes("/")
+    ? id.match(/(playlist|album)\/(\d+)/)?.[2] || id.match(/(\d+)/)?.[1] || id
+    : id.replace(/^deezer:(playlist|album):/i, "");
+  const isAlbum = kind === "album";
+  const metaUrl = `https://api.deezer.com/${isAlbum ? "album" : "playlist"}/${encodeURIComponent(numericId)}`;
+  const meta = toRecord(await fetchJson(metaUrl));
+  let rawTracks = isAlbum
+    ? toArray(toRecord(meta.tracks).data)
+    : toArray(meta.data);
+  if (!isAlbum && rawTracks.length === 0) {
+    // deezer playlist meta omits tracks; page the tracks endpoint
+    let index = 0;
+    for (let page = 0; page < 5; page += 1) {
+      const chunk = toRecord(
+        await fetchJson(`${metaUrl}/tracks?index=${index}&limit=100`)
+      );
+      const data = toArray(chunk.data);
+      if (!data.length) break;
+      rawTracks = rawTracks.concat(data);
+      index += data.length;
+      if (!chunk.next) break;
+    }
+  }
+  const tracks = rawTracks.map((entry) => toRecord(entry));
+
+  const entries = tracks
+    .filter((track) => safeString(track.preview))
+    .map((track) => {
+      const artist = toRecord(track.artist);
+      const album = toRecord(track.album);
+      const preview = safeString(track.preview);
+      return {
+        id: `deezer:track:${track.id}`,
+        title: safeString(track.title),
+        name: safeString(track.title),
+        type: "song",
+        duration: normalizeDurationSeconds(track.duration) ?? 0,
+        artists: [{ name: safeString(artist.name) }],
+        primaryArtists: safeString(artist.name)
+          ? [{ id: String(artist.id ?? ""), name: safeString(artist.name) }]
+          : [],
+        artist: safeString(artist.name),
+        album: safeString(album.title),
+        image: safeString(album.cover_xl) || safeString(album.cover_big),
+        thumbnailUrl: safeString(album.cover_xl) || safeString(album.cover_big),
+        url: safeString(track.link),
+        previewUrl: preview,
+        downloadUrl: [{ url: preview }],
+        explicit: Boolean(track.explicit_lyrics),
+      };
+    });
+
+  if (!entries.length) {
+    throw new Error("The Deezer collection has no previewable tracks.");
+  }
+
+  return {
+    collection: {
+      id: `deezer:${isAlbum ? "album" : "playlist"}:${numericId}`,
+      title: safeString(meta.title) || "Deezer " + kind,
+      author: safeString(toRecord(meta.user).name) || undefined,
+      description: safeString(meta.description) || null,
+      thumbnailUrl:
+        safeString(meta.cover_xl) || safeString(meta.cover_big) || "",
+      url: safeString(meta.link),
+      count: safeNumber(meta.nb_tracks) ?? entries.length,
+      source: "deezer",
+    },
+    entries,
+  };
+}
+
+async function fetchItunesCollection(
+  id: string,
+  kind: string,
+): Promise<CollectionResponse> {
+  const numericId = id.includes("/")
+    ? id.match(/(\d+)(?:\?|$|\/[^/]*$)/)?.[1] || id.replace(/\D+/g, "") || id
+    : id.replace(/^itunes:(playlist|album):/i, "");
+  const lookupUrl = `https://itunes.apple.com/lookup?id=${encodeURIComponent(numericId)}&entity=song&limit=200`;
+  const payload = toRecord(await fetchJson(lookupUrl));
+  const results = toArray(payload.results).map((entry) => toRecord(entry));
+  const meta = results.find((entry) => safeString(entry.kind) === "album") || {};
+  const songs = results.filter((entry) => safeString(entry.kind) === "song");
+
+  const entries = songs
+    .filter((song) => safeString(song.previewUrl))
+    .map((song) => {
+      const preview = safeString(song.previewUrl);
+      return {
+        id: `itunes:track:${song.trackId}`,
+        title: safeString(song.trackName),
+        name: safeString(song.trackName),
+        type: "song",
+        duration: Math.floor((safeNumber(song.trackTimeMillis) ?? 0) / 1000),
+        artists: [{ name: safeString(song.artistName) }],
+        primaryArtists: safeString(song.artistName)
+          ? [{ id: "", name: safeString(song.artistName) }]
+          : [],
+        artist: safeString(song.artistName),
+        album: safeString(song.collectionName),
+        image: safeString(song.artworkUrl100).replace(/\/\d+x\d+bb/, "/600x600bb"),
+        thumbnailUrl: safeString(song.artworkUrl100).replace(/\/\d+x\d+bb/, "/600x600bb"),
+        url: safeString(song.trackViewUrl),
+        previewUrl: preview,
+        downloadUrl: [{ url: preview }],
+        explicit: false,
+      };
+    });
+
+  if (!entries.length) {
+    throw new Error("The iTunes collection has no previewable tracks.");
+  }
+
+  const coverArt = safeString(meta.artworkUrl100).replace(/\/\d+x\d+bb/, "/600x600bb");
+  return {
+    collection: {
+      id: `itunes:album:${numericId}`,
+      title: safeString(meta.collectionName) || safeString(songs[0]?.collectionName) || "iTunes " + kind,
+      author: safeString(meta.artistName) || undefined,
+      description: null,
+      thumbnailUrl: coverArt,
+      url: safeString(meta.collectionViewUrl),
+      count: safeNumber(meta.trackCount) ?? entries.length,
+      source: "itunes",
+    },
+    entries,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const blockedResponse = requireStreamifyRequest(request);
   if (blockedResponse) return blockedResponse;
@@ -762,6 +907,10 @@ export async function GET(request: NextRequest) {
       );
     } else if (source === "spotify") {
       response = await fetchSpotifyCollection(id || url, kind);
+    } else if (source === "deezer") {
+      response = await fetchDeezerCollection(id || url, kind);
+    } else if (source === "itunes") {
+      response = await fetchItunesCollection(id || url, kind);
     }
 
     if (!response) {

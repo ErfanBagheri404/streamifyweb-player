@@ -15,6 +15,7 @@ import { type Song, useAudio } from "../contexts/AudioContext";
 import { useToast } from "../contexts/ToastContext";
 import { useAppLanguage } from "../hooks/useAppLanguage";
 import PlaylistCreateModal from "../components/PlaylistCreateModal";
+import PlaylistImportModal from "../components/PlaylistImportModal";
 import {
   createStoredPlaylist,
   getLocalCollectionPath,
@@ -28,6 +29,10 @@ import {
   buildArtistRouteHref,
   canOpenArtistRoute,
 } from "../lib/artist-routing";
+import {
+  fetchCollectionForImport,
+  parseCollectionUrl,
+} from "../lib/collection-import";
 import {
   syncCloudLibrarySnapshot,
 } from "../lib/cloud-library-sync";
@@ -795,16 +800,12 @@ export default function LibraryPage() {
           source: artist.source,
         })
       )
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 12);
+      .sort((a, b) => b.count - a.count);
   }, [recentSongs]);
 
   const shownArtists = useMemo(() => topArtists, [topArtists]);
 
-  const previouslyPlayed = useMemo(
-    () => recentSongs.slice(0, 20),
-    [recentSongs]
-  );
+  const previouslyPlayed = useMemo(() => recentSongs, [recentSongs]);
 
   const playLocalCollection = useCallback(
     async (collectionId: string) => {
@@ -933,17 +934,17 @@ export default function LibraryPage() {
     [visiblePlaylistCards]
   );
 
-  const recentAlbums = useMemo(() => recentSongs.slice(0, 10), [recentSongs]);
+  const recentAlbums = useMemo(() => recentSongs, [recentSongs]);
 
   const mixedLibraryItems = useMemo<LibraryGridItem[]>(() => {
-    const artistItems = shownArtists.slice(0, 8).map((artist, index) => ({
+    const artistItems = shownArtists.map((artist, index) => ({
       kind: "artist" as const,
       id: `artist-${artist.name}`,
       artist,
       priority: index < 4,
     }));
 
-    const mediaItems = recentAlbums.slice(0, 10).map((item, index) => ({
+    const mediaItems = recentAlbums.map((item, index) => ({
       kind: "media" as const,
       id: `track-${item.id}`,
       title: item.title,
@@ -1111,6 +1112,63 @@ export default function LibraryPage() {
         likedSongs: likedSongs.length,
       });
 
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importError, setImportError] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+
+  const openImportPlaylist = () => {
+    setImportUrl("");
+    setImportError("");
+    setIsImportModalOpen(true);
+  };
+
+  const closeImportPlaylist = () => {
+    setIsImportModalOpen(false);
+    setImportUrl("");
+    setImportError("");
+  };
+
+  const submitImportPlaylist = async () => {
+    const parsed = parseCollectionUrl(importUrl);
+    if (!parsed) {
+      setImportError(t("library.importFailed"));
+      return;
+    }
+
+    setIsImporting(true);
+    setImportError("");
+    try {
+      const imported = await fetchCollectionForImport(parsed);
+      const playlist = createStoredPlaylist(
+        imported.name || imported.sourceCollectionId,
+        imported.description,
+        {
+          songs: imported.songs,
+          sourceCollectionId: imported.sourceCollectionId,
+          sourceCollectionKind: imported.sourceCollectionKind,
+          sourceCollectionSource: imported.sourceCollectionSource,
+        }
+      );
+      setUserPlaylists((prev) => [playlist, ...prev]);
+      closeImportPlaylist();
+      showToast({
+        message: t("library.importedPlaylist", { name: playlist.name }),
+        tone: "success",
+        actionLabel: t("library.open"),
+        onAction: () => {
+          openCollectionPath(getLocalCollectionPath(playlist.id));
+        },
+      });
+    } catch (error) {
+      setImportError(
+        error instanceof Error ? error.message : t("library.importFailed")
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const openCreatePlaylist = () => {
     setPlaylistName("");
     setPlaylistDescription("");
@@ -1212,6 +1270,33 @@ export default function LibraryPage() {
                   >
                     <PlusGlyph />
                     {t("library.create")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openImportPlaylist}
+                    className="theme-button-soft inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition sm:gap-2 sm:px-4 sm:py-2 sm:text-sm"
+                    aria-label={t("library.importPlaylistAria")}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      className="h-4 w-4"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 3v12m0 0 4-4m-4 4-4-4"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
+                      />
+                    </svg>
+                    {t("library.importPlaylist")}
                   </button>
                   {authUser ? (
                     <button
@@ -1478,6 +1563,16 @@ export default function LibraryPage() {
         onDescriptionChange={setPlaylistDescription}
         onClose={closeCreatePlaylist}
         onSubmit={submitCreatePlaylist}
+      />
+
+      <PlaylistImportModal
+        open={isImportModalOpen}
+        url={importUrl}
+        error={importError}
+        isImporting={isImporting}
+        onUrlChange={setImportUrl}
+        onClose={closeImportPlaylist}
+        onSubmit={() => void submitImportPlaylist()}
       />
     </>
   );
