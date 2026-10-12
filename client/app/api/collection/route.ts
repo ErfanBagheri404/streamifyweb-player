@@ -711,6 +711,254 @@ async function fetchSpotifyCollection(
   };
 }
 
+// ---- YouTube / YouTube Music via Innertube browse -------------------------
+// Public Piped instances are dead (the config lists one, it 500s), so the
+// playlist import path uses the same keyless Innertube browse the mobile app
+// ships: WEB/WEB_REMIX browse on the VL-prefixed playlist id.
+
+// ponytail: one client for both kinds. Plain WEB browse answers a playlist id
+// with `lockupViewModel` rows, while WEB_REMIX answers the same VL id with
+// `musicResponsiveListItemRenderer` rows — the shape the parser below reads. A
+// second parser for lockups only pays off if the plain-WEB rows are needed for
+// something WEB_REMIX cannot express.
+const YT_IMPORT_CLIENTS = {
+  youtube: {
+    name: "WEB_REMIX",
+    version: "1.20250908.01.00",
+    clientNameHeader: "67",
+    origin: "https://music.youtube.com",
+  },
+  youtubemusic: {
+    name: "WEB_REMIX",
+    version: "1.20250908.01.00",
+    clientNameHeader: "67",
+    origin: "https://music.youtube.com",
+  },
+} as const;
+
+const YT_IMPORT_MAX_PAGES = 20;
+
+function ytFindFirst(value: unknown, key: string): unknown {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const hit = ytFindFirst(entry, key);
+      if (hit !== undefined) return hit;
+    }
+    return undefined;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (key in record) return record[key];
+    for (const entry of Object.values(record)) {
+      const hit = ytFindFirst(entry, key);
+      if (hit !== undefined) return hit;
+    }
+  }
+  return undefined;
+}
+
+function ytCollectByKey(value: unknown, key: string, out: unknown[] = []): unknown[] {
+  if (Array.isArray(value)) {
+    for (const entry of value) ytCollectByKey(entry, key, out);
+    return out;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (key in record) {
+      out.push(record[key]);
+      return out;
+    }
+    for (const entry of Object.values(record)) ytCollectByKey(entry, key, out);
+  }
+  return out;
+}
+
+function ytRunsToText(runs: unknown): string {
+  if (!Array.isArray(runs)) return "";
+  return runs
+    .map((run) => (run && typeof run === "object" ? String((run as Record<string, unknown>).text ?? "") : ""))
+    .join("")
+    .trim();
+}
+
+function ytThumbnailUrl(thumbnail: unknown): string {
+  const thumbs = ytFindFirst(thumbnail, "thumbnails");
+  if (!Array.isArray(thumbs) || !thumbs.length) return "";
+  const last = thumbs[thumbs.length - 1] as Record<string, unknown>;
+  return typeof last?.url === "string" ? last.url : "";
+}
+
+function ytParseClockDuration(value: string): number {
+  const trimmed = (value || "").trim();
+  if (!trimmed || !/^\d+(:\d{1,2})+$/.test(trimmed)) return 0;
+  const parts = trimmed.split(":").map((part) => Number(part));
+  if (parts.some((part) => Number.isNaN(part))) return 0;
+  return parts.reduce((total, part) => total * 60 + part, 0);
+}
+
+function ytParseListItem(item: unknown) {
+  if (!item || typeof item !== "object") return null;
+  const renderer = item as Record<string, any>;
+  let videoId = "";
+  let title = "";
+  let artist = "";
+  let duration = 0;
+  let columnIndex = 0;
+
+  for (const column of renderer.flexColumns || []) {
+    const columnRenderer = column?.musicResponsiveListItemFlexColumnRenderer;
+    const text = ytRunsToText(columnRenderer?.text?.runs);
+    if (text) {
+      if (columnIndex === 0) title = text;
+      else if (!artist) artist = text;
+    }
+    columnIndex += 1;
+    for (const run of columnRenderer?.text?.runs || []) {
+      const endpointVideoId = run?.navigationEndpoint?.watchEndpoint?.videoId;
+      if (!videoId && typeof endpointVideoId === "string") {
+        videoId = endpointVideoId;
+      }
+    }
+  }
+
+  if (!videoId) {
+    const overlayVideoId = ytFindFirst(renderer.overlay, "videoId");
+    if (typeof overlayVideoId === "string") videoId = overlayVideoId;
+  }
+
+  if (!videoId) {
+    // Playlist rows (playlistBrowse) carry the id on playlistItemData, not on
+    // the title's run endpoint.
+    const dataVideoId = ytFindFirst(renderer, "videoId");
+    if (typeof dataVideoId === "string") videoId = dataVideoId;
+  }
+
+  for (const column of renderer.fixedColumns || []) {
+    const text = ytRunsToText(
+      column?.musicResponsiveListItemFixedColumnRenderer?.text?.runs,
+    );
+    const seconds = ytParseClockDuration(text);
+    if (seconds > 0) {
+      duration = seconds;
+      break;
+    }
+  }
+
+  if (!videoId || !title) return null;
+  return { videoId, title, artist, duration, thumbnail: ytThumbnailUrl(renderer.thumbnail) };
+}
+
+async function ytPostBrowse(
+  kind: "youtube" | "youtubemusic",
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  const client = YT_IMPORT_CLIENTS[kind];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(`${client.origin}/youtubei/v1/browse?prettyPrint=false`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+        "X-YouTube-Client-Name": client.clientNameHeader,
+        "X-YouTube-Client-Version": client.version,
+        Origin: client.origin,
+        Referer: `${client.origin}/`,
+      },
+      body: JSON.stringify({
+        // browseId/continuation must be siblings of `context`, not inside it —
+        // spreading them into context returns the home feed instead.
+        context: {
+          client: {
+            clientName: client.name,
+            clientVersion: client.version,
+            hl: "en",
+            gl: "US",
+          },
+        },
+        ...body,
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchYouTubeInnertubeCollection(
+  playlistId: string,
+  kind: "youtube" | "youtubemusic",
+): Promise<CollectionResponse> {
+  const browseId = playlistId.startsWith("VL") ? playlistId : `VL${playlistId}`;
+  const entries: CollectionResponse["entries"] = [];
+  let name = "";
+  let owner = "";
+  let thumbnail = "";
+  let continuation = "";
+  let pages = 0;
+
+  do {
+    if (pages >= YT_IMPORT_MAX_PAGES) break;
+    const payload = await ytPostBrowse(kind, continuation ? { continuation } : { browseId });
+    for (const rawItem of ytCollectByKey(payload, "musicResponsiveListItemRenderer")) {
+      const parsed = ytParseListItem(rawItem);
+      if (!parsed) continue;
+      entries.push({
+        id: `youtube:video:${parsed.videoId}`,
+        title: parsed.title,
+        subtitle: parsed.artist || undefined,
+        duration: parsed.duration || undefined,
+        artist: parsed.artist || undefined,
+        thumbnailUrl: parsed.thumbnail || undefined,
+        url: `https://www.youtube.com/watch?v=${parsed.videoId}`,
+      });
+    }
+    if (!name) {
+      const header = ytFindFirst(payload, "musicResponsiveHeaderRenderer") as
+        | Record<string, any>
+        | undefined;
+      name = header ? ytRunsToText(header.title?.runs) : "";
+      owner = header
+        ? (header.subtitle?.runs ?? [])
+            .map((run: any) => String(run?.text ?? "").trim())
+            .filter((text: string) => text && text !== "\u2022")
+            .join(" ")
+            .trim()
+        : "";
+      thumbnail = header ? ytThumbnailUrl(header.thumbnail) : "";
+    }
+    const command = ytFindFirst(payload, "continuationCommand");
+    continuation =
+      command && typeof command === "object"
+        ? String((command as Record<string, unknown>).token ?? "")
+        : "";
+    pages += 1;
+  } while (continuation);
+
+  if (!entries.length) {
+    throw new Error("The YouTube playlist returned no tracks.");
+  }
+
+  return {
+    collection: {
+      id: playlistId,
+      title: name || "YouTube playlist",
+      author: owner || undefined,
+      thumbnailUrl: thumbnail || undefined,
+      url: `https://www.youtube.com/playlist?list=${playlistId}`,
+      count: entries.length,
+      source: kind,
+    },
+    entries,
+  };
+}
+
 async function fetchDeezerCollection(
   id: string,
   kind: string,
@@ -889,17 +1137,19 @@ export async function GET(request: NextRequest) {
       kind === "playlist" &&
       normalizedYouTubePlaylistId
     ) {
-      response = isYouTubeMixId(normalizedYouTubePlaylistId)
-        ? await fetchInvidiousMix(normalizedYouTubePlaylistId, "youtube")
-        : await fetchPipedPlaylist(normalizedYouTubePlaylistId, "youtube");
+      response = await fetchYouTubeInnertubeCollection(
+        normalizedYouTubePlaylistId,
+        "youtube"
+      );
     } else if (
       source === "youtubemusic" &&
       kind === "playlist" &&
       normalizedYouTubePlaylistId
     ) {
-      response = isYouTubeMixId(normalizedYouTubePlaylistId)
-        ? await fetchInvidiousMix(normalizedYouTubePlaylistId, "youtubemusic")
-        : await fetchPipedPlaylist(normalizedYouTubePlaylistId, "youtubemusic");
+      response = await fetchYouTubeInnertubeCollection(
+        normalizedYouTubePlaylistId,
+        "youtubemusic"
+      );
     } else if (source === "soundcloud" && normalizedSoundCloudUrl) {
       response = await fetchSoundCloudCollection(
         normalizedSoundCloudUrl,
