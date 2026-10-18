@@ -6,6 +6,7 @@ import { normalizeYouTubeThumbnailUrl } from "./youtube-thumbnails";
 
 export const PLAYLISTS_STORAGE_KEY = "libraryUserPlaylists";
 export const LIKED_SONGS_STORAGE_KEY = "libraryLikedSongs";
+export const LIBRARY_DELETIONS_STORAGE_KEY = "libraryDeletedRefs";
 export const LOCAL_LIBRARY_UPDATED_EVENT = "streamify-local-library-updated";
 const SONG_METADATA_CACHE_STORAGE_KEY = "librarySongMetadataCache";
 
@@ -782,8 +783,185 @@ export function writeStoredPlaylists(playlists: StoredPlaylist[]) {
     PLAYLISTS_STORAGE_KEY,
     JSON.stringify(normalized)
   );
+  forgetPresentPlaylists(normalized);
   updateSongMetadataCache(normalized.flatMap((playlist) => playlist.songs));
   emitLocalLibraryUpdated();
+}
+
+// Deletion tombstones.
+//
+// Without a tombstone a cloud merge cannot tell "the user deleted this" from
+// "this device has never seen this". The base-less merge (fresh storage, or
+// signed out and back in) unions both sides, so anything removed locally is
+// pulled straight back from the cloud — deleting a playlist, unliking a song
+// or removing an imported collection appears to do nothing, and the edit is
+// then pushed up, so it reverts on every device.
+//
+// Tombstones are recorded only where the user explicitly deletes something,
+// never by diffing two writes: a write can also shrink the library because a
+// cloud restore replaced it, and that must not be mistaken for a deletion.
+// They are dropped as soon as the same entity is present locally again.
+type LibraryTombstones = {
+  version: 1;
+  playlists: string[];
+  likedSongs: string[];
+};
+
+const EMPTY_TOMBSTONES: LibraryTombstones = {
+  version: 1,
+  playlists: [],
+  likedSongs: [],
+};
+
+function readLibraryTombstones(): LibraryTombstones {
+  if (typeof window === "undefined") return { ...EMPTY_TOMBSTONES };
+
+  try {
+    const raw = window.localStorage.getItem(LIBRARY_DELETIONS_STORAGE_KEY);
+    if (!raw) return { ...EMPTY_TOMBSTONES };
+
+    const parsed = JSON.parse(raw) as Partial<LibraryTombstones> | null;
+    if (!parsed || typeof parsed !== "object") return { ...EMPTY_TOMBSTONES };
+
+    const toIds = (value: unknown) =>
+      Array.isArray(value)
+        ? value
+            .filter((id): id is string => typeof id === "string" && !!id.trim())
+            .slice(0, 500)
+        : [];
+
+    return {
+      version: 1,
+      playlists: toIds(parsed.playlists),
+      likedSongs: toIds(parsed.likedSongs),
+    };
+  } catch (error) {
+    console.error("Failed to restore library tombstones:", error);
+    return { ...EMPTY_TOMBSTONES };
+  }
+}
+
+function writeLibraryTombstones(tombstones: LibraryTombstones) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      LIBRARY_DELETIONS_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        playlists: tombstones.playlists.slice(0, 500),
+        likedSongs: tombstones.likedSongs.slice(0, 500),
+      }),
+    );
+  } catch (error) {
+    console.error("Failed to store library tombstones:", error);
+  }
+}
+
+export function readDeletedPlaylistIds(): Set<string> {
+  return new Set(readLibraryTombstones().playlists);
+}
+
+export function readDeletedLikedSongKeys(): Set<string> {
+  return new Set(readLibraryTombstones().likedSongs);
+}
+
+function updateTombstones(
+  deleted: string[],
+  restored: string[],
+  field: "playlists" | "likedSongs",
+) {
+  if (typeof window === "undefined") return;
+  if (deleted.length === 0 && restored.length === 0) return;
+
+  const tombstones = readLibraryTombstones();
+  const next = new Set(tombstones[field]);
+  for (const key of deleted) next.add(key);
+  // Something that came back (undo, re-import, re-like) is no longer deleted.
+  for (const key of restored) next.delete(key);
+
+  writeLibraryTombstones({ ...tombstones, [field]: [...next] });
+}
+
+function recordDeletedPlaylists(playlistIds: string[]) {
+  updateTombstones(playlistIds, [], "playlists");
+}
+
+function recordDeletedLikedSongs(keys: string[]) {
+  updateTombstones(keys, [], "likedSongs");
+}
+
+// Called by the explicit delete paths only.
+export function markPlaylistsDeleted(playlistIds: string[]) {
+  recordDeletedPlaylists(playlistIds.filter(Boolean));
+}
+
+export function markLikedSongsDeleted(songs: Pick<Song, "id" | "source">[]) {
+  recordDeletedLikedSongs(
+    songs
+      .map((song) => getCloudTrackRefKeyFromSong(song as Song))
+      .filter((key): key is string => Boolean(key)),
+  );
+}
+
+// A playlist that is present again (undo, re-import) is no longer deleted.
+function forgetPresentPlaylists(playlists: StoredPlaylist[]) {
+  const tombstones = readLibraryTombstones();
+  if (tombstones.playlists.length === 0) return;
+  const present = new Set(playlists.map((playlist) => playlist.id));
+  const next = tombstones.playlists.filter((id) => !present.has(id));
+  if (next.length !== tombstones.playlists.length) {
+    writeLibraryTombstones({ ...tombstones, playlists: next });
+  }
+}
+
+function forgetPresentLikedSongs(songs: Song[]) {
+  const tombstones = readLibraryTombstones();
+  if (tombstones.likedSongs.length === 0) return;
+  const present = new Set(
+    songs
+      .map((song) => getCloudTrackRefKeyFromSong(song))
+      .filter((key): key is string => Boolean(key)),
+  );
+  const next = tombstones.likedSongs.filter((key) => !present.has(key));
+  if (next.length !== tombstones.likedSongs.length) {
+    writeLibraryTombstones({ ...tombstones, likedSongs: next });
+  }
+}
+
+function getCloudTrackRefKeyFromSong(song: Song): string | null {
+  const ref = createCloudTrackRef(song);
+  return ref ? getCloudTrackRefKey(ref) : null;
+}
+
+export function clearLibraryTombstones() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(LIBRARY_DELETIONS_STORAGE_KEY);
+  } catch {}
+}
+
+// Drop anything this device has deleted from a cloud snapshot, so a merge or
+// plain restore cannot resurrect it. The base-less union merge cannot tell a
+// delete from "never seen", so local deletions have to be carried explicitly.
+export function dropLocallyDeleted(
+  snapshot: CloudLibrarySnapshot,
+): CloudLibrarySnapshot {
+  const deletedPlaylists = readDeletedPlaylistIds();
+  const deletedLikes = readDeletedLikedSongKeys();
+  if (deletedPlaylists.size === 0 && deletedLikes.size === 0) {
+    return snapshot;
+  }
+
+  const filterRefs = (refs: CloudTrackRef[]) =>
+    refs.filter((ref) => !deletedLikes.has(getCloudTrackRefKey(ref)));
+
+  return {
+    playlists: snapshot.playlists
+      .filter((playlist) => !deletedPlaylists.has(playlist.id))
+      .map((playlist) => ({ ...playlist, songs: filterRefs(playlist.songs) })),
+    likedSongs: filterRefs(snapshot.likedSongs),
+  };
 }
 
 export function createCloudLibrarySnapshot(
@@ -847,6 +1025,8 @@ export function removeStoredPlaylist(playlistId: string) {
     };
   }
 
+  // Record the intent before the write, so a cloud merge cannot resurrect it.
+  markPlaylistsDeleted([playlistId]);
   writeStoredPlaylists(
     playlists.filter((playlist) => playlist.id !== playlistId)
   );
@@ -1039,6 +1219,7 @@ export function writeLikedSongs(songs: Song[]) {
     LIKED_SONGS_STORAGE_KEY,
     JSON.stringify(normalizedSongs)
   );
+  forgetPresentLikedSongs(normalizedSongs);
   updateSongMetadataCache(normalizedSongs);
   emitLocalLibraryUpdated();
 }
@@ -1117,6 +1298,10 @@ export function toggleLikedSong(song: Song) {
       )
     : [...likedSongs, normalizeSongSnapshot(song)];
 
+  if (exists) {
+    markLikedSongsDeleted([song]);
+  }
+
   writeLikedSongs(next);
 
   return {
@@ -1147,19 +1332,44 @@ export async function restoreCloudLibrary(
 ) {
   const normalized = normalizeCloudLibrarySnapshot(snapshot);
   const knownSongsByKey = buildKnownSongMetadataMap();
-  if (options.deferSongMetadataRefresh) {
-    const restoredPlaylists = normalized.playlists.map((playlist) => ({
+  // Playlist source metadata is device-local (which provider a playlist was
+  // imported from); the cloud snapshot does not carry it. Rebuild a playlist
+  // without it and the import loses its provider binding, so carry it over.
+  const existingPlaylistsById = new Map<string, StoredPlaylist>();
+  try {
+    for (const playlist of readStoredPlaylists()) {
+      existingPlaylistsById.set(playlist.id, playlist);
+    }
+  } catch {}
+  const withSourceMetadata = (
+    playlist: CloudPlaylistSnapshot,
+    songs: Song[],
+  ): StoredPlaylist => {
+    const existing = existingPlaylistsById.get(playlist.id);
+    return {
       id: playlist.id,
       name: playlist.name,
       description: playlist.description,
       createdAt: playlist.createdAt,
-      songs: playlist.songs.map((ref) =>
-        createRestoredSongSnapshot(
-          ref,
-          knownSongsByKey.get(getCloudTrackRefKey(ref))
-        )
+      songs,
+      sourceCollectionId: existing?.sourceCollectionId,
+      sourceCollectionKind: existing?.sourceCollectionKind,
+      sourceCollectionSource: existing?.sourceCollectionSource,
+      sourceCollectionUrl: existing?.sourceCollectionUrl,
+    };
+  };
+  if (options.deferSongMetadataRefresh) {
+    const restoredPlaylists = normalized.playlists.map((playlist) =>
+      withSourceMetadata(
+        playlist,
+        playlist.songs.map((ref) =>
+          createRestoredSongSnapshot(
+            ref,
+            knownSongsByKey.get(getCloudTrackRefKey(ref)),
+          ),
+        ),
       ),
-    }));
+    );
     const restoredLikedSongs = normalized.likedSongs.map((ref) =>
       createRestoredSongSnapshot(ref, knownSongsByKey.get(getCloudTrackRefKey(ref)))
     );
@@ -1171,20 +1381,19 @@ export async function restoreCloudLibrary(
   }
 
   const restoredPlaylists = await Promise.all(
-    normalized.playlists.map(async (playlist) => ({
-      id: playlist.id,
-      name: playlist.name,
-      description: playlist.description,
-      createdAt: playlist.createdAt,
-      songs: await Promise.all(
-        playlist.songs.map((ref) =>
-          resolveCloudTrackRef(
-            ref,
-            knownSongsByKey.get(getCloudTrackRefKey(ref))
-          )
-        )
+    normalized.playlists.map(async (playlist) =>
+      withSourceMetadata(
+        playlist,
+        await Promise.all(
+          playlist.songs.map((ref) =>
+            resolveCloudTrackRef(
+              ref,
+              knownSongsByKey.get(getCloudTrackRefKey(ref)),
+            ),
+          ),
+        ),
       ),
-    }))
+    ),
   );
   const restoredLikedSongs = await Promise.all(
     normalized.likedSongs.map((ref) =>

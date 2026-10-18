@@ -784,6 +784,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const lastMediaSessionPositionUpdateRef = useRef(0);
   const lastPersistedSongIdRef = useRef<string | null>(null);
   const lastPersistedProgressRef = useRef(0);
+  const lastPersistedQueueKeyRef = useRef("");
   const hlsControllerRef = useRef<{ destroy: () => void } | null>(null);
   const hlsSourceRef = useRef<string | null>(null);
   const shakaPlayerRef = useRef<{
@@ -1439,8 +1440,31 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
                 ? "one"
                 : "off";
           setCurrentSong(hydratedSong);
-          setPlaybackQueue([hydratedSong]);
-          setQueueIndex(0);
+          // Restore the whole queue, not just the current song. Rebuilding a
+          // one-song queue on boot made the track look like it was never in
+          // the playlist it was played from — next/previous and the queue
+          // panel all lost the list.
+          const savedQueue = Array.isArray(state.playbackQueue)
+            ? state.playbackQueue.map((entry) => normalizeSong(entry as Song))
+            : [];
+          const queueContainsCurrent = savedQueue.some(
+            (entry) => entry.id === hydratedSong.id,
+          );
+          const restoredQueue = queueContainsCurrent
+            ? savedQueue
+            : [hydratedSong, ...savedQueue];
+          setPlaybackQueue(restoredQueue);
+          const savedIndex =
+            typeof state.queueIndex === "number" ? state.queueIndex : -1;
+          const restoredIndex = Math.max(
+            0,
+            restoredQueue.findIndex((entry) => entry.id === hydratedSong.id),
+          );
+          setQueueIndex(
+            savedIndex >= 0 && savedIndex < restoredQueue.length
+              ? savedIndex
+              : restoredIndex,
+          );
           setCurrentTime(state.currentTime || 0);
           setDuration(state.duration || 0);
           setVolumeState(
@@ -1469,14 +1493,23 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     const shouldPersistProgress =
       !isPlaying ||
       Math.abs(currentTime - lastPersistedProgressRef.current) >= 15;
+    // A queue edit while paused (reorder, add, remove) changes neither the song
+    // nor the progress, so without this the restored playlist would be stale.
+    const queueKey = `${playbackQueue.length}:${queueIndex}:${playbackQueue[queueIndex]?.id ?? ""}`;
+    const hasQueueChanged = queueKey !== lastPersistedQueueKeyRef.current;
 
-    if (!hasSongChanged && !shouldPersistProgress) {
+    if (!hasSongChanged && !shouldPersistProgress && !hasQueueChanged) {
       return;
     }
 
     const state = {
       currentSong,
       recentSongs,
+      // Persist the queue so a restart keeps the playlist context. Capped
+      // because entries carry full audio URLs and localStorage tops out near
+      // 5MB — a 500-track playlist would blow it and lose the state entirely.
+      playbackQueue: playbackQueue.slice(0, 300),
+      queueIndex,
       currentTime,
       duration,
       volume,
@@ -1488,6 +1521,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     localStorage.setItem("audioPlayerState", JSON.stringify(state));
     lastPersistedSongIdRef.current = currentSong?.id || null;
     lastPersistedProgressRef.current = currentTime;
+    lastPersistedQueueKeyRef.current = queueKey;
   }, [
     currentSong,
     recentSongs,
@@ -1497,6 +1531,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     repeatMode,
     isRepeat,
     isPlaying,
+    playbackQueue,
+    queueIndex,
   ]);
 
   useEffect(

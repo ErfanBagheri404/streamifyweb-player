@@ -9,6 +9,7 @@ import {
 } from "../lib/cloud-library-sync";
 import {
   createCloudLibrarySnapshot,
+  dropLocallyDeleted,
   LOCAL_LIBRARY_UPDATED_EVENT,
   mergeCloudLibrarySnapshots,
   readLikedSongs,
@@ -131,9 +132,9 @@ export default function CloudLibraryBridge() {
           return;
         }
 
-        const remoteSnapshot = payload as Parameters<
-          typeof mergeCloudLibrarySnapshots
-        >[1];
+        const remoteSnapshot = dropLocallyDeleted(
+          payload as Parameters<typeof mergeCloudLibrarySnapshots>[1],
+        );
         const hasLocalData = hasLocalLibraryData();
         const nextSnapshot = hasLocalData
           ? mergeCloudLibrarySnapshots(

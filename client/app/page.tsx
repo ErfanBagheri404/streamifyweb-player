@@ -426,7 +426,7 @@ export default function Home() {
   }, [authNotice]);
 
   const uniqueRecentSongs = useMemo(
-    () => dedupeSongsById(recentSongs).slice(0, 12),
+    () => dedupeSongsById(recentSongs),
     [recentSongs]
   );
   const madeForYouSeedCandidates = useMemo(
@@ -477,8 +477,7 @@ export default function Home() {
 
     return [...artistMap.values()]
       .filter((artist) => canOpenArtistRoute(artist))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 12);
+      .sort((a, b) => b.count - a.count);
   }, [recentSongs]);
 
   const mostPlayedYouTubeArtist = useMemo<ArtistHistorySummary | null>(() => {

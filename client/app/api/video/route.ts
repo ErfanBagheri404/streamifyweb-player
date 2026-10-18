@@ -1840,10 +1840,15 @@ async function fetchVideoDetails(
       return fetchSoundCloudDetails(videoId, options?.urlHint);
     }
 
-    if (source === "spotify") {
+    if (
+      source === "spotify" ||
+      source === "deezer" ||
+      source === "itunes"
+    ) {
       const title = options?.title || "";
       const artist = options?.artist || "";
-      if (!title) throw new Error("Spotify track metadata is missing");
+      if (!title)
+        throw new Error("Track metadata is missing for " + source + " source");
 
       const providerEndpoints = await getEndpointsSafe();
       const matchedJioSaavnSong = await findJioSaavnMatch(title, artist);
@@ -1875,7 +1880,7 @@ async function fetchVideoDetails(
         return fetchSoundCloudDetails(soundcloudUrl, soundcloudUrl);
       }
 
-      throw new Error("No playable source found for Spotify track");
+      throw new Error("No playable source found for " + source + " track");
     }
 
   if (source === "jiosaavn") {

@@ -50,7 +50,7 @@ export function parseCollectionUrl(input: string): ParsedCollectionUrl | null {
   }
 
   match = raw.match(
-    /jiosaavn\.com\/(?:featured|playlist|album)\/[^/]+\/([A-Za-z0-9]+)/i
+    /jiosaavn\.com\/(?:featured|playlist|album)\/[^/]+\/([A-Za-z0-9_-]+)/i
   );
   if (match?.[1]) {
     return {

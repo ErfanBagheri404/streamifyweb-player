@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { publicJsonCacheHeaders } from "../_lib/cache-headers";
 import { requireStreamifyRequest } from "../_lib/request-guard";
+import { fetchSpotifyTrackCovers } from "../_lib/spotify-lookup";
 import {
   getInvidiousInstances,
   getPipedInstances,
@@ -223,7 +224,7 @@ async function fetchJson(url: string): Promise<unknown> {
     const message = error instanceof Error ? error.message : String(error);
     const shouldTryPowerShell =
       process.platform === "win32" &&
-      (/fetch failed|aborted|ECONNRESET|UND_ERR_CONNECT_TIMEOUT/i.test(
+      (/fetch failed|aborted|ECONNRESET|UND_ERR_CONNECT_TIMEOUT|connection was closed|TLS|certificate/i.test(
         message
       ) ||
         message.includes("This operation was aborted"));
@@ -234,6 +235,13 @@ async function fetchJson(url: string): Promise<unknown> {
 
     const escapedUrl = url.replace(/'/g, "''");
     const escapedUserAgent = USER_AGENT.replace(/'/g, "''");
+    // This host has no direct route to several provider APIs (Deezer,
+    // SoundCloud, YouTube) — only a local HTTP proxy does. Node's fetch ignores
+    // the system proxy, so the PowerShell fallback has to pass it explicitly.
+    const proxyUrl = (process.env.YT_PROXY_URL || "").trim();
+    const proxyArg = /^https?:\/\//i.test(proxyUrl)
+      ? ` -Proxy '${proxyUrl.replace(/'/g, "''")}'`
+      : "";
     const script = [
       "$ProgressPreference = 'SilentlyContinue'",
       "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
@@ -241,7 +249,7 @@ async function fetchJson(url: string): Promise<unknown> {
       `$response = Invoke-RestMethod -Uri '${escapedUrl}' -Headers $headers -TimeoutSec ${Math.max(
         1,
         Math.ceil(COLLECTION_FETCH_TIMEOUT_MS / 1000)
-      )}`,
+      )}${proxyArg}`,
       "$response | ConvertTo-Json -Depth 100 -Compress",
     ].join("; ");
 
@@ -310,17 +318,33 @@ async function fetchJioSaavnCollection(
   kind: "playlist" | "album"
 ): Promise<CollectionResponse> {
   const providerEndpoints = await resolveProviderEndpoints();
+  // The renderer passes either the numeric id or a share token. The saavn API
+  // answers `id=` with the NUMERIC id only; share tokens (featured/album links,
+  // whose slug token is NOT the id) resolve through `link=` instead. Both
+  // shapes return the same payload, and `limit` lifts the default 10-song page.
+  const trimmed = id.trim();
+  const numericId =
+    trimmed.match(/\/(\d{6,})\/?(?:[?#]|$)/)?.[1] ||
+    (!trimmed.includes("/") && /^\d+$/.test(trimmed) ? trimmed : "");
+  const params = numericId
+    ? { id: numericId, limit: 500 }
+    : {
+        limit: 500,
+        link: /^https?:\/\//i.test(trimmed)
+          ? trimmed
+          : `https://www.jiosaavn.com/featured/x/${trimmed}`,
+      };
   const endpointCandidates =
     kind === "playlist"
       ? buildProviderUrlCandidates(
           providerEndpoints.providers.jiosaavn.apiBase,
           ["/api/playlists", "/playlists"],
-          { id }
+          params
         )
       : buildProviderUrlCandidates(
           providerEndpoints.providers.jiosaavn.apiBase,
           ["/api/albums", "/albums"],
-          { id }
+          params
         );
 
   const payload = await fetchFirstSuccessfulJsonUrl(endpointCandidates);
@@ -682,7 +706,9 @@ async function fetchSpotifyCollection(
         title: trackTitle,
         subtitle: artist,
         artist,
-        thumbnailUrl: coverArt,
+        // Filled in below: the embed payload carries NO per-track artwork, so
+        // every row would otherwise show the playlist cover.
+        thumbnailUrl: undefined as string | undefined,
         duration:
           durationMs != null && durationMs > 0
             ? Math.round(durationMs / 1000)
@@ -695,6 +721,22 @@ async function fetchSpotifyCollection(
 
   if (!entries.length) {
     throw new Error("Spotify collection returned no playable tracks");
+  }
+
+  // Per-track cover art. The embed HTML has none, so resolve each track's own
+  // album through the keyless partner lookup. Failure is non-fatal — rows
+  // keep the collection cover rather than the whole import failing.
+  try {
+    const covers = await fetchSpotifyTrackCovers(
+      entries.map((entry) => entry.id)
+    );
+    for (const entry of entries) {
+      entry.thumbnailUrl = covers.get(entry.id) || coverArt || undefined;
+    }
+  } catch {
+    for (const entry of entries) {
+      entry.thumbnailUrl = coverArt || undefined;
+    }
   }
 
   return {
@@ -853,42 +895,72 @@ async function ytPostBrowse(
   body: Record<string, unknown>,
 ): Promise<unknown> {
   const client = YT_IMPORT_CLIENTS[kind];
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch(`${client.origin}/youtubei/v1/browse?prettyPrint=false`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
-        "X-YouTube-Client-Name": client.clientNameHeader,
-        "X-YouTube-Client-Version": client.version,
-        Origin: client.origin,
-        Referer: `${client.origin}/`,
+  const url = `${client.origin}/youtubei/v1/browse?prettyPrint=false`;
+  const payload = {
+    // browseId/continuation must be siblings of `context`, not inside it —
+    // spreading them into context returns the home feed instead.
+    context: {
+      client: {
+        clientName: client.name,
+        clientVersion: client.version,
+        hl: "en",
+        gl: "US",
       },
-      body: JSON.stringify({
-        // browseId/continuation must be siblings of `context`, not inside it —
-        // spreading them into context returns the home feed instead.
-        context: {
-          client: {
-            clientName: client.name,
-            clientVersion: client.version,
-            hl: "en",
-            gl: "US",
-          },
+    },
+    ...body,
+  };
+  const jsonBody = JSON.stringify(payload);
+
+  const proxyUrl = (process.env.YT_PROXY_URL || "").trim();
+  const usePowerShell = process.platform === "win32" && !!proxyUrl;
+
+  if (!usePowerShell) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+          "X-YouTube-Client-Name": client.clientNameHeader,
+          "X-YouTube-Client-Version": client.version,
+          Origin: client.origin,
+          Referer: `${client.origin}/`,
         },
-        ...body,
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+        body: jsonBody,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return await response.json();
+    } finally {
+      clearTimeout(timer);
     }
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
   }
+
+  // Windows-local path: route through the configured proxy via PowerShell
+  // because Node's fetch ignores the system proxy.
+  const escapedUrl = url.replace(/'/g, "''");
+  const escapedBody = jsonBody.replace(/'/g, "''");
+  const proxyArg = ` -Proxy '${proxyUrl.replace(/'/g, "''")}'`;
+  const script = [
+    "$ProgressPreference = 'SilentlyContinue'",
+    "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
+    `$headers = @{ 'Content-Type' = 'application/json'; 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'; 'X-YouTube-Client-Name' = '${client.clientNameHeader}'; 'X-YouTube-Client-Version' = '${client.version}'; 'Origin' = '${client.origin}'; 'Referer' = '${client.origin}/' }`,
+    `$response = Invoke-RestMethod -Uri '${escapedUrl}' -Method POST -Headers $headers -Body '${escapedBody}' -TimeoutSec 20${proxyArg}`,
+    "$response | ConvertTo-Json -Depth 100 -Compress",
+  ].join("; ");
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const { stdout } = await promisify(execFile)(
+    "powershell",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    { encoding: "utf8", maxBuffer: 50 * 1024 * 1024 },
+  );
+  return JSON.parse(stdout.trim() || "null");
 }
 
 async function fetchYouTubeInnertubeCollection(
