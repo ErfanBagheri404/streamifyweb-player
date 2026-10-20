@@ -206,6 +206,7 @@ interface SoundCloudWidgetController {
   setVolume: (volume: number) => void;
   getPosition: (callback: (milliseconds: number) => void) => void;
   getDuration: (callback: (milliseconds: number) => void) => void;
+  isPaused?: (callback: (paused: boolean) => void) => void;
 }
 
 interface SoundCloudWidgetApi {
@@ -1760,7 +1761,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             if (!widget) {
               throw new Error("SoundCloud widget is unavailable for repeat");
             }
-            soundCloudWidgetForcePlayOnReadyRef.current = false;
+            soundCloudWidgetForcePlayOnReadyRef.current = true;
             if (soundCloudWidgetRepeatReplayTimerRef.current !== null) {
               window.clearTimeout(soundCloudWidgetRepeatReplayTimerRef.current);
               soundCloudWidgetRepeatReplayTimerRef.current = null;
@@ -1768,9 +1769,41 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
             setPlaybackError(null);
             setCurrentTime(0);
             setDuration(activeSong.duration || duration || 0);
-            setIsSongLoading(false);
-            widget.seekTo(0);
-            widget.play();
+            setIsSongLoading(true);
+            setIsPlaying(true);
+            // Reload the track instead of seekTo(0)+play(). The SoundCloud
+            // widget's stream token is single-use: after FINISH the previous
+            // stream is exhausted, so seekTo(0)+play() is silently ignored and
+            // the track appears stuck until the user presses play/next. A
+            // fresh load() fetches a new token and (via the READY handler,
+            // forcePlayOnReadyRef above) issues the single play() POST.
+            soundCloudWidgetSourceRef.current = soundCloudWidgetTrackUrl;
+            widget.load(soundCloudWidgetTrackUrl as string, {
+              auto_play: false,
+              show_artwork: false,
+            });
+            // Watchdog: if READY/play never landed, retry play() once.
+            soundCloudWidgetRepeatReplayTimerRef.current = window.setTimeout(
+              () => {
+                soundCloudWidgetRepeatReplayTimerRef.current = null;
+                const w = soundCloudWidgetRef.current;
+                if (!w || cancelled) return;
+                try {
+                  if (typeof w.isPaused !== "function") {
+                    w.play();
+                    return;
+                  }
+                  w.isPaused((paused: boolean) => {
+                    if (paused) {
+                      try {
+                        w.play();
+                      } catch {}
+                    }
+                  });
+                } catch {}
+              },
+              3000,
+            );
           } catch (error) {
             console.error("Error repeating SoundCloud widget audio:", error);
             setIsSongLoading(false);
@@ -1792,6 +1825,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
       // Tear down the finished widget immediately so it cannot restart
       // while the next queued track is still being resolved.
       destroySoundCloudWidgetPlayback(true);
+      // The widget finished, so the coalesced PAUSE handler may have already
+      // flipped isPlaying to false. Force the next widget (if any) to autoplay
+      // on READY regardless of that stale state.
+      soundCloudWidgetForcePlayOnReadyRef.current = true;
 
       const queuedSongs = playbackQueueRef.current;
       const nextQueueIndex = getNextQueueIndex(
