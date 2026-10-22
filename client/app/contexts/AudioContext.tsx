@@ -1251,6 +1251,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         widget.pause();
       } catch {}
     }
+    // Cancel any coalesced play/pause flush AFTER pausing: the pause above
+    // schedules one, and it must not land as isPlaying=false after the next
+    // track has already been forced to play.
+    if (soundCloudWidgetPlayStateTimerRef.current !== null) {
+      window.clearTimeout(soundCloudWidgetPlayStateTimerRef.current);
+      soundCloudWidgetPlayStateTimerRef.current = null;
+    }
+    soundCloudWidgetPlayStatePendingRef.current = null;
     const iframe = soundCloudWidgetIframeRef.current;
     if (hardReset && iframe) {
       iframe.src = "about:blank";
@@ -2114,6 +2122,18 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
 
       widget.bind(FINISH, () => {
         if (cancelled) return;
+        // The widget emits PAUSE immediately before FINISH. That pause is
+        // coalesced into a pending `isPlaying = false` flush on a 120ms
+        // timer, which can fire AFTER this handler has already forced
+        // isPlaying = true for the replay/next track. The late flush then
+        // flips the player back to paused, so repeat and auto-advance both
+        // die until the user presses play by hand. Cancel the pending flush
+        // before advancing.
+        if (soundCloudWidgetPlayStateTimerRef.current !== null) {
+          window.clearTimeout(soundCloudWidgetPlayStateTimerRef.current);
+          soundCloudWidgetPlayStateTimerRef.current = null;
+        }
+        soundCloudWidgetPlayStatePendingRef.current = null;
         handleWidgetFinish();
       });
 
