@@ -3130,9 +3130,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
         suppressNextPauseEventRef.current = false;
         return;
       }
-      if (isSongLoading && !audio.ended) {
-        return;
-      }
+      // A media element fires `pause` immediately before `ended`. Treating that
+      // as a user pause flips isPlaying to false, which re-runs the playback
+      // effect and tears the source down (removeAttribute("src") + load())
+      // before the `ended` handler can restart or advance the queue. The
+      // player then sits idle until the user presses play/next by hand.
+      // Track completion is the `ended` handler's job, so ignore this pause.
+      if (audio.ended) return;
+      if (isSongLoading) return;
       setIsPlaying(false);
     };
 
