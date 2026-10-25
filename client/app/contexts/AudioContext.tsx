@@ -682,7 +682,9 @@ function shouldRefreshResolvedAudio(song: Song): boolean {
   }
 
   if (source === "jiosaavn") {
-    return false;
+    // JioSaavn CDN links are request-scoped: a cached audioUrl (library rows,
+    // localStorage, stale search results) can 403 later. Always re-resolve.
+    return true;
   }
 
   return isManagedRemoteAudioUrl(song.audioUrl || "");
@@ -1092,7 +1094,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     }
 
     const attempts = autoRetryAttemptCountRef.current[song.id] ?? 0;
-    if (attempts >= 1 || autoRetryInFlightRef.current) {
+    if (attempts >= 3 || autoRetryInFlightRef.current) {
       return false;
     }
 
